@@ -1,19 +1,21 @@
 import { Controller, Get, ServiceUnavailableException } from '@nestjs/common';
+import { PrismaService } from '../database/prisma.service';
 
 @Controller('health')
 export class HealthController {
+  constructor(private readonly prisma: PrismaService) {}
+
   @Get('live')
   live(): { status: 'ok'; service: string } {
     return { status: 'ok', service: 'mudatex-platform-api' };
   }
 
   @Get('ready')
-  ready(): { status: 'ok'; checks: { api: 'ok'; database: 'not-configured' } } {
-    // Database readiness becomes a real connectivity check when Prisma is wired.
-    // Do not report database health as verified before that check exists.
-    if (process.env.NODE_ENV === 'production' && !process.env.DATABASE_URL) {
-      throw new ServiceUnavailableException('Database configuration is missing');
+  async ready(): Promise<{ status: 'ok'; checks: { api: 'ok'; database: 'ok' } }> {
+    const connected = await this.prisma.checkConnection();
+    if (!connected) {
+      throw new ServiceUnavailableException({ status: 'not_ready', checks: { api: 'ok', database: 'unavailable' } });
     }
-    return { status: 'ok', checks: { api: 'ok', database: 'not-configured' } };
+    return { status: 'ok', checks: { api: 'ok', database: 'ok' } };
   }
 }
