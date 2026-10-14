@@ -89,7 +89,6 @@ model UnitOfMeasure {
   active      Boolean   @default(true)
   products    Product[]
   createdAt   DateTime  @default(now()) @db.Timestamptz(6)
-  @@check(decimalPlaces >= 0 AND decimalPlaces <= 6)
 }
 
 model Product {
