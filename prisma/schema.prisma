@@ -1,0 +1,169 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum LocationType {
+  COUNTRY_OFFICE
+  BRANCH
+  WAREHOUSE
+  PRODUCTION_SITE
+  STORE
+}
+
+enum ProductStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum InventoryMovementType {
+  OPENING_BALANCE
+  RECEIPT
+  SALE
+  RETURN
+  TRANSFER_OUT
+  TRANSFER_IN
+  PRODUCTION_ISSUE
+  PRODUCTION_OUTPUT
+  ADJUSTMENT
+  SCRAP
+}
+
+model Organization {
+  id          String       @id @default(uuid()) @db.Uuid
+  code        String       @unique @db.VarChar(40)
+  name        String       @db.VarChar(200)
+  active      Boolean      @default(true)
+  createdAt   DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime     @updatedAt @db.Timestamptz(6)
+  legalEntities LegalEntity[]
+}
+
+model LegalEntity {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @db.Uuid
+  code           String       @db.VarChar(40)
+  name           String       @db.VarChar(200)
+  countryCode    String       @db.Char(2)
+  functionalCurrency String   @db.Char(3)
+  active         Boolean      @default(true)
+  createdAt      DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime     @updatedAt @db.Timestamptz(6)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  locations      Location[]
+  products       Product[]
+  @@unique([organizationId, code])
+  @@index([countryCode, active])
+}
+
+model Location {
+  id            String       @id @default(uuid()) @db.Uuid
+  legalEntityId String       @db.Uuid
+  parentId      String?      @db.Uuid
+  code          String       @db.VarChar(40)
+  name          String       @db.VarChar(200)
+  type          LocationType
+  timezone      String       @db.VarChar(80)
+  active        Boolean      @default(true)
+  createdAt     DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime     @updatedAt @db.Timestamptz(6)
+  legalEntity   LegalEntity  @relation(fields: [legalEntityId], references: [id], onDelete: Restrict)
+  parent        Location?    @relation("LocationTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children      Location[]   @relation("LocationTree")
+  inventoryMovements InventoryMovement[]
+  @@unique([legalEntityId, code])
+  @@index([legalEntityId, type, active])
+  @@index([parentId])
+}
+
+model UnitOfMeasure {
+  id          String    @id @default(uuid()) @db.Uuid
+  code        String    @unique @db.VarChar(20)
+  name        String    @db.VarChar(80)
+  decimalPlaces Int     @default(3)
+  active      Boolean   @default(true)
+  products    Product[]
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  @@check(decimalPlaces >= 0 AND decimalPlaces <= 6)
+}
+
+model Product {
+  id            String        @id @default(uuid()) @db.Uuid
+  legalEntityId String        @db.Uuid
+  sku           String        @db.VarChar(80)
+  name          String        @db.VarChar(240)
+  description   String?
+  categoryCode  String?       @db.VarChar(80)
+  fabricFamily  String?       @db.VarChar(100)
+  pattern       String?       @db.VarChar(120)
+  colour        String?       @db.VarChar(80)
+  widthMm       Int?
+  composition   String?       @db.VarChar(200)
+  baseUomId     String        @db.Uuid
+  status        ProductStatus @default(DRAFT)
+  lotTracked    Boolean       @default(false)
+  rollTracked   Boolean       @default(false)
+  createdAt     DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime      @updatedAt @db.Timestamptz(6)
+  legalEntity   LegalEntity   @relation(fields: [legalEntityId], references: [id], onDelete: Restrict)
+  baseUom       UnitOfMeasure @relation(fields: [baseUomId], references: [id], onDelete: Restrict)
+  movements     InventoryMovement[]
+  @@unique([legalEntityId, sku])
+  @@index([legalEntityId, status, name])
+  @@index([categoryCode])
+}
+
+model InventoryMovement {
+  id             String                @id @default(uuid()) @db.Uuid
+  legalEntityId  String                @db.Uuid
+  locationId     String                @db.Uuid
+  productId      String                @db.Uuid
+  movementType   InventoryMovementType
+  quantity       Decimal               @db.Decimal(20, 6)
+  uomCode        String                @db.VarChar(20)
+  sourceType     String?               @db.VarChar(60)
+  sourceId       String?               @db.VarChar(120)
+  idempotencyKey String                @unique @db.VarChar(160)
+  reason         String?               @db.VarChar(500)
+  occurredAt     DateTime              @default(now()) @db.Timestamptz(6)
+  createdAt      DateTime              @default(now()) @db.Timestamptz(6)
+  location       Location              @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  product        Product               @relation(fields: [productId], references: [id], onDelete: Restrict)
+  @@index([legalEntityId, locationId, productId, occurredAt])
+  @@index([sourceType, sourceId])
+}
+
+model AuditEvent {
+  id            String   @id @default(uuid()) @db.Uuid
+  organizationId String  @db.Uuid
+  actorId       String?  @db.VarChar(160)
+  action        String   @db.VarChar(120)
+  entityType    String   @db.VarChar(100)
+  entityId      String   @db.VarChar(160)
+  result        String   @db.VarChar(40)
+  reason        String?  @db.VarChar(500)
+  correlationId String?  @db.VarChar(160)
+  metadata      Json?
+  createdAt     DateTime @default(now()) @db.Timestamptz(6)
+  @@index([organizationId, createdAt])
+  @@index([entityType, entityId])
+  @@index([actorId, createdAt])
+}
+
+model IdempotencyRecord {
+  id             String   @id @default(uuid()) @db.Uuid
+  scope          String   @db.VarChar(120)
+  key            String   @db.VarChar(160)
+  requestHash    String   @db.VarChar(128)
+  responseStatus Int?
+  responseBody   Json?
+  createdAt      DateTime @default(now()) @db.Timestamptz(6)
+  expiresAt      DateTime? @db.Timestamptz(6)
+  @@unique([scope, key])
+  @@index([expiresAt])
+}
