@@ -38,6 +38,14 @@ enum WarehouseTransferStatus {
   CANCELLED
 }
 
+enum StockReservationStatus {
+  ACTIVE
+  PARTIALLY_FULFILLED
+  FULFILLED
+  RELEASED
+  EXPIRED
+}
+
 enum StockAdjustmentStatus {
   PENDING
   APPROVED
@@ -69,6 +77,7 @@ model Organization {
   stockAdjustmentRequests StockAdjustmentRequest[]
   cycleCountSessions CycleCountSession[]
   warehouseTransfers WarehouseTransfer[]
+  stockReservations StockReservation[]
 }
 
 model LegalEntity {
@@ -87,6 +96,7 @@ model LegalEntity {
   stockAdjustmentRequests StockAdjustmentRequest[]
   cycleCountSessions CycleCountSession[]
   warehouseTransfers WarehouseTransfer[]
+  stockReservations StockReservation[]
   @@unique([organizationId, code])
   @@index([countryCode, active])
 }
@@ -110,6 +120,7 @@ model Location {
   cycleCountSessions CycleCountSession[]
   outgoingTransfers WarehouseTransfer[] @relation("TransferSourceLocation")
   incomingTransfers WarehouseTransfer[] @relation("TransferDestinationLocation")
+  stockReservations StockReservation[]
   @@unique([legalEntityId, code])
   @@index([legalEntityId, type, active])
   @@index([parentId])
@@ -149,6 +160,7 @@ model Product {
   stockAdjustmentRequests StockAdjustmentRequest[]
   cycleCountLines CycleCountLine[]
   warehouseTransferLines WarehouseTransferLine[]
+  stockReservationLines StockReservationLine[]
   @@unique([legalEntityId, sku])
   @@index([legalEntityId, status, name])
   @@index([categoryCode])
@@ -339,4 +351,43 @@ model WarehouseTransferLine {
   product              Product          @relation(fields: [productId], references: [id], onDelete: Restrict)
   @@unique([transferId, productId])
   @@index([productId, transferId])
+}
+
+
+model StockReservation {
+  id                    String                 @id @default(uuid()) @db.Uuid
+  organizationId        String                 @db.Uuid
+  legalEntityId         String                 @db.Uuid
+  locationId            String                 @db.Uuid
+  orderReference        String                 @db.VarChar(120)
+  status                StockReservationStatus @default(ACTIVE)
+  createdBy             String                 @db.VarChar(160)
+  releasedBy            String?                @db.VarChar(160)
+  idempotencyKey        String                 @unique @db.VarChar(160)
+  expiresAt             DateTime?              @db.Timestamptz(6)
+  releasedAt            DateTime?              @db.Timestamptz(6)
+  createdAt             DateTime               @default(now()) @db.Timestamptz(6)
+  updatedAt             DateTime               @updatedAt @db.Timestamptz(6)
+  organization          Organization           @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  legalEntity           LegalEntity            @relation(fields: [legalEntityId], references: [id], onDelete: Restrict)
+  location              Location               @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  lines                 StockReservationLine[]
+  @@index([organizationId, status, createdAt])
+  @@index([locationId, status, expiresAt])
+  @@index([orderReference, organizationId])
+}
+
+model StockReservationLine {
+  id                 String           @id @default(uuid()) @db.Uuid
+  reservationId      String           @db.Uuid
+  productId          String           @db.Uuid
+  quantityReserved   Decimal          @db.Decimal(20, 6)
+  quantityFulfilled  Decimal          @default(0) @db.Decimal(20, 6)
+  uomCode             String           @db.VarChar(20)
+  createdAt           DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime         @updatedAt @db.Timestamptz(6)
+  reservation         StockReservation @relation(fields: [reservationId], references: [id], onDelete: Restrict)
+  product             Product          @relation(fields: [productId], references: [id], onDelete: Restrict)
+  @@unique([reservationId, productId])
+  @@index([productId, reservationId])
 }
