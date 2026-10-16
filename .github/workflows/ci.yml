@@ -33,6 +33,8 @@ jobs:
       - run: npm install
       - run: npx prisma validate
       - run: npx prisma generate
+      - run: npx prisma migrate deploy
+      - run: npx prisma migrate status
       - run: npm run typecheck
       - run: npm test -- --runInBand
       - run: npm run build
