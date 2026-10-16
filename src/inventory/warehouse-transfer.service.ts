@@ -137,27 +137,29 @@ export class WarehouseTransferService {
   }
 
   async reject(organizationId: string, principal: AuthenticatedPrincipal, id: string, reason: string) {
-    const transfer = await this.prisma.warehouseTransfer.findFirst({ where: { id, organizationId } });
-    if (!transfer) throw new NotFoundException('Warehouse transfer was not found in this organization');
-    if (transfer.status !== WarehouseTransferStatus.PENDING_APPROVAL) throw new ConflictException('Only a pending transfer can be rejected');
-    if (transfer.requestedBy === this.actor(principal)) throw new ConflictException('The requester cannot approve or reject their own transfer');
     return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRawUnsafe('SELECT "id" FROM "WarehouseTransfer" WHERE "id" = $1::uuid AND "organizationId" = $2::uuid FOR UPDATE', id, organizationId);
+      const transfer = await tx.warehouseTransfer.findFirst({ where: { id, organizationId } });
+      if (!transfer) throw new NotFoundException('Warehouse transfer was not found in this organization');
+      if (transfer.status !== WarehouseTransferStatus.PENDING_APPROVAL) throw new ConflictException('Only a pending transfer can be rejected');
+      if (transfer.requestedBy === this.actor(principal)) throw new ConflictException('The requester cannot approve or reject their own transfer');
       const updated = await tx.warehouseTransfer.update({ where: { id }, data: { status: WarehouseTransferStatus.REJECTED, rejectionReason: reason.trim() } });
       await this.audit(tx, organizationId, principal, 'inventory.warehouse_transfer.rejected', id, reason.trim());
       return updated;
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 
   private async transition(organizationId: string, principal: AuthenticatedPrincipal, id: string,
     allowed: WarehouseTransferStatus[], next: WarehouseTransferStatus, action: string,
     timestampField?: 'submittedAt' | 'approvedAt', separateApprover = false) {
-    const transfer = await this.prisma.warehouseTransfer.findFirst({ where: { id, organizationId } });
-    if (!transfer) throw new NotFoundException('Warehouse transfer was not found in this organization');
-    if (!allowed.includes(transfer.status)) throw new ConflictException('Warehouse transfer is not in a state that permits this action');
-    if (separateApprover && transfer.requestedBy === this.actor(principal)) {
-      throw new ConflictException('The requester cannot approve their own transfer');
-    }
     return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRawUnsafe('SELECT "id" FROM "WarehouseTransfer" WHERE "id" = $1::uuid AND "organizationId" = $2::uuid FOR UPDATE', id, organizationId);
+      const transfer = await tx.warehouseTransfer.findFirst({ where: { id, organizationId } });
+      if (!transfer) throw new NotFoundException('Warehouse transfer was not found in this organization');
+      if (!allowed.includes(transfer.status)) throw new ConflictException('Warehouse transfer is not in a state that permits this action');
+      if (separateApprover && transfer.requestedBy === this.actor(principal)) {
+        throw new ConflictException('The requester cannot approve their own transfer');
+      }
       const updated = await tx.warehouseTransfer.update({
         where: { id },
         data: {
@@ -168,7 +170,7 @@ export class WarehouseTransferService {
       });
       await this.audit(tx, organizationId, principal, action, id, transfer.reason, { from: transfer.status, to: next });
       return updated;
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 
   async dispatch(organizationId: string, principal: AuthenticatedPrincipal, id: string) {
@@ -180,18 +182,22 @@ export class WarehouseTransferService {
 
     try {
       return await this.prisma.$transaction(async (tx) => {
-        for (const locationId of [transfer.sourceLocationId, transfer.destinationLocationId].sort()) {
+        await tx.$queryRawUnsafe('SELECT "id" FROM "WarehouseTransfer" WHERE "id" = $1::uuid AND "organizationId" = $2::uuid FOR UPDATE', id, organizationId);
+        const current = await tx.warehouseTransfer.findFirst({ where: { id, organizationId }, include: { lines: true } });
+        if (!current) throw new NotFoundException('Warehouse transfer was not found in this organization');
+        if (current.status !== WarehouseTransferStatus.APPROVED) throw new ConflictException('Only an approved transfer can be dispatched');
+        for (const locationId of [current.sourceLocationId, current.destinationLocationId].sort()) {
           await tx.$queryRawUnsafe('SELECT "id" FROM "Location" WHERE "id" = $1::uuid FOR UPDATE', locationId);
         }
         const activeCount = await tx.cycleCountSession.findFirst({
-          where: { locationId: { in: [transfer.sourceLocationId, transfer.destinationLocationId] }, status: CycleCountStatus.IN_PROGRESS },
+          where: { locationId: { in: [current.sourceLocationId, current.destinationLocationId] }, status: CycleCountStatus.IN_PROGRESS },
           select: { id: true },
         });
         if (activeCount) throw new ConflictException('Transfers cannot be dispatched while a cycle count is active at either location');
 
-        for (const line of transfer.lines) {
+        for (const line of current.lines) {
           const movements = await tx.inventoryMovement.findMany({
-            where: { legalEntityId: transfer.legalEntityId, locationId: transfer.sourceLocationId, productId: line.productId },
+            where: { legalEntityId: current.legalEntityId, locationId: current.sourceLocationId, productId: line.productId },
             select: { movementType: true, quantity: true },
           });
           const available = movements.reduce((sum, movement) => {
@@ -206,15 +212,15 @@ export class WarehouseTransferService {
           }
         }
 
-        for (const line of transfer.lines) {
+        for (const line of current.lines) {
           await tx.inventoryMovement.create({
             data: {
-              legalEntityId: transfer.legalEntityId, locationId: transfer.sourceLocationId,
+              legalEntityId: current.legalEntityId, locationId: current.sourceLocationId,
               productId: line.productId, movementType: InventoryMovementType.TRANSFER_OUT,
               quantity: line.quantityRequested, uomCode: line.uomCode,
               sourceType: 'WAREHOUSE_TRANSFER', sourceId: transfer.id,
-              idempotencyKey: transfer.idempotencyKey + ':OUT:' + line.productId,
-              reason: transfer.reason,
+              idempotencyKey: current.idempotencyKey + ':OUT:' + line.productId,
+              reason: current.reason,
             },
           });
           await tx.warehouseTransferLine.update({
@@ -225,8 +231,8 @@ export class WarehouseTransferService {
           where: { id }, data: { status: WarehouseTransferStatus.IN_TRANSIT, dispatchedBy: this.actor(principal), dispatchedAt: new Date() },
           include: { lines: true },
         });
-        await this.audit(tx, organizationId, principal, 'inventory.warehouse_transfer.dispatched', id, transfer.reason,
-          { lineCount: transfer.lines.length });
+        await this.audit(tx, organizationId, principal, 'inventory.warehouse_transfer.dispatched', id, current.reason,
+          { lineCount: current.lines.length });
         return updated;
       }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
     } catch (error) {
@@ -262,7 +268,7 @@ export class WarehouseTransferService {
     }
     if (input.complete) {
       for (const inputLine of input.lines) {
-        const line = transferLines.get(inputLine.productId)!;
+        const line = currentLines.get(inputLine.productId)!;
         if (new Prisma.Decimal(inputLine.quantityReceived).lessThan(line.quantityDispatched) && !inputLine.discrepancyReason?.trim()) {
           throw new UnprocessableEntityException('A discrepancy reason is required to close a transfer with a short receipt');
         }
@@ -270,9 +276,35 @@ export class WarehouseTransferService {
     }
 
     return this.prisma.$transaction(async (tx) => {
-      await tx.$queryRawUnsafe('SELECT "id" FROM "Location" WHERE "id" = $1::uuid FOR UPDATE', transfer.destinationLocationId);
+      await tx.$queryRawUnsafe('SELECT "id" FROM "WarehouseTransfer" WHERE "id" = $1::uuid AND "organizationId" = $2::uuid FOR UPDATE', id, organizationId);
+      const current = await tx.warehouseTransfer.findFirst({ where: { id, organizationId }, include: { lines: true } });
+      if (!current) throw new NotFoundException('Warehouse transfer was not found in this organization');
+      if (current.status !== WarehouseTransferStatus.IN_TRANSIT && current.status !== WarehouseTransferStatus.PARTIALLY_RECEIVED) {
+        throw new ConflictException('Only an in-transit transfer can be received');
+      }
+      const currentLines = new Map(current.lines.map((line) => [line.productId, line]));
+      for (const inputLine of input.lines) {
+        const line = currentLines.get(inputLine.productId);
+        if (!line) throw new UnprocessableEntityException('Receipt contains a product that is not part of this transfer');
+        const cumulative = new Prisma.Decimal(inputLine.quantityReceived);
+        if (cumulative.lessThan(line.quantityReceived) || cumulative.greaterThan(line.quantityDispatched)) {
+          throw new UnprocessableEntityException('Cumulative received quantity cannot decrease or exceed the dispatched quantity');
+        }
+      }
+      if (input.complete && current.lines.some((line) => !input.lines.some((entry) => entry.productId === line.productId))) {
+        throw new UnprocessableEntityException('To close a transfer, provide a final cumulative receipt quantity for every line');
+      }
+      if (input.complete) {
+        for (const inputLine of input.lines) {
+          const line = currentLines.get(inputLine.productId)!;
+          if (new Prisma.Decimal(inputLine.quantityReceived).lessThan(line.quantityDispatched) && !inputLine.discrepancyReason?.trim()) {
+            throw new UnprocessableEntityException('A discrepancy reason is required to close a transfer with a short receipt');
+          }
+        }
+      }
+      await tx.$queryRawUnsafe('SELECT "id" FROM "Location" WHERE "id" = $1::uuid FOR UPDATE', current.destinationLocationId);
       const activeCount = await tx.cycleCountSession.findFirst({
-        where: { locationId: transfer.destinationLocationId, status: CycleCountStatus.IN_PROGRESS }, select: { id: true },
+        where: { locationId: current.destinationLocationId, status: CycleCountStatus.IN_PROGRESS }, select: { id: true },
       });
       if (activeCount) throw new ConflictException('Receipts cannot be recorded while a cycle count is active at the destination location');
 
@@ -283,12 +315,12 @@ export class WarehouseTransferService {
         if (delta.greaterThan(0)) {
           await tx.inventoryMovement.create({
             data: {
-              legalEntityId: transfer.legalEntityId, locationId: transfer.destinationLocationId,
+              legalEntityId: current.legalEntityId, locationId: current.destinationLocationId,
               productId: line.productId, movementType: InventoryMovementType.TRANSFER_IN,
               quantity: delta, uomCode: line.uomCode, sourceType: 'WAREHOUSE_TRANSFER',
               sourceId: transfer.id,
-              idempotencyKey: transfer.idempotencyKey + ':IN:' + line.productId + ':' + nextQuantity.toFixed(6),
-              reason: inputLine.discrepancyReason?.trim() || transfer.reason,
+              idempotencyKey: current.idempotencyKey + ':IN:' + line.productId + ':' + nextQuantity.toFixed(6),
+              reason: inputLine.discrepancyReason?.trim() || current.reason,
             },
           });
         }
@@ -315,7 +347,7 @@ export class WarehouseTransferService {
       const discrepancies = updatedLines.filter((line) => new Prisma.Decimal(line.quantityReceived).lessThan(line.quantityDispatched))
         .map((line) => ({ productId: line.productId, dispatched: line.quantityDispatched.toString(), received: line.quantityReceived.toString(), reason: line.discrepancyReason }));
       await this.audit(tx, organizationId, principal, 'inventory.warehouse_transfer.received', id,
-        discrepancies.length ? 'Receipt recorded with discrepancies' : transfer.reason,
+        discrepancies.length ? 'Receipt recorded with discrepancies' : current.reason,
         { complete, discrepancies, linesReceived: input.lines.length });
       return updated;
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
