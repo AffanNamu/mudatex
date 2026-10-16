@@ -196,7 +196,7 @@ export class InventoryService {
 
   async requestStockAdjustment(organizationId: string, principal: AuthenticatedPrincipal, input: RequestStockAdjustmentDto) {
     const quantityDelta = input.quantityDelta.trim();
-    if (!/^-?\\d+(?:\\.\\d{1,6})?$/.test(quantityDelta) || new Prisma.Decimal(quantityDelta).isZero()) {
+    if (!/^-?[0-9]+(?:[.][0-9]{1,6})?$/.test(quantityDelta) || new Prisma.Decimal(quantityDelta).isZero()) {
       throw new UnprocessableEntityException('Adjustment delta must be non-zero and use at most 6 decimal places');
     }
     const [product, location] = await Promise.all([
