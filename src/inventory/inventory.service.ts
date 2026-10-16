@@ -1,11 +1,12 @@
 import { createHash } from 'node:crypto';
 import { ConflictException, Injectable, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
-import { InventoryMovementType, LocationType, Prisma, ProductStatus } from '@prisma/client';
+import { InventoryMovementType, LocationType, Prisma, ProductStatus, StockAdjustmentStatus } from '@prisma/client';
 import type { AuthenticatedPrincipal } from '../auth/authenticated-request';
 import { PrismaService } from '../database/prisma.service';
 import type { ReceiveStockDto } from './dto/receive-stock.dto';
 import type { TransferStockDto } from './dto/transfer-stock.dto';
 import type { ListStockBalancesQueryDto } from './dto/list-stock-balances-query.dto';
+import type { RequestStockAdjustmentDto } from './dto/request-stock-adjustment.dto';
 
 const OUTGOING = new Set<InventoryMovementType>([
   InventoryMovementType.SALE, InventoryMovementType.TRANSFER_OUT,
@@ -190,6 +191,163 @@ export class InventoryService {
       }
       throw error;
     }
+  }
+
+
+  async requestStockAdjustment(organizationId: string, principal: AuthenticatedPrincipal, input: RequestStockAdjustmentDto) {
+    const quantityDelta = input.quantityDelta.trim();
+    if (!/^-?\\d+(?:\\.\\d{1,6})?$/.test(quantityDelta) || new Prisma.Decimal(quantityDelta).isZero()) {
+      throw new UnprocessableEntityException('Adjustment delta must be non-zero and use at most 6 decimal places');
+    }
+    const [product, location] = await Promise.all([
+      this.prisma.product.findFirst({
+        where: { id: input.productId, status: ProductStatus.ACTIVE, legalEntity: { organizationId, active: true } },
+        select: { id: true, legalEntityId: true, baseUom: { select: { code: true } } },
+      }),
+      this.findStockLocation(organizationId, input.locationId),
+    ]);
+    if (!product) throw new NotFoundException('Active product was not found in this organization');
+    if (!location) throw new NotFoundException('Active stock location was not found in this organization');
+    if (location.legalEntityId !== product.legalEntityId) {
+      throw new UnprocessableEntityException('Product and stock location must belong to the same legal entity');
+    }
+
+    const idempotencyKey = this.scopedIdempotencyKey(organizationId, 'stock-adjustment:' + input.idempotencyKey);
+    const existing = await this.prisma.stockAdjustmentRequest.findUnique({ where: { idempotencyKey } });
+    if (existing) {
+      if (existing.productId !== product.id || existing.locationId !== location.id ||
+          !new Prisma.Decimal(existing.quantityDelta).equals(new Prisma.Decimal(quantityDelta)) ||
+          existing.reason !== input.reason.trim()) {
+        throw new ConflictException('Idempotency key was already used for a different stock adjustment');
+      }
+      return { request: existing, replayed: true };
+    }
+
+    try {
+      const request = await this.prisma.$transaction(async (tx) => {
+        const created = await tx.stockAdjustmentRequest.create({
+          data: {
+            organizationId, legalEntityId: product.legalEntityId, locationId: location.id, productId: product.id,
+            requestedBy: [principal.issuer, principal.subject].join('|').slice(0, 160),
+            quantityDelta, uomCode: product.baseUom.code, reason: input.reason.trim(), idempotencyKey,
+          },
+        });
+        await tx.auditEvent.create({
+          data: {
+            organizationId, actorId: [principal.issuer, principal.subject].join('|').slice(0, 160),
+            action: 'inventory.adjustment.requested', entityType: 'StockAdjustmentRequest', entityId: created.id,
+            result: 'PENDING', reason: input.reason.trim(),
+            metadata: { productId: product.id, locationId: location.id, quantityDelta, uomCode: product.baseUom.code },
+          },
+        });
+        return created;
+      });
+      return { request, replayed: false };
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        const raced = await this.prisma.stockAdjustmentRequest.findUnique({ where: { idempotencyKey } });
+        if (raced && raced.productId === product.id && raced.locationId === location.id &&
+            new Prisma.Decimal(raced.quantityDelta).equals(new Prisma.Decimal(quantityDelta)) &&
+            raced.reason === input.reason.trim()) return { request: raced, replayed: true };
+        throw new ConflictException('A stock adjustment request conflicts with an existing record');
+      }
+      throw error;
+    }
+  }
+
+  async listStockAdjustments(organizationId: string) {
+    return this.prisma.stockAdjustmentRequest.findMany({
+      where: { organizationId },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
+  }
+
+  async approveStockAdjustment(organizationId: string, principal: AuthenticatedPrincipal, requestId: string) {
+    const request = await this.prisma.stockAdjustmentRequest.findFirst({ where: { id: requestId, organizationId } });
+    if (!request) throw new NotFoundException('Stock adjustment request was not found in this organization');
+    if (request.status !== StockAdjustmentStatus.PENDING) {
+      throw new ConflictException('Only pending stock adjustment requests can be approved');
+    }
+    const delta = new Prisma.Decimal(request.quantityDelta);
+    const movementKey = this.scopedIdempotencyKey(organizationId, 'approved-stock-adjustment:' + request.id);
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        await tx.$queryRawUnsafe('SELECT "id" FROM "Location" WHERE "id" = $1::uuid FOR UPDATE', request.locationId);
+        const movements = await tx.inventoryMovement.findMany({
+          where: { legalEntityId: request.legalEntityId, locationId: request.locationId, productId: request.productId },
+          select: { movementType: true, quantity: true },
+        });
+        const available = movements.reduce((sum, movement) => {
+          const amount = new Prisma.Decimal(movement.quantity);
+          if (OUTGOING.has(movement.movementType)) return sum.minus(amount);
+          if (INCOMING.has(movement.movementType)) return sum.plus(amount);
+          if (movement.movementType === InventoryMovementType.ADJUSTMENT) return sum.plus(amount);
+          return sum;
+        }, new Prisma.Decimal(0));
+        if (available.plus(delta).lessThan(0)) {
+          throw new UnprocessableEntityException('This adjustment would make available stock negative');
+        }
+        const changed = await tx.stockAdjustmentRequest.updateMany({
+          where: { id: request.id, organizationId, status: StockAdjustmentStatus.PENDING },
+          data: {
+            status: StockAdjustmentStatus.APPROVED,
+            reviewedBy: [principal.issuer, principal.subject].join('|').slice(0, 160),
+            reviewedAt: new Date(),
+          },
+        });
+        if (changed.count !== 1) throw new ConflictException('The stock adjustment was reviewed by another user');
+        const movement = await tx.inventoryMovement.create({
+          data: {
+            legalEntityId: request.legalEntityId, locationId: request.locationId, productId: request.productId,
+            movementType: InventoryMovementType.ADJUSTMENT, quantity: delta, uomCode: request.uomCode,
+            sourceType: 'STOCK_ADJUSTMENT', sourceId: request.id, idempotencyKey: movementKey, reason: request.reason,
+          },
+        });
+        await tx.auditEvent.create({
+          data: {
+            organizationId, actorId: [principal.issuer, principal.subject].join('|').slice(0, 160),
+            action: 'inventory.adjustment.approved', entityType: 'StockAdjustmentRequest', entityId: request.id,
+            result: 'SUCCESS', reason: request.reason,
+            metadata: { quantityDelta: delta.toFixed(6), movementId: movement.id, locationId: request.locationId, productId: request.productId },
+          },
+        });
+        return { requestId: request.id, status: StockAdjustmentStatus.APPROVED, movement };
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034') {
+        throw new ConflictException('Concurrent stock activity changed the balance; retry the approval');
+      }
+      throw error;
+    }
+  }
+
+  async rejectStockAdjustment(organizationId: string, principal: AuthenticatedPrincipal, requestId: string, reason: string) {
+    const request = await this.prisma.stockAdjustmentRequest.findFirst({ where: { id: requestId, organizationId } });
+    if (!request) throw new NotFoundException('Stock adjustment request was not found in this organization');
+    if (request.status !== StockAdjustmentStatus.PENDING) {
+      throw new ConflictException('Only pending stock adjustment requests can be rejected');
+    }
+    return this.prisma.$transaction(async (tx) => {
+      const changed = await tx.stockAdjustmentRequest.updateMany({
+        where: { id: request.id, organizationId, status: StockAdjustmentStatus.PENDING },
+        data: {
+          status: StockAdjustmentStatus.REJECTED,
+          reviewedBy: [principal.issuer, principal.subject].join('|').slice(0, 160),
+          reviewedAt: new Date(),
+        },
+      });
+      if (changed.count !== 1) throw new ConflictException('The stock adjustment was reviewed by another user');
+      await tx.auditEvent.create({
+        data: {
+          organizationId, actorId: [principal.issuer, principal.subject].join('|').slice(0, 160),
+          action: 'inventory.adjustment.rejected', entityType: 'StockAdjustmentRequest', entityId: request.id,
+          result: 'SUCCESS', reason: reason.trim(),
+          metadata: { requestReason: request.reason, quantityDelta: new Prisma.Decimal(request.quantityDelta).toFixed(6) },
+        },
+      });
+      return { requestId: request.id, status: StockAdjustmentStatus.REJECTED };
+    });
   }
 
   async listBalances(organizationId: string, query: ListStockBalancesQueryDto) {
