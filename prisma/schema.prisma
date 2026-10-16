@@ -95,7 +95,6 @@ model Location {
   inventoryMovements InventoryMovement[]
   stockAdjustmentRequests StockAdjustmentRequest[]
   cycleCountSessions CycleCountSession[]
-  cycleCountLines CycleCountLine[]
   @@unique([legalEntityId, code])
   @@index([legalEntityId, type, active])
   @@index([parentId])
