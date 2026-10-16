@@ -118,6 +118,7 @@ describe('InventoryService', () => {
     prisma.$transaction.mockImplementationOnce(async (callback: (tx: unknown) => unknown) => callback({
       $queryRawUnsafe: jest.fn().mockResolvedValue([]),
       cycleCountSession: { findFirst: jest.fn().mockResolvedValue(null), create: createSession },
+      stockAdjustmentRequest: { findFirst: jest.fn().mockResolvedValue(null) },
       auditEvent: { create: audit },
     }));
     const result = await service.createCycleCount('org-1', principal, input);
