@@ -105,6 +105,24 @@ describe('InventoryService', () => {
   });
 
 
+  it('does not transfer stock reserved for other orders', async () => {
+    prisma.$transaction.mockImplementationOnce(async (callback: (tx: unknown) => unknown) => callback({
+      $queryRawUnsafe: jest.fn().mockResolvedValue([]),
+      inventoryMovement: {
+        findMany: jest.fn().mockResolvedValue([{ movementType: 'RECEIPT', quantity: new Prisma.Decimal('12.500') }]),
+        create: jest.fn(),
+      },
+      stockReservation: {
+        findMany: jest.fn().mockResolvedValue([{
+          lines: [{ quantityReserved: new Prisma.Decimal('11.000'), quantityFulfilled: new Prisma.Decimal('0') }],
+        }]),
+      },
+      cycleCountSession: { findFirst: jest.fn().mockResolvedValue(null) },
+      auditEvent: { create: jest.fn() },
+    }));
+    await expect(service.transfer('org-1', principal, transfer)).rejects.toBeInstanceOf(UnprocessableEntityException);
+  });
+
   it('creates a cycle count with expected quantities snapshotted from the ledger', async () => {
     const input: CreateCycleCountDto = {
       locationId: receipt.locationId, productIds: [receipt.productId], idempotencyKey: 'count-001',
