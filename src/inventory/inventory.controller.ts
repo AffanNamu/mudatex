@@ -10,11 +10,41 @@ import { InventoryService } from './inventory.service';
 import { StockAdjustmentApprovalGuard } from './stock-adjustment-approval.guard';
 import { RequestStockAdjustmentDto } from './dto/request-stock-adjustment.dto';
 import { RejectStockAdjustmentDto } from './dto/reject-stock-adjustment.dto';
+import { CreateCycleCountDto } from './dto/create-cycle-count.dto';
+import { RecordCycleCountLineDto } from './dto/record-cycle-count-line.dto';
 
 @Controller('inventory')
 @UseGuards(OidcAuthGuard, OrganizationScopeGuard)
 export class InventoryController {
   constructor(private readonly inventory: InventoryService) {}
+
+  @Get('cycle-counts')
+  listCycleCounts(@Req() request: MudatexRequest) {
+    return this.inventory.listCycleCounts(request.organizationAccess!.organizationId);
+  }
+
+  @Post('cycle-counts')
+  @UseGuards(InventoryWriteRoleGuard)
+  createCycleCount(@Req() request: MudatexRequest, @Body() input: CreateCycleCountDto) {
+    return this.inventory.createCycleCount(request.organizationAccess!.organizationId, request.principal!, input);
+  }
+
+  @Post('cycle-counts/:id/lines/:productId')
+  @UseGuards(InventoryWriteRoleGuard)
+  recordCycleCountLine(
+    @Req() request: MudatexRequest,
+    @Param('id') id: string,
+    @Param('productId') productId: string,
+    @Body() input: RecordCycleCountLineDto,
+  ) {
+    return this.inventory.recordCycleCountLine(request.organizationAccess!.organizationId, request.principal!, id, productId, input);
+  }
+
+  @Post('cycle-counts/:id/submit')
+  @UseGuards(InventoryWriteRoleGuard)
+  submitCycleCount(@Req() request: MudatexRequest, @Param('id') id: string) {
+    return this.inventory.submitCycleCount(request.organizationAccess!.organizationId, request.principal!, id);
+  }
 
   @Get('balances')
   listBalances(@Req() request: MudatexRequest, @Query() query: ListStockBalancesQueryDto) {
