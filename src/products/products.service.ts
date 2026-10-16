@@ -80,7 +80,7 @@ export class ProductsService {
         await tx.auditEvent.create({
           data: {
             organizationId,
-            actorId: `${principal.issuer}|${principal.subject}`.slice(0, 160),
+            actorId: [principal.issuer, principal.subject].join('|').slice(0, 160),
             action: 'product.created',
             entityType: 'Product',
             entityId: product.id,
@@ -96,5 +96,36 @@ export class ProductsService {
       }
       throw error;
     }
+  }
+
+  async activate(organizationId: string, principal: AuthenticatedPrincipal, productId: string) {
+    const existing = await this.prisma.product.findFirst({
+      where: { id: productId, legalEntity: { organizationId, active: true } },
+      select: { id: true, status: true },
+    });
+    if (!existing) throw new NotFoundException('Product was not found in this organization');
+    if (existing.status === ProductStatus.ACTIVE) return { id: existing.id, status: existing.status, replayed: true };
+    if (existing.status === ProductStatus.ARCHIVED) {
+      throw new ConflictException('Archived products cannot be activated');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const product = await tx.product.update({
+        where: { id: productId },
+        data: { status: ProductStatus.ACTIVE },
+      });
+      await tx.auditEvent.create({
+        data: {
+          organizationId,
+          actorId: [principal.issuer, principal.subject].join('|').slice(0, 160),
+          action: 'product.activated',
+          entityType: 'Product',
+          entityId: product.id,
+          result: 'SUCCESS',
+          metadata: { previousStatus: existing.status, status: product.status },
+        },
+      });
+      return { id: product.id, status: product.status, replayed: false };
+    });
   }
 }

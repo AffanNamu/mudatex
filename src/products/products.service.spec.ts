@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { ConflictException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { ProductsService } from './products.service';
 import type { CreateProductDto } from './dto/create-product.dto';
@@ -7,6 +7,7 @@ describe('ProductsService', () => {
   const prisma = {
     legalEntity: { findFirst: jest.fn() },
     unitOfMeasure: { findFirst: jest.fn() },
+    product: { findFirst: jest.fn() },
     $transaction: jest.fn(),
   };
   const service = new ProductsService(prisma as unknown as PrismaService);
@@ -62,5 +63,33 @@ describe('ProductsService', () => {
     expect(auditCreate).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ organizationId: 'org-1', action: 'product.created', entityId: 'product-1' }),
     }));
+  });
+
+  it('activates a draft product with an audit event transactionally', async () => {
+    prisma.product.findFirst.mockResolvedValue({ id: 'product-1', status: 'DRAFT' });
+    const productUpdate = jest.fn().mockResolvedValue({ id: 'product-1', status: 'ACTIVE' });
+    const auditCreate = jest.fn().mockResolvedValue({});
+    prisma.$transaction.mockImplementationOnce(async (callback: (tx: unknown) => unknown) =>
+      callback({ product: { update: productUpdate }, auditEvent: { create: auditCreate } }),
+    );
+
+    await expect(service.activate('org-1', principal, 'product-1'))
+      .resolves.toEqual({ id: 'product-1', status: 'ACTIVE', replayed: false });
+    expect(productUpdate).toHaveBeenCalledWith({ where: { id: 'product-1' }, data: { status: 'ACTIVE' } });
+    expect(auditCreate).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ action: 'product.activated', entityId: 'product-1' }),
+    }));
+  });
+
+  it('does not activate products outside the selected organization', async () => {
+    prisma.product.findFirst.mockResolvedValue(null);
+    await expect(service.activate('org-1', principal, 'product-1')).rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('rejects archived products', async () => {
+    prisma.product.findFirst.mockResolvedValue({ id: 'product-1', status: 'ARCHIVED' });
+    await expect(service.activate('org-1', principal, 'product-1')).rejects.toBeInstanceOf(ConflictException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 });

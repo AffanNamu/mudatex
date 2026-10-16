@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, Req, UseGuards } from '@nestjs/common';
 import type { MudatexRequest } from '../auth/authenticated-request';
 import { OidcAuthGuard } from '../auth/oidc-auth.guard';
 import { OrganizationScopeGuard } from '../auth/organization-scope.guard';
@@ -24,6 +24,16 @@ export class ProductsController {
       request.organizationAccess!.organizationId,
       request.principal!,
       input,
+    );
+  }
+
+  @Post(':id/activate')
+  @UseGuards(ProductWriteRoleGuard)
+  activate(@Req() request: MudatexRequest, @Param('id', new ParseUUIDPipe()) productId: string) {
+    return this.products.activate(
+      request.organizationAccess!.organizationId,
+      request.principal!,
+      productId,
     );
   }
 }
