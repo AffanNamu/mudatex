@@ -245,7 +245,7 @@ export class WarehouseTransferService {
       where: { id, organizationId }, include: { lines: true },
     });
     if (!transfer) throw new NotFoundException('Warehouse transfer was not found in this organization');
-    if (![WarehouseTransferStatus.IN_TRANSIT, WarehouseTransferStatus.PARTIALLY_RECEIVED].includes(transfer.status)) {
+    if (transfer.status !== WarehouseTransferStatus.IN_TRANSIT && transfer.status !== WarehouseTransferStatus.PARTIALLY_RECEIVED) {
       throw new ConflictException('Only an in-transit transfer can be received');
     }
     const transferLines = new Map(transfer.lines.map((line) => [line.productId, line]));
