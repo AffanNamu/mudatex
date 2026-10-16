@@ -268,7 +268,7 @@ export class WarehouseTransferService {
     }
     if (input.complete) {
       for (const inputLine of input.lines) {
-        const line = currentLines.get(inputLine.productId)!;
+        const line = transferLines.get(inputLine.productId)!;
         if (new Prisma.Decimal(inputLine.quantityReceived).lessThan(line.quantityDispatched) && !inputLine.discrepancyReason?.trim()) {
           throw new UnprocessableEntityException('A discrepancy reason is required to close a transfer with a short receipt');
         }
