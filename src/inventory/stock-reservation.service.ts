@@ -199,7 +199,7 @@ export class StockReservationService {
         return movement && movement.sourceType === 'STOCK_RESERVATION_FULFILMENT' && movement.sourceId === id && new Prisma.Decimal(movement.quantity).equals(line.quantity);
       });
       if (!replayIsComplete) throw new ConflictException('Fulfillment idempotency key was reused with a different or incomplete payload');
-      return { movements: existingMovements, replayed: true };
+      return { movements: existingMovements, status: reservation.status, replayed: true };
     }
 
     return this.prisma.$transaction(async tx => {
@@ -211,7 +211,7 @@ export class StockReservationService {
           return movement && movement.sourceType === 'STOCK_RESERVATION_FULFILMENT' && movement.sourceId === id && new Prisma.Decimal(movement.quantity).equals(line.quantity);
         });
         if (!replayIsComplete) throw new ConflictException('Fulfillment idempotency key was reused with a different or incomplete payload');
-        return { movements: racedMovements, replayed: true };
+        return { movements: racedMovements, status: reservation.status, replayed: true };
       }
       const activeCount = await tx.cycleCountSession.findFirst({ where: { locationId: reservation.locationId, status: CycleCountStatus.IN_PROGRESS }, select: { id: true } });
       if (activeCount) throw new ConflictException('Fulfillment is paused while a cycle count is in progress at this location');
