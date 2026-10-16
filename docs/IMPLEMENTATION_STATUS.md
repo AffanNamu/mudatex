@@ -2,35 +2,26 @@
 
 ## Implemented in the foundation branch
 
-- NestJS API scaffold with a versioned \`/api/v1\` prefix, Helmet security headers, strict request validation and health/readiness endpoints.
-- PostgreSQL/Prisma schema and versioned migrations for organizations, legal entities, locations, units of measure, textile product metadata, inventory movement primitives, audit events, idempotency records and organization memberships.
-- OIDC access-token verification foundation and server-side organization membership scope guard. Identity-provider configuration and membership provisioning remain operational prerequisites.
-- Organization-scoped product catalog API:
-  - \`GET /api/v1/products\` lists products only for active legal entities belonging to the selected organization.
-  - \`POST /api/v1/products\` creates a draft product for an active legal entity in that organization.
-  - \`POST /api/v1/products/:id/activate\` activates a draft product only within the selected organization and writes an audit event transactionally. Repeated activation is idempotent; archived products cannot be activated.
-  - Product creation normalizes SKU, validates active unit of measure and legal-entity scope, records an audit event transactionally, and handles SKU uniqueness conflicts.
-  - Product creation and activation require OWNER, ADMIN or MANAGER organization membership. STAFF and VIEWER cannot perform those operations.
-- Organization-scoped inventory receiving API:
-  - \`POST /api/v1/inventory/receipts\` records a positive receipt quantity against an active product and active stock-bearing location within the selected organization.
-  - Product and location must belong to the same active legal entity; receipt quantities use the product's base unit because unit conversion is not yet implemented.
-  - Inventory movements are append-only; the receipt and its audit event are created in one database transaction.
-  - An organization-scoped idempotency key prevents duplicate receipts on retries and rejects reuse of the same key with a different payload, including concurrent unique-key races.
-  - OWNER, ADMIN, MANAGER and STAFF may receive inventory; VIEWER is read-only. All access still requires a valid OIDC token and active organization membership.
-- Unit tests for health endpoints, product-role authorization, product creation scope/UOM checks, product activation, inventory receipt validation, idempotent retries and inventory write-role authorization.
-- Local PostgreSQL Docker Compose service, environment template, CI workflow, architecture decision record and Sakash reference map.
+- NestJS API scaffold with versioned \`/api/v1\`, Helmet, strict validation and health/readiness endpoints.
+- PostgreSQL/Prisma schema and migrations for organizations, legal entities, locations, units, textile product metadata, inventory movements, audit events, idempotency and memberships.
+- OIDC token verification and server-side organization membership scope guard. Identity provider configuration and secure membership provisioning remain operational prerequisites.
+- Product catalog: \`GET /api/v1/products\`, \`POST /api/v1/products\`, and \`POST /api/v1/products/:id/activate\`. Product creation/activation are organization-scoped, role-protected and audited transactionally.
+- Inventory receipts: \`POST /api/v1/inventory/receipts\`; active product/location checks, same-entity constraint, positive decimal quantity, scoped idempotency and transactional audit.
+- Inventory transfers: \`POST /api/v1/inventory/transfers\`; paired TRANSFER_OUT/TRANSFER_IN movements, source-availability check, distinct locations, same legal entity, serializable transaction and audit trail.
+- Stock balances: \`GET /api/v1/inventory/balances\` derives on-hand quantities from the movement ledger, with optional location/product filters. This is a quantity view, not financial valuation.
+- Inventory write operations require valid OIDC authentication, active organization membership and OWNER/ADMIN/MANAGER/STAFF role; VIEWER is read-only.
+- Unit tests cover core product, receipt, transfer and authorization cases. Local PostgreSQL, CI, environment template, ADRs and Sakash reference mapping are present.
 
 ## Not yet implemented
 
-- Login/user provisioning workflow, production identity-provider configuration, branch/warehouse/legal-entity granular permissions and role administration.
-- Product update/archive, categories/variants/barcodes/pricing, attachments and richer textile-specific attributes.
-- Inventory transfers/counts/adjustments/returns, stock ledger balance projections, reservations and availability logic.
-- Procurement, POS, wholesale orders, customer/supplier management, integrated accounting, tax, payments and full manufacturing execution.
-- Offline synchronization protocol, conflict resolution and device registration.
-- Inventory costing policy and official valuation/production financial postings.
-- Production deployment, monitoring, backups, disaster-recovery automation and operational runbooks.
-- Legacy data export/import scripts and parallel-run reconciliation.
+- Secure login/user provisioning and granular branch/warehouse permissions.
+- Product update/archive, variants, barcodes, price lists and richer textile attributes.
+- Cycle counts, controlled stock adjustments, returns, transfer dispatch/receipt workflow, reservations and optimized persisted balance projections.
+- Procurement, POS, wholesale orders, customer/supplier management, accounting, taxes, payments and full manufacturing execution.
+- Offline sync protocol, conflict resolution and device registration.
+- Inventory costing/valuation policy and official financial postings.
+- Production deployment, monitoring, backup/DR automation, runbooks and legacy import/reconciliation.
 
 ## Verification status
 
-CI passed for the preceding product-catalog head. The inventory-receiving and product-activation changes must pass schema validation, migrations, typecheck, tests and production build before they are considered verified or merged. No production deployment or production-data migration has been performed.
+Transfer and balance changes require successful CI schema validation, migrations, typecheck, tests and build before merge/deployment. No production deployment or production-data migration has occurred.
