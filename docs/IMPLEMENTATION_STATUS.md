@@ -18,7 +18,9 @@
 - Secure login/user provisioning and granular branch/warehouse permissions.
 - Product update/archive, variants, barcodes, price lists and richer textile attributes.
 - Cycle-count cancellation/recount controls, returns, reservations and optimized persisted balance projections.
-- Procurement, POS, wholesale orders, customer/supplier management, accounting, taxes, payments and full manufacturing execution.
+- First-class sales orders, pick/pack, customer/supplier management, procurement, POS, wholesale order lifecycle, accounting, taxes, payments and full manufacturing execution.
+- Scheduled reservation expiry/release worker and order-cancellation integration.
+- Ensure every non-reservation outbound stock flow (including compatibility transfers and controlled warehouse dispatch) protects active reservations before enabling reservation-backed live order traffic.
 - Offline sync protocol, conflict resolution and device registration.
 - Inventory costing/valuation policy and official financial postings.
 - Production deployment, monitoring, backup/DR automation, runbooks and legacy import/reconciliation.
