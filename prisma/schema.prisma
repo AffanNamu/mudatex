@@ -27,6 +27,17 @@ enum CycleCountStatus {
   CANCELLED
 }
 
+enum WarehouseTransferStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  IN_TRANSIT
+  PARTIALLY_RECEIVED
+  RECEIVED
+  REJECTED
+  CANCELLED
+}
+
 enum StockAdjustmentStatus {
   PENDING
   APPROVED
@@ -57,6 +68,7 @@ model Organization {
   memberships  OrganizationMembership[]
   stockAdjustmentRequests StockAdjustmentRequest[]
   cycleCountSessions CycleCountSession[]
+  warehouseTransfers WarehouseTransfer[]
 }
 
 model LegalEntity {
@@ -74,6 +86,7 @@ model LegalEntity {
   products       Product[]
   stockAdjustmentRequests StockAdjustmentRequest[]
   cycleCountSessions CycleCountSession[]
+  warehouseTransfers WarehouseTransfer[]
   @@unique([organizationId, code])
   @@index([countryCode, active])
 }
@@ -95,6 +108,8 @@ model Location {
   inventoryMovements InventoryMovement[]
   stockAdjustmentRequests StockAdjustmentRequest[]
   cycleCountSessions CycleCountSession[]
+  outgoingTransfers WarehouseTransfer[] @relation("TransferSourceLocation")
+  incomingTransfers WarehouseTransfer[] @relation("TransferDestinationLocation")
   @@unique([legalEntityId, code])
   @@index([legalEntityId, type, active])
   @@index([parentId])
@@ -133,6 +148,7 @@ model Product {
   movements     InventoryMovement[]
   stockAdjustmentRequests StockAdjustmentRequest[]
   cycleCountLines CycleCountLine[]
+  warehouseTransferLines WarehouseTransferLine[]
   @@unique([legalEntityId, sku])
   @@index([legalEntityId, status, name])
   @@index([categoryCode])
@@ -275,4 +291,52 @@ model CycleCountLine {
   product          Product         @relation(fields: [productId], references: [id], onDelete: Restrict)
   @@unique([sessionId, productId])
   @@index([productId, sessionId])
+}
+
+
+model WarehouseTransfer {
+  id                  String                  @id @default(uuid()) @db.Uuid
+  organizationId      String                  @db.Uuid
+  legalEntityId       String                  @db.Uuid
+  sourceLocationId    String                  @db.Uuid
+  destinationLocationId String                @db.Uuid
+  status              WarehouseTransferStatus @default(DRAFT)
+  requestedBy         String                  @db.VarChar(160)
+  approvedBy          String?                 @db.VarChar(160)
+  dispatchedBy        String?                 @db.VarChar(160)
+  lastReceivedBy      String?                 @db.VarChar(160)
+  idempotencyKey      String                  @unique @db.VarChar(160)
+  reason              String                  @db.VarChar(500)
+  rejectionReason     String?                 @db.VarChar(500)
+  submittedAt         DateTime?               @db.Timestamptz(6)
+  approvedAt          DateTime?               @db.Timestamptz(6)
+  dispatchedAt        DateTime?               @db.Timestamptz(6)
+  receivedAt          DateTime?               @db.Timestamptz(6)
+  createdAt           DateTime                @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime                @updatedAt @db.Timestamptz(6)
+  organization        Organization            @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  legalEntity         LegalEntity             @relation(fields: [legalEntityId], references: [id], onDelete: Restrict)
+  sourceLocation      Location                @relation("TransferSourceLocation", fields: [sourceLocationId], references: [id], onDelete: Restrict)
+  destinationLocation Location                @relation("TransferDestinationLocation", fields: [destinationLocationId], references: [id], onDelete: Restrict)
+  lines               WarehouseTransferLine[]
+  @@index([organizationId, status, createdAt])
+  @@index([sourceLocationId, status])
+  @@index([destinationLocationId, status])
+}
+
+model WarehouseTransferLine {
+  id                  String           @id @default(uuid()) @db.Uuid
+  transferId          String           @db.Uuid
+  productId           String           @db.Uuid
+  quantityRequested   Decimal          @db.Decimal(20, 6)
+  quantityDispatched  Decimal          @default(0) @db.Decimal(20, 6)
+  quantityReceived    Decimal          @default(0) @db.Decimal(20, 6)
+  uomCode              String           @db.VarChar(20)
+  discrepancyReason   String?          @db.VarChar(500)
+  createdAt            DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt            DateTime         @updatedAt @db.Timestamptz(6)
+  transfer             WarehouseTransfer @relation(fields: [transferId], references: [id], onDelete: Restrict)
+  product              Product          @relation(fields: [productId], references: [id], onDelete: Restrict)
+  @@unique([transferId, productId])
+  @@index([productId, transferId])
 }
