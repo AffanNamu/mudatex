@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { ConflictException, Injectable, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
-import { InventoryMovementType, LocationType, Prisma, ProductStatus, WarehouseTransferStatus, CycleCountStatus } from '@prisma/client';
+import { InventoryMovementType, LocationType, Prisma, ProductStatus, WarehouseTransferStatus, CycleCountStatus, StockReservationStatus } from '@prisma/client';
 import type { AuthenticatedPrincipal } from '../auth/authenticated-request';
 import { PrismaService } from '../database/prisma.service';
 import type { CreateWarehouseTransferDto } from './dto/create-warehouse-transfer.dto';
@@ -220,8 +220,19 @@ export class WarehouseTransferService {
             if (movement.movementType === InventoryMovementType.ADJUSTMENT) return sum.plus(quantity);
             return sum;
           }, new Prisma.Decimal(0));
-          if (available.lessThan(line.quantityRequested)) {
-            throw new UnprocessableEntityException('Insufficient stock to dispatch product ' + line.productId);
+          const activeReservations = await tx.stockReservation.findMany({
+            where: {
+              locationId: current.sourceLocationId,
+              status: { in: [StockReservationStatus.ACTIVE, StockReservationStatus.PARTIALLY_FULFILLED] },
+              OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+            },
+            include: { lines: { where: { productId: line.productId }, select: { quantityReserved: true, quantityFulfilled: true } } },
+          });
+          const reserved = activeReservations.reduce((sum, reservation) => sum.plus(reservation.lines.reduce(
+            (lineSum, reservationLine) => lineSum.plus(reservationLine.quantityReserved.minus(reservationLine.quantityFulfilled)), new Prisma.Decimal(0),
+          )), new Prisma.Decimal(0));
+          if (available.minus(reserved).lessThan(line.quantityRequested)) {
+            throw new UnprocessableEntityException('Insufficient available-to-promise stock after active reservations for product ' + line.productId);
           }
         }
 

@@ -44,6 +44,7 @@ describe('InventoryService', () => {
       },
       auditEvent: { create: jest.fn().mockResolvedValue({}) },
       cycleCountSession: { findFirst: jest.fn().mockResolvedValue(null) },
+      stockReservation: { findMany: jest.fn().mockResolvedValue([]) },
       $queryRawUnsafe: jest.fn().mockResolvedValue([]),
     }));
   });
@@ -63,6 +64,7 @@ describe('InventoryService', () => {
       inventoryMovement: { create: createMovement }, auditEvent: { create: createAudit },
       $queryRawUnsafe: jest.fn().mockResolvedValue([]),
       cycleCountSession: { findFirst: jest.fn().mockResolvedValue(null) },
+      stockReservation: { findMany: jest.fn().mockResolvedValue([]) },
     }));
     await service.receive('org-1', principal, receipt);
     expect(createMovement).toHaveBeenCalledWith(expect.objectContaining({
@@ -92,6 +94,7 @@ describe('InventoryService', () => {
         create: jest.fn().mockImplementation(({ data }) => data.movementType === 'TRANSFER_OUT' ? out() : into()),
       },
       cycleCountSession: { findFirst: jest.fn().mockResolvedValue(null) },
+      stockReservation: { findMany: jest.fn().mockResolvedValue([]) },
       auditEvent: { create: audit },
     }));
     const result = await service.transfer('org-1', principal, transfer);
@@ -101,6 +104,24 @@ describe('InventoryService', () => {
     expect(audit).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ action: 'inventory.transfer.created' }) }));
   });
 
+
+  it('does not transfer stock reserved for other orders', async () => {
+    prisma.$transaction.mockImplementationOnce(async (callback: (tx: unknown) => unknown) => callback({
+      $queryRawUnsafe: jest.fn().mockResolvedValue([]),
+      inventoryMovement: {
+        findMany: jest.fn().mockResolvedValue([{ movementType: 'RECEIPT', quantity: new Prisma.Decimal('12.500') }]),
+        create: jest.fn(),
+      },
+      stockReservation: {
+        findMany: jest.fn().mockResolvedValue([{
+          lines: [{ quantityReserved: new Prisma.Decimal('11.000'), quantityFulfilled: new Prisma.Decimal('0') }],
+        }]),
+      },
+      cycleCountSession: { findFirst: jest.fn().mockResolvedValue(null) },
+      auditEvent: { create: jest.fn() },
+    }));
+    await expect(service.transfer('org-1', principal, transfer)).rejects.toBeInstanceOf(UnprocessableEntityException);
+  });
 
   it('creates a cycle count with expected quantities snapshotted from the ledger', async () => {
     const input: CreateCycleCountDto = {

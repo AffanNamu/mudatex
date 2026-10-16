@@ -22,6 +22,8 @@ describe('WarehouseTransferService', () => {
         findFirst: prisma.warehouseTransfer.findFirst,
         update: prisma.warehouseTransfer.update,
       },
+      inventoryMovement: { findMany: jest.fn().mockResolvedValue([]), create: jest.fn().mockResolvedValue({ id: 'movement-1' }) },
+      stockReservation: { findMany: jest.fn().mockResolvedValue([]) },
       auditEvent: { create: jest.fn() },
     }));
   });
