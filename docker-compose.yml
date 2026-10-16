@@ -1,0 +1,19 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: mudatex
+      POSTGRES_USER: mudatex
+      POSTGRES_PASSWORD: mudatex_local_only
+    ports:
+      - "5432:5432"
+    volumes:
+      - mudatex_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mudatex -d mudatex"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+volumes:
+  mudatex_pgdata:

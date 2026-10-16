@@ -1,36 +1,41 @@
 # Mudatex Enterprise Platform
 
-The new Mudatex platform is being designed for international retail, wholesale, distribution, integrated double-entry accounting, multi-warehouse operations, and full manufacturing. It is a clean project in this repository; Sakash Collection is a separate legacy reference/migration source, not a runtime dependency.
+A new enterprise platform for international textile retail, wholesale, distribution, integrated accounting and full manufacturing. Sakash Collection is a workflow and migration reference, not a runtime dependency or the codebase being extended.
 
-## Status
+## Current implementation
 
-This repository currently contains the baseline requirements and architecture specification. Technology choices and operational policies still require ADRs and stakeholder approval. In particular, inventory costing is intentionally undecided.
+The foundation branch introduces a NestJS API, PostgreSQL/Prisma data model, health/readiness endpoints, OIDC validation and organization membership guards, an organization-scoped product catalog, and a first append-only inventory receipt workflow. Protected endpoints fail closed until an identity provider is configured and the caller has an active organization membership.
 
-## Start here
+- [Enterprise architecture and requirements](docs/ENTERPRISE_ARCHITECTURE_AND_SPECIFICATION.md)
+- [Sakash reference map](docs/SAKASH_REFERENCE_MAP.md)
+- [Implementation status](docs/IMPLEMENTATION_STATUS.md)
+- [Architecture decision register](docs/adr/README.md)
+- [ADR-001: backend and database](docs/adr/ADR-001-backend-and-database.md)
 
-- [Enterprise Architecture and Product Specification](docs/ENTERPRISE_ARCHITECTURE_AND_SPECIFICATION.md)
+## Local development
 
-The specification covers:
-- Multi-company and multi-country structure
-- Textile catalogue, rolls and units of measure
-- Inventory ledger, warehouses and distribution
-- Retail POS and broad offline operations
-- Wholesale, procurement and customer/supplier accounts
-- Integrated double-entry accounting and reconciliation
-- Full manufacturing, MRP, BOM, routings, WIP and genealogy
-- Security, migration from Sakash, phased delivery and acceptance criteria
+Prerequisites: Node.js 22+, npm, Docker Compose.
 
-## Working principles
+1. Copy `.env.example` to `.env` and keep local credentials out of Git.
+2. Start PostgreSQL with `docker compose up -d postgres`.
+3. Install dependencies: `npm install`.
+4. Validate and generate Prisma client: `npx prisma validate` then `npx prisma generate`.
+5. Run tests and checks: `npm test`, `npm run typecheck`, `npm run build`.
+6. Start the API with `npm run start:dev`.
+7. Liveness endpoint: `GET /api/v1/health/live`; readiness endpoint: `GET /api/v1/health/ready`. Product and inventory endpoints require a valid OIDC bearer token plus `X-Organization-Id`; configure `AUTH_ISSUER`, `AUTH_AUDIENCE`, and `AUTH_JWKS_URL` before using them.
 
-1. Protect financial and inventory integrity before adding convenience features.
-2. Never use client-only authorization or trust client-reported payment success.
-3. Make retried commands idempotent and important state transitions auditable.
-4. Offline work must remain visible as queued, accepted, rejected or requiring review.
-5. Keep one authoritative writer for each inventory/financial scope during migration.
-6. Do not hard-code the inventory costing policy; finance must approve it before valuation and production cost posting.
-7. Use synthetic data in development. Production data, secrets and signing materials must not be committed.
-8. Use reviewed ADRs for framework, database, hosting, offline sync and other major technical choices.
+Versioned migrations are included and exercised in CI, but remain an initial development foundation rather than a production deployment approval. Do not connect this scaffold to production data until identity provisioning, authorization policy, integration tests, operational controls and migration review are complete.
 
-## Repository maturity
+## Guardrails
 
-The specification is a plan, not evidence that the application, security controls, tests or infrastructure have already been implemented. Implementation status should be tracked through issues, pull requests and tested release gates.
+- PostgreSQL is the proposed authoritative transactional database; major decisions remain subject to ADR review and CI evidence.
+- Inventory costing is undecided and must not be hard-coded.
+- Never trust client-side admin flags or client-reported payment success.
+- All inventory/finance writes must be server-authorized, transactional, idempotent and auditable.
+- Offline actions must have explicit accepted/rejected/review states and conflict handling.
+- During Sakash migration, use one authoritative writer per inventory/finance domain.
+- Development uses synthetic data only; never commit real credentials, signing materials or production data.
+
+## Important
+
+The specification describes the intended platform. Features marked not implemented in the status document are not yet available. CI must pass before this branch is merged or treated as deployable.
