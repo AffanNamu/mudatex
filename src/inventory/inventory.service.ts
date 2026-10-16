@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { ConflictException, Injectable, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, Injectable, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
 import { InventoryMovementType, LocationType, Prisma, ProductStatus, StockAdjustmentStatus } from '@prisma/client';
 import type { AuthenticatedPrincipal } from '../auth/authenticated-request';
 import { PrismaService } from '../database/prisma.service';
@@ -269,6 +269,9 @@ export class InventoryService {
     if (request.status !== StockAdjustmentStatus.PENDING) {
       throw new ConflictException('Only pending stock adjustment requests can be approved');
     }
+    if (request.requestedBy === [principal.issuer, principal.subject].join('|').slice(0, 160)) {
+      throw new ForbiddenException('The requester cannot approve their own stock adjustment');
+    }
     const delta = new Prisma.Decimal(request.quantityDelta);
     const movementKey = this.scopedIdempotencyKey(organizationId, 'approved-stock-adjustment:' + request.id);
     try {
@@ -327,6 +330,9 @@ export class InventoryService {
     if (!request) throw new NotFoundException('Stock adjustment request was not found in this organization');
     if (request.status !== StockAdjustmentStatus.PENDING) {
       throw new ConflictException('Only pending stock adjustment requests can be rejected');
+    }
+    if (request.requestedBy === [principal.issuer, principal.subject].join('|').slice(0, 160)) {
+      throw new ForbiddenException('The requester cannot reject their own stock adjustment');
     }
     return this.prisma.$transaction(async (tx) => {
       const changed = await tx.stockAdjustmentRequest.updateMany({
