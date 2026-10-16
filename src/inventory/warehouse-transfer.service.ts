@@ -218,7 +218,7 @@ export class WarehouseTransferService {
               legalEntityId: current.legalEntityId, locationId: current.sourceLocationId,
               productId: line.productId, movementType: InventoryMovementType.TRANSFER_OUT,
               quantity: line.quantityRequested, uomCode: line.uomCode,
-              sourceType: 'WAREHOUSE_TRANSFER', sourceId: transfer.id,
+              sourceType: 'WAREHOUSE_TRANSFER', sourceId: current.id,
               idempotencyKey: current.idempotencyKey + ':OUT:' + line.productId,
               reason: current.reason,
             },
@@ -309,7 +309,7 @@ export class WarehouseTransferService {
       if (activeCount) throw new ConflictException('Receipts cannot be recorded while a cycle count is active at the destination location');
 
       for (const inputLine of input.lines) {
-        const line = transferLines.get(inputLine.productId)!;
+        const line = currentLines.get(inputLine.productId)!;
         const nextQuantity = new Prisma.Decimal(inputLine.quantityReceived);
         const delta = nextQuantity.minus(line.quantityReceived);
         if (delta.greaterThan(0)) {
