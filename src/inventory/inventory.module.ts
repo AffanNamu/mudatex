@@ -5,10 +5,12 @@ import { InventoryController } from './inventory.controller';
 import { InventoryWriteRoleGuard } from './inventory-write-role.guard';
 import { InventoryService } from './inventory.service';
 import { StockAdjustmentApprovalGuard } from './stock-adjustment-approval.guard';
+import { WarehouseTransfersController } from './warehouse-transfers.controller';
+import { WarehouseTransferService } from './warehouse-transfer.service';
 
 @Module({
   imports: [AuthModule, DatabaseModule],
-  controllers: [InventoryController],
-  providers: [InventoryService, InventoryWriteRoleGuard, StockAdjustmentApprovalGuard],
+  controllers: [InventoryController, WarehouseTransfersController],
+  providers: [InventoryService, WarehouseTransferService, InventoryWriteRoleGuard, StockAdjustmentApprovalGuard],
 })
 export class InventoryModule {}
