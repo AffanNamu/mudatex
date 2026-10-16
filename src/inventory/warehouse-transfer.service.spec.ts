@@ -16,6 +16,14 @@ describe('WarehouseTransferService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    (prisma.$transaction as jest.Mock).mockImplementation(async (callback: (tx: unknown) => unknown) => callback({
+      $queryRawUnsafe: jest.fn().mockResolvedValue([]),
+      warehouseTransfer: {
+        findFirst: prisma.warehouseTransfer.findFirst,
+        update: prisma.warehouseTransfer.update,
+      },
+      auditEvent: { create: jest.fn() },
+    }));
   });
 
   it('rejects a transfer with the same source and destination before touching persistence', async () => {
