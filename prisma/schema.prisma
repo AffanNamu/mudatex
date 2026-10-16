@@ -21,6 +21,12 @@ enum ProductStatus {
   ARCHIVED
 }
 
+enum CycleCountStatus {
+  IN_PROGRESS
+  SUBMITTED
+  CANCELLED
+}
+
 enum StockAdjustmentStatus {
   PENDING
   APPROVED
@@ -50,6 +56,7 @@ model Organization {
   legalEntities LegalEntity[]
   memberships  OrganizationMembership[]
   stockAdjustmentRequests StockAdjustmentRequest[]
+  cycleCountSessions CycleCountSession[]
 }
 
 model LegalEntity {
@@ -66,6 +73,7 @@ model LegalEntity {
   locations      Location[]
   products       Product[]
   stockAdjustmentRequests StockAdjustmentRequest[]
+  cycleCountSessions CycleCountSession[]
   @@unique([organizationId, code])
   @@index([countryCode, active])
 }
@@ -86,6 +94,7 @@ model Location {
   children      Location[]   @relation("LocationTree")
   inventoryMovements InventoryMovement[]
   stockAdjustmentRequests StockAdjustmentRequest[]
+  cycleCountSessions CycleCountSession[]
   @@unique([legalEntityId, code])
   @@index([legalEntityId, type, active])
   @@index([parentId])
@@ -123,6 +132,7 @@ model Product {
   baseUom       UnitOfMeasure @relation(fields: [baseUomId], references: [id], onDelete: Restrict)
   movements     InventoryMovement[]
   stockAdjustmentRequests StockAdjustmentRequest[]
+  cycleCountLines CycleCountLine[]
   @@unique([legalEntityId, sku])
   @@index([legalEntityId, status, name])
   @@index([categoryCode])
@@ -229,4 +239,40 @@ model StockAdjustmentRequest {
   product        Product               @relation(fields: [productId], references: [id], onDelete: Restrict)
   @@index([organizationId, status, createdAt])
   @@index([locationId, productId, status])
+}
+
+
+model CycleCountSession {
+  id             String          @id @default(uuid()) @db.Uuid
+  organizationId String          @db.Uuid
+  legalEntityId  String          @db.Uuid
+  locationId     String          @db.Uuid
+  createdBy      String          @db.VarChar(160)
+  status         CycleCountStatus @default(IN_PROGRESS)
+  idempotencyKey String          @unique @db.VarChar(160)
+  submittedAt    DateTime?       @db.Timestamptz(6)
+  createdAt      DateTime        @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime        @updatedAt @db.Timestamptz(6)
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  legalEntity    LegalEntity     @relation(fields: [legalEntityId], references: [id], onDelete: Restrict)
+  location       Location        @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  lines          CycleCountLine[]
+  @@index([organizationId, status, createdAt])
+  @@index([locationId, status, createdAt])
+}
+
+model CycleCountLine {
+  id               String          @id @default(uuid()) @db.Uuid
+  sessionId        String          @db.Uuid
+  productId        String          @db.Uuid
+  expectedQuantity Decimal         @db.Decimal(20, 6)
+  countedQuantity  Decimal?        @db.Decimal(20, 6)
+  countedBy        String?         @db.VarChar(160)
+  countedAt        DateTime?       @db.Timestamptz(6)
+  createdAt        DateTime        @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime        @updatedAt @db.Timestamptz(6)
+  session          CycleCountSession @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  product          Product         @relation(fields: [productId], references: [id], onDelete: Restrict)
+  @@unique([sessionId, productId])
+  @@index([productId, sessionId])
 }

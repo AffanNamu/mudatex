@@ -1,12 +1,14 @@
 import { createHash } from 'node:crypto';
 import { ConflictException, ForbiddenException, Injectable, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
-import { InventoryMovementType, LocationType, Prisma, ProductStatus, StockAdjustmentStatus } from '@prisma/client';
+import { CycleCountStatus, InventoryMovementType, LocationType, Prisma, ProductStatus, StockAdjustmentStatus } from '@prisma/client';
 import type { AuthenticatedPrincipal } from '../auth/authenticated-request';
 import { PrismaService } from '../database/prisma.service';
 import type { ReceiveStockDto } from './dto/receive-stock.dto';
 import type { TransferStockDto } from './dto/transfer-stock.dto';
 import type { ListStockBalancesQueryDto } from './dto/list-stock-balances-query.dto';
 import type { RequestStockAdjustmentDto } from './dto/request-stock-adjustment.dto';
+import type { CreateCycleCountDto } from './dto/create-cycle-count.dto';
+import type { RecordCycleCountLineDto } from './dto/record-cycle-count-line.dto';
 
 const OUTGOING = new Set<InventoryMovementType>([
   InventoryMovementType.SALE, InventoryMovementType.TRANSFER_OUT,
@@ -67,6 +69,11 @@ export class InventoryService {
 
     try {
       return await this.prisma.$transaction(async (tx) => {
+        await tx.$queryRawUnsafe('SELECT "id" FROM "Location" WHERE "id" = $1::uuid FOR UPDATE', location.id);
+        const activeCount = await tx.cycleCountSession.findFirst({
+          where: { locationId: location.id, status: CycleCountStatus.IN_PROGRESS }, select: { id: true },
+        });
+        if (activeCount) throw new ConflictException('Stock receipts are paused while a cycle count is in progress at this location');
         const movement = await tx.inventoryMovement.create({
           data: {
             legalEntityId: product.legalEntityId, locationId: location.id, productId: product.id,
@@ -132,8 +139,15 @@ export class InventoryService {
 
     try {
       return await this.prisma.$transaction(async (tx) => {
-        // Lock source location while checking stock; serializable isolation rejects conflicting concurrent transfers.
-        await tx.$queryRawUnsafe('SELECT "id" FROM "Location" WHERE "id" = $1::uuid FOR UPDATE', source.id);
+        // Lock both locations in stable order so count snapshots and transfers serialize without avoidable deadlocks.
+        for (const locationId of [source.id, destination.id].sort()) {
+          await tx.$queryRawUnsafe('SELECT "id" FROM "Location" WHERE "id" = $1::uuid FOR UPDATE', locationId);
+        }
+        const activeCount = await tx.cycleCountSession.findFirst({
+          where: { locationId: { in: [source.id, destination.id] }, status: CycleCountStatus.IN_PROGRESS },
+          select: { id: true, locationId: true },
+        });
+        if (activeCount) throw new ConflictException('Transfers are paused while a cycle count is in progress at either location');
         const movements = await tx.inventoryMovement.findMany({
           where: { legalEntityId: product.legalEntityId, locationId: source.id, productId: product.id },
           select: { movementType: true, quantity: true },
@@ -194,9 +208,233 @@ export class InventoryService {
   }
 
 
+
+  async createCycleCount(organizationId: string, principal: AuthenticatedPrincipal, input: CreateCycleCountDto) {
+    if (!input.productIds.length || input.productIds.length > 200) {
+      throw new UnprocessableEntityException('A cycle count must include between 1 and 200 products');
+    }
+    const location = await this.findStockLocation(organizationId, input.locationId);
+    if (!location) throw new NotFoundException('Active stock location was not found in this organization');
+    const idempotencyKey = this.scopedIdempotencyKey(organizationId, 'cycle-count:' + input.idempotencyKey);
+    const existing = await this.prisma.cycleCountSession.findUnique({
+      where: { idempotencyKey }, include: { lines: { select: { productId: true } } },
+    });
+    if (existing) {
+      const requested = [...input.productIds].sort();
+      const stored = existing.lines.map((line) => line.productId).sort();
+      if (existing.locationId !== location.id || requested.length !== stored.length ||
+          requested.some((id, index) => id !== stored[index])) {
+        throw new ConflictException('Idempotency key was already used for a different cycle count');
+      }
+      return { session: existing, replayed: true };
+    }
+
+    const products = await this.prisma.product.findMany({
+      where: {
+        id: { in: input.productIds }, status: ProductStatus.ACTIVE,
+        legalEntityId: location.legalEntityId, legalEntity: { organizationId, active: true },
+      },
+      select: { id: true, baseUom: { select: { code: true } } },
+    });
+    if (products.length !== input.productIds.length) {
+      throw new UnprocessableEntityException('Every counted product must be active and belong to the stock location legal entity');
+    }
+    try {
+      const session = await this.prisma.$transaction(async (tx) => {
+        await tx.$queryRawUnsafe('SELECT "id" FROM "Location" WHERE "id" = $1::uuid FOR UPDATE', location.id);
+        const activeCount = await tx.cycleCountSession.findFirst({
+          where: { locationId: location.id, status: CycleCountStatus.IN_PROGRESS }, select: { id: true },
+        });
+        if (activeCount) throw new ConflictException('A cycle count is already in progress at this location');
+        const pendingAdjustment = await tx.stockAdjustmentRequest.findFirst({
+          where: { organizationId, locationId: location.id, status: StockAdjustmentStatus.PENDING },
+          select: { id: true },
+        });
+        if (pendingAdjustment) {
+          throw new ConflictException('Resolve pending stock adjustment requests at this location before starting another cycle count');
+        }
+        const movements = await tx.inventoryMovement.findMany({
+          where: { legalEntityId: location.legalEntityId, locationId: location.id, productId: { in: input.productIds } },
+          select: { productId: true, movementType: true, quantity: true },
+        });
+        const expected = new Map<string, Prisma.Decimal>();
+        for (const productId of input.productIds) expected.set(productId, new Prisma.Decimal(0));
+        for (const movement of movements) {
+          const amount = new Prisma.Decimal(movement.quantity);
+          const current = expected.get(movement.productId) ?? new Prisma.Decimal(0);
+          if (OUTGOING.has(movement.movementType)) expected.set(movement.productId, current.minus(amount));
+          else if (INCOMING.has(movement.movementType) || movement.movementType === InventoryMovementType.ADJUSTMENT) {
+            expected.set(movement.productId, current.plus(amount));
+          }
+        }
+        const created = await tx.cycleCountSession.create({
+          data: {
+            organizationId, legalEntityId: location.legalEntityId, locationId: location.id,
+            createdBy: [principal.issuer, principal.subject].join('|').slice(0, 160), idempotencyKey,
+            lines: {
+              create: products.map((product) => ({
+                productId: product.id,
+                expectedQuantity: expected.get(product.id) ?? new Prisma.Decimal(0),
+              })),
+            },
+          },
+          include: { lines: true },
+        });
+        await tx.auditEvent.create({
+          data: {
+            organizationId, actorId: [principal.issuer, principal.subject].join('|').slice(0, 160),
+            action: 'inventory.cycle_count.created', entityType: 'CycleCountSession', entityId: created.id,
+            result: 'IN_PROGRESS',
+            metadata: { locationId: location.id, productCount: products.length, idempotencyKey },
+          },
+        });
+        return created;
+      });
+      return { session, replayed: false };
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        const raced = await this.prisma.cycleCountSession.findUnique({
+          where: { idempotencyKey }, include: { lines: { select: { productId: true } } },
+        });
+        if (raced && raced.locationId === location.id &&
+            [...input.productIds].sort().join(',') === raced.lines.map((line) => line.productId).sort().join(',')) {
+          return { session: raced, replayed: true };
+        }
+        throw new ConflictException('A cycle count conflicts with an existing record');
+      }
+      throw error;
+    }
+  }
+
+  async listCycleCounts(organizationId: string) {
+    return this.prisma.cycleCountSession.findMany({
+      where: { organizationId }, orderBy: { createdAt: 'desc' }, take: 100,
+      include: { lines: { include: { product: { select: { sku: true, name: true } } } } },
+    });
+  }
+
+  async recordCycleCountLine(
+    organizationId: string, principal: AuthenticatedPrincipal, sessionId: string, productId: string, input: RecordCycleCountLineDto,
+  ) {
+    const countedQuantity = input.countedQuantity.trim();
+    if (!/^(?:0|[1-9][0-9]{0,13})(?:[.][0-9]{1,6})?$/.test(countedQuantity)) {
+      throw new UnprocessableEntityException('Counted quantity must be zero or a positive decimal with at most 6 decimal places');
+    }
+    const session = await this.prisma.cycleCountSession.findFirst({ where: { id: sessionId, organizationId } });
+    if (!session) throw new NotFoundException('Cycle count session was not found in this organization');
+    if (session.status !== CycleCountStatus.IN_PROGRESS) {
+      throw new ConflictException('Only in-progress cycle counts can be edited');
+    }
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRawUnsafe('SELECT "id" FROM "CycleCountSession" WHERE "id" = $1::uuid FOR UPDATE', session.id);
+      const current = await tx.cycleCountSession.findFirst({ where: { id: session.id, organizationId } });
+      if (!current || current.status !== CycleCountStatus.IN_PROGRESS) {
+        throw new ConflictException('Cycle count is no longer in progress');
+      }
+      const line = await tx.cycleCountLine.update({
+        where: { sessionId_productId: { sessionId: session.id, productId } },
+        data: {
+          countedQuantity, countedBy: [principal.issuer, principal.subject].join('|').slice(0, 160),
+          countedAt: new Date(),
+        },
+        include: { product: { select: { sku: true, name: true } } },
+      });
+      await tx.auditEvent.create({
+        data: {
+          organizationId, actorId: [principal.issuer, principal.subject].join('|').slice(0, 160),
+          action: 'inventory.cycle_count.line_recorded', entityType: 'CycleCountLine', entityId: line.id,
+          result: 'SUCCESS', metadata: { sessionId: session.id, productId, countedQuantity },
+        },
+      });
+      return line;
+    });
+  }
+
+  async submitCycleCount(organizationId: string, principal: AuthenticatedPrincipal, sessionId: string) {
+    const session = await this.prisma.cycleCountSession.findFirst({
+      where: { id: sessionId, organizationId },
+      include: { lines: { include: { product: { select: { id: true, baseUom: { select: { code: true } } } } } } },
+    });
+    if (!session) throw new NotFoundException('Cycle count session was not found in this organization');
+    if (session.status !== CycleCountStatus.IN_PROGRESS) {
+      throw new ConflictException('Only in-progress cycle counts can be submitted');
+    }
+    if (!session.lines.length || session.lines.some((line) => line.countedQuantity === null)) {
+      throw new UnprocessableEntityException('Record a physical count for every product before submitting');
+    }
+
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        await tx.$queryRawUnsafe('SELECT "id" FROM "CycleCountSession" WHERE "id" = $1::uuid FOR UPDATE', session.id);
+        const current = await tx.cycleCountSession.findFirst({
+          where: { id: session.id, organizationId },
+          include: { lines: { include: { product: { select: { id: true, baseUom: { select: { code: true } } } } } } },
+        });
+        if (!current || current.status !== CycleCountStatus.IN_PROGRESS) {
+          throw new ConflictException('Cycle count has already been submitted or cancelled');
+        }
+        if (!current.lines.length || current.lines.some((line) => line.countedQuantity === null)) {
+          throw new UnprocessableEntityException('Record a physical count for every product before submitting');
+        }
+
+        const actor = [principal.issuer, principal.subject].join('|').slice(0, 160);
+        const adjustments: Array<{ requestId: string; productId: string; quantityDelta: string }> = [];
+        for (const line of current.lines) {
+          const delta = new Prisma.Decimal(line.countedQuantity!).minus(new Prisma.Decimal(line.expectedQuantity));
+          if (delta.isZero()) continue;
+          const idempotencyKey = this.scopedIdempotencyKey(
+            organizationId, 'stock-adjustment:cycle-count:' + current.id + ':' + line.productId,
+          );
+          const reason = 'Cycle count variance for session ' + current.id;
+          const request = await tx.stockAdjustmentRequest.create({
+            data: {
+              organizationId, legalEntityId: current.legalEntityId, locationId: current.locationId,
+              productId: line.productId, requestedBy: actor, quantityDelta: delta,
+              uomCode: line.product.baseUom.code, reason, idempotencyKey,
+            },
+          });
+          adjustments.push({ requestId: request.id, productId: line.productId, quantityDelta: delta.toFixed(6) });
+          await tx.auditEvent.create({
+            data: {
+              organizationId, actorId: actor, action: 'inventory.adjustment.requested',
+              entityType: 'StockAdjustmentRequest', entityId: request.id, result: 'PENDING', reason,
+              metadata: {
+                sourceCycleCountSessionId: current.id, productId: line.productId,
+                expectedQuantity: new Prisma.Decimal(line.expectedQuantity).toFixed(6),
+                countedQuantity: new Prisma.Decimal(line.countedQuantity!).toFixed(6),
+                quantityDelta: delta.toFixed(6),
+              },
+            },
+          });
+        }
+        const changed = await tx.cycleCountSession.updateMany({
+          where: { id: current.id, organizationId, status: CycleCountStatus.IN_PROGRESS },
+          data: { status: CycleCountStatus.SUBMITTED, submittedAt: new Date() },
+        });
+        if (changed.count !== 1) throw new ConflictException('Cycle count was submitted concurrently');
+        await tx.auditEvent.create({
+          data: {
+            organizationId, actorId: actor, action: 'inventory.cycle_count.submitted',
+            entityType: 'CycleCountSession', entityId: current.id, result: 'SUBMITTED',
+            metadata: { lineCount: current.lines.length, adjustmentCount: adjustments.length, adjustments },
+          },
+        });
+        return { sessionId: current.id, status: CycleCountStatus.SUBMITTED, adjustmentRequests: adjustments };
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new ConflictException('A cycle-count adjustment request already exists; investigate before retrying');
+      }
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034') {
+        throw new ConflictException('Concurrent inventory activity changed the cycle count; retry the submission');
+      }
+      throw error;
+    }
+  }
+
   async requestStockAdjustment(organizationId: string, principal: AuthenticatedPrincipal, input: RequestStockAdjustmentDto) {
     const quantityDelta = input.quantityDelta.trim();
-    if (!/^-?\\d+(?:\\.\\d{1,6})?$/.test(quantityDelta) || new Prisma.Decimal(quantityDelta).isZero()) {
+    if (!/^-?[0-9]+(?:[.][0-9]{1,6})?$/.test(quantityDelta) || new Prisma.Decimal(quantityDelta).isZero()) {
       throw new UnprocessableEntityException('Adjustment delta must be non-zero and use at most 6 decimal places');
     }
     const [product, location] = await Promise.all([
@@ -277,6 +515,10 @@ export class InventoryService {
     try {
       return await this.prisma.$transaction(async (tx) => {
         await tx.$queryRawUnsafe('SELECT "id" FROM "Location" WHERE "id" = $1::uuid FOR UPDATE', request.locationId);
+        const activeCount = await tx.cycleCountSession.findFirst({
+          where: { locationId: request.locationId, status: CycleCountStatus.IN_PROGRESS }, select: { id: true },
+        });
+        if (activeCount) throw new ConflictException('Stock adjustments are paused while a cycle count is in progress at this location');
         const movements = await tx.inventoryMovement.findMany({
           where: { legalEntityId: request.legalEntityId, locationId: request.locationId, productId: request.productId },
           select: { movementType: true, quantity: true },
