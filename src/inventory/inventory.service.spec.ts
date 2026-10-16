@@ -43,6 +43,7 @@ describe('InventoryService', () => {
         findMany: prisma.inventoryMovement.findMany,
       },
       auditEvent: { create: jest.fn().mockResolvedValue({}) },
+      cycleCountSession: { findFirst: jest.fn().mockResolvedValue(null) },
       $queryRawUnsafe: jest.fn().mockResolvedValue([]),
     }));
   });
@@ -60,6 +61,8 @@ describe('InventoryService', () => {
     const createAudit = jest.fn().mockResolvedValue({});
     prisma.$transaction.mockImplementationOnce(async (callback: (tx: unknown) => unknown) => callback({
       inventoryMovement: { create: createMovement }, auditEvent: { create: createAudit },
+      $queryRawUnsafe: jest.fn().mockResolvedValue([]),
+      cycleCountSession: { findFirst: jest.fn().mockResolvedValue(null) },
     }));
     await service.receive('org-1', principal, receipt);
     expect(createMovement).toHaveBeenCalledWith(expect.objectContaining({
@@ -88,6 +91,7 @@ describe('InventoryService', () => {
         findMany: jest.fn().mockResolvedValue([{ movementType: 'RECEIPT', quantity: new Prisma.Decimal('12.500') }]),
         create: jest.fn().mockImplementation(({ data }) => data.movementType === 'TRANSFER_OUT' ? out() : into()),
       },
+      cycleCountSession: { findFirst: jest.fn().mockResolvedValue(null) },
       auditEvent: { create: audit },
     }));
     const result = await service.transfer('org-1', principal, transfer);
@@ -112,7 +116,8 @@ describe('InventoryService', () => {
     });
     const audit = jest.fn().mockResolvedValue({});
     prisma.$transaction.mockImplementationOnce(async (callback: (tx: unknown) => unknown) => callback({
-      cycleCountSession: { create: createSession },
+      $queryRawUnsafe: jest.fn().mockResolvedValue([]),
+      cycleCountSession: { findFirst: jest.fn().mockResolvedValue(null), create: createSession },
       auditEvent: { create: audit },
     }));
     const result = await service.createCycleCount('org-1', principal, input);
