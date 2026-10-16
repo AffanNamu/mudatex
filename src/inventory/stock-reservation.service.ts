@@ -204,6 +204,15 @@ export class StockReservationService {
 
     return this.prisma.$transaction(async tx => {
       await tx.$queryRawUnsafe('SELECT "id" FROM "Location" WHERE "id" = $1::uuid FOR UPDATE', reservation.locationId);
+      const racedMovements = await tx.inventoryMovement.findMany({ where: { idempotencyKey: { in: movementKeys } } });
+      if (racedMovements.length) {
+        const replayIsComplete = racedMovements.length === requested.length && requested.every(line => {
+          const movement = racedMovements.find(m => m.idempotencyKey === this.key(organizationId, input.idempotencyKey, ':F:' + line.productId));
+          return movement && movement.sourceType === 'STOCK_RESERVATION_FULFILMENT' && movement.sourceId === id && new Prisma.Decimal(movement.quantity).equals(line.quantity);
+        });
+        if (!replayIsComplete) throw new ConflictException('Fulfillment idempotency key was reused with a different or incomplete payload');
+        return { movements: racedMovements, replayed: true };
+      }
       const activeCount = await tx.cycleCountSession.findFirst({ where: { locationId: reservation.locationId, status: CycleCountStatus.IN_PROGRESS }, select: { id: true } });
       if (activeCount) throw new ConflictException('Fulfillment is paused while a cycle count is in progress at this location');
       const current = await tx.stockReservation.findFirst({ where: { id, organizationId }, include: { lines: true } });
