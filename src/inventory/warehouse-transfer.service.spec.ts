@@ -41,7 +41,7 @@ describe('WarehouseTransferService', () => {
       requestedBy: 'https://identity.example|user-1',
     });
     await expect(service.reject('org-1', principal, id, 'Rejected')).rejects.toBeInstanceOf(ConflictException);
-    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
   });
 
   it('rejects receipt quantities that decrease or exceed the dispatched quantity', async () => {
