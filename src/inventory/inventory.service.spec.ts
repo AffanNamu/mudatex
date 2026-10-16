@@ -44,6 +44,7 @@ describe('InventoryService', () => {
       },
       auditEvent: { create: jest.fn().mockResolvedValue({}) },
       cycleCountSession: { findFirst: jest.fn().mockResolvedValue(null) },
+      stockReservation: { findMany: jest.fn().mockResolvedValue([]) },
       $queryRawUnsafe: jest.fn().mockResolvedValue([]),
     }));
   });
@@ -63,6 +64,7 @@ describe('InventoryService', () => {
       inventoryMovement: { create: createMovement }, auditEvent: { create: createAudit },
       $queryRawUnsafe: jest.fn().mockResolvedValue([]),
       cycleCountSession: { findFirst: jest.fn().mockResolvedValue(null) },
+      stockReservation: { findMany: jest.fn().mockResolvedValue([]) },
     }));
     await service.receive('org-1', principal, receipt);
     expect(createMovement).toHaveBeenCalledWith(expect.objectContaining({
@@ -92,6 +94,7 @@ describe('InventoryService', () => {
         create: jest.fn().mockImplementation(({ data }) => data.movementType === 'TRANSFER_OUT' ? out() : into()),
       },
       cycleCountSession: { findFirst: jest.fn().mockResolvedValue(null) },
+      stockReservation: { findMany: jest.fn().mockResolvedValue([]) },
       auditEvent: { create: audit },
     }));
     const result = await service.transfer('org-1', principal, transfer);
