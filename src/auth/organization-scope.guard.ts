@@ -5,12 +5,12 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
-import { DatabaseService } from '../database/prisma.service';
+import { PrismaService } from '../database/prisma.service';
 import type { MudatexRequest } from './authenticated-request';
 
 @Injectable()
 export class OrganizationScopeGuard implements CanActivate {
-  constructor(private readonly database: DatabaseService) {}
+  constructor(private readonly database: PrismaService) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<MudatexRequest>();
