@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { ConflictException, ForbiddenException, Injectable, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
-import { CycleCountStatus, InventoryMovementType, LocationType, Prisma, ProductStatus, StockAdjustmentStatus } from '@prisma/client';
+import { CycleCountStatus, InventoryMovementType, LocationType, Prisma, ProductStatus, StockAdjustmentStatus, StockReservationStatus } from '@prisma/client';
 import type { AuthenticatedPrincipal } from '../auth/authenticated-request';
 import { PrismaService } from '../database/prisma.service';
 import type { ReceiveStockDto } from './dto/receive-stock.dto';
@@ -159,8 +159,19 @@ export class InventoryService {
           if (movement.movementType === InventoryMovementType.ADJUSTMENT) return sum.plus(amount);
           return sum;
         }, new Prisma.Decimal(0));
-        if (available.lessThan(new Prisma.Decimal(quantity))) {
-          throw new UnprocessableEntityException('Insufficient available stock for this transfer');
+        const activeReservations = await tx.stockReservation.findMany({
+          where: {
+            locationId: source.id,
+            status: { in: [StockReservationStatus.ACTIVE, StockReservationStatus.PARTIALLY_FULFILLED] },
+            OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+          },
+          include: { lines: { where: { productId: product.id }, select: { quantityReserved: true, quantityFulfilled: true } } },
+        });
+        const reserved = activeReservations.reduce((sum, reservation) => sum.plus(reservation.lines.reduce(
+          (lineSum, line) => lineSum.plus(line.quantityReserved.minus(line.quantityFulfilled)), new Prisma.Decimal(0),
+        )), new Prisma.Decimal(0));
+        if (available.minus(reserved).lessThan(new Prisma.Decimal(quantity))) {
+          throw new UnprocessableEntityException('Insufficient available-to-promise stock for this transfer after active reservations');
         }
 
         const sourceMovement = await tx.inventoryMovement.create({
