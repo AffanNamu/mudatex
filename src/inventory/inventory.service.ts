@@ -246,6 +246,13 @@ export class InventoryService {
           where: { locationId: location.id, status: CycleCountStatus.IN_PROGRESS }, select: { id: true },
         });
         if (activeCount) throw new ConflictException('A cycle count is already in progress at this location');
+        const pendingAdjustment = await tx.stockAdjustmentRequest.findFirst({
+          where: { organizationId, locationId: location.id, status: StockAdjustmentStatus.PENDING },
+          select: { id: true },
+        });
+        if (pendingAdjustment) {
+          throw new ConflictException('Resolve pending stock adjustment requests at this location before starting another cycle count');
+        }
         const movements = await tx.inventoryMovement.findMany({
           where: { legalEntityId: location.legalEntityId, locationId: location.id, productId: { in: input.productIds } },
           select: { productId: true, movementType: true, quantity: true },
