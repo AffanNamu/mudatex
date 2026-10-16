@@ -119,7 +119,20 @@ export class WarehouseTransferService {
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         const raced = await this.prisma.warehouseTransfer.findUnique({ where: { idempotencyKey }, include: { lines: true } });
-        if (raced) return { transfer: raced, replayed: true };
+        if (raced) {
+          const requested = [...input.lines].sort((a, b) => a.productId.localeCompare(b.productId));
+          const stored = [...raced.lines].sort((a, b) => a.productId.localeCompare(b.productId));
+          const sameRequest = raced.sourceLocationId === source.id &&
+            raced.destinationLocationId === destination.id &&
+            raced.reason === input.reason.trim() &&
+            requested.length === stored.length &&
+            requested.every((line, index) => line.productId === stored[index].productId &&
+              new Prisma.Decimal(line.quantity).comparedTo(stored[index].quantityRequested) === 0);
+          if (!sameRequest) {
+            throw new ConflictException('Idempotency key was concurrently used for a different warehouse transfer');
+          }
+          return { transfer: raced, replayed: true };
+        }
         throw new ConflictException('A warehouse transfer conflicts with an existing record');
       }
       throw error;
