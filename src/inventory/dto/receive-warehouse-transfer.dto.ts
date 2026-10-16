@@ -1,4 +1,4 @@
-import { ArrayMaxSize, ArrayMinSize, ArrayUnique, IsArray, IsOptional, IsString, IsUUID, Matches, MaxLength, MinLength, ValidateNested } from 'class-validator';
+import { ArrayMaxSize, ArrayMinSize, ArrayUnique, IsArray, IsBoolean, IsOptional, IsString, IsUUID, Matches, MaxLength, MinLength, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 
 class WarehouseTransferReceiptLineInput {
@@ -17,6 +17,10 @@ class WarehouseTransferReceiptLineInput {
 }
 
 export class ReceiveWarehouseTransferDto {
+  @IsOptional()
+  @IsBoolean()
+  complete?: boolean;
+
   @IsArray()
   @ArrayMinSize(1)
   @ArrayMaxSize(100)
