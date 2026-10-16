@@ -52,6 +52,52 @@ describe('StockReservationService', () => {
     expect(tx.stockReservation.create).not.toHaveBeenCalled();
   });
 
+  it('fulfills part of a reservation by posting a SALE movement atomically', async () => {
+    const reservation = {
+      id: '44444444-4444-4444-8444-444444444444',
+      organizationId, legalEntityId: '55555555-5555-4555-8555-555555555555',
+      locationId, orderReference: 'ORDER-102', status: 'ACTIVE', expiresAt: null,
+      lines: [{
+        id: '66666666-6666-4666-8666-666666666666', productId,
+        quantityReserved: new Prisma.Decimal('5'), quantityFulfilled: new Prisma.Decimal('0'), uomCode: 'EA',
+      }],
+    };
+    const tx: any = {
+      $queryRawUnsafe: jest.fn().mockResolvedValue([]),
+      cycleCountSession: { findFirst: jest.fn().mockResolvedValue(null) },
+      stockReservation: {
+        findFirst: jest.fn().mockResolvedValue(reservation),
+        findMany: jest.fn().mockResolvedValue([{ lines: reservation.lines }]),
+        update: jest.fn().mockResolvedValue({ ...reservation, status: 'PARTIALLY_FULFILLED' }),
+      },
+      inventoryMovement: {
+        findMany: jest.fn().mockResolvedValue([{ movementType: InventoryMovementType.RECEIPT, quantity: new Prisma.Decimal('5') }]),
+        create: jest.fn().mockResolvedValue({ id: 'sale-movement', movementType: 'SALE' }),
+      },
+      stockReservationLine: {
+        update: jest.fn().mockResolvedValue({}),
+        findMany: jest.fn().mockResolvedValue([{ quantityReserved: new Prisma.Decimal('5'), quantityFulfilled: new Prisma.Decimal('2') }]),
+      },
+      auditEvent: { create: jest.fn().mockResolvedValue({}) },
+    };
+    const prisma: any = {
+      stockReservation: { findFirst: jest.fn().mockResolvedValue(reservation) },
+      inventoryMovement: { findMany: jest.fn().mockResolvedValue([]) },
+      $transaction: jest.fn().mockImplementation(async (callback: any) => callback(tx)),
+    };
+    const service = new StockReservationService(prisma);
+    const result = await service.fulfill(organizationId, principal, reservation.id, {
+      idempotencyKey: 'fulfill-102',
+      lines: [{ productId, quantity: '2' }],
+    });
+    expect(result.status).toBe(StockReservationStatus.PARTIALLY_FULFILLED);
+    expect(tx.inventoryMovement.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ movementType: InventoryMovementType.SALE, quantity: new Prisma.Decimal('2') }),
+    }));
+    expect(tx.stockReservationLine.update).toHaveBeenCalledTimes(1);
+    expect(tx.auditEvent.create).toHaveBeenCalledTimes(1);
+  });
+
   it('creates a reservation without adding an inventory movement', async () => {
     const { service, tx } = setup('5', '0');
     const result = await service.create(organizationId, principal, {
