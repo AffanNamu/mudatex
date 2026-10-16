@@ -20,6 +20,7 @@ CREATE TABLE "CycleCountSession" (
 CREATE UNIQUE INDEX "CycleCountSession_idempotencyKey_key" ON "CycleCountSession"("idempotencyKey");
 CREATE INDEX "CycleCountSession_organizationId_status_createdAt_idx" ON "CycleCountSession"("organizationId", "status", "createdAt");
 CREATE INDEX "CycleCountSession_locationId_status_createdAt_idx" ON "CycleCountSession"("locationId", "status", "createdAt");
+CREATE UNIQUE INDEX "CycleCountSession_one_active_per_location_key" ON "CycleCountSession"("locationId") WHERE "status" = 'IN_PROGRESS';
 
 CREATE TABLE "CycleCountLine" (
   "id" UUID NOT NULL,
