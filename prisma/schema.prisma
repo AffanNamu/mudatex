@@ -42,6 +42,7 @@ model Organization {
   createdAt   DateTime     @default(now()) @db.Timestamptz(6)
   updatedAt   DateTime     @updatedAt @db.Timestamptz(6)
   legalEntities LegalEntity[]
+  memberships  OrganizationMembership[]
 }
 
 model LegalEntity {
@@ -165,4 +166,32 @@ model IdempotencyRecord {
   expiresAt      DateTime? @db.Timestamptz(6)
   @@unique([scope, key])
   @@index([expiresAt])
+}
+
+
+enum MembershipRole {
+  OWNER
+  ADMIN
+  MANAGER
+  STAFF
+  VIEWER
+}
+
+enum MembershipStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+model OrganizationMembership {
+  id             String           @id @default(uuid()) @db.Uuid
+  organizationId String           @db.Uuid
+  issuer         String           @db.VarChar(500)
+  subject        String           @db.VarChar(255)
+  role           MembershipRole   @default(VIEWER)
+  status         MembershipStatus @default(ACTIVE)
+  createdAt      DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime         @updatedAt @db.Timestamptz(6)
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  @@unique([organizationId, issuer, subject])
+  @@index([issuer, subject, status])
 }
