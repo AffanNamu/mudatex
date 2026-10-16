@@ -9,7 +9,7 @@
 - Inventory receipts: \`POST /api/v1/inventory/receipts\`; active product/location checks, same-entity constraint, positive decimal quantity, scoped idempotency and transactional audit.
 - Legacy immediate inventory transfers remain available at \`POST /api/v1/inventory/transfers\` for compatibility; they post paired TRANSFER_OUT/TRANSFER_IN movements immediately. Prefer the controlled warehouse-transfer lifecycle for operational transfers.
 - Controlled warehouse transfers: \`/api/v1/inventory/warehouse-transfers\` supports draft creation, submission, manager approval/rejection, dispatch, partial receipt, final receipt and discrepancy reasons. Dispatch posts source ledger movements; receipt posts only newly received destination quantities. Each state change is organization-scoped, audited, and guarded against active cycle counts. Cross-legal-entity transfers remain blocked pending intercompany accounting.
-- Stock reservations: ` /api/v1/inventory/stock-reservations ` supports ATP-checked reservation creation, listing, release, and partial/final fulfillment. Reservation records do not alter on-hand ledger quantities; fulfillment posts SALE movements transactionally. The legacy transfer and controlled warehouse dispatch paths subtract active unexpired reservations before dispatching stock. See ADR-011. This remains an inventory primitive, not a complete sales-order, picking/packing, payment, or delivery system.
+- Stock reservations: `/api/v1/inventory/stock-reservations` supports ATP-checked reservation creation, listing, release, and partial/final fulfillment. Reservation records do not alter on-hand ledger quantities; fulfillment posts SALE movements transactionally. The legacy transfer and controlled warehouse dispatch paths subtract active unexpired reservations before dispatching stock. See ADR-011. This remains an inventory primitive, not a complete sales-order, picking/packing, payment, or delivery system.
 - Stock balances: \`GET /api/v1/inventory/balances\` derives on-hand quantities from the movement ledger, with optional location/product filters. This is a quantity view, not financial valuation.
 - Inventory write operations require valid OIDC authentication, active organization membership and OWNER/ADMIN/MANAGER/STAFF role; VIEWER is read-only.
 - Unit tests cover core product, receipt, transfer and authorization cases. Local PostgreSQL, CI, environment template, ADRs and Sakash reference mapping are present.
@@ -21,9 +21,7 @@
 - Cycle-count cancellation/recount controls, returns and optimized persisted balance projections.
 - First-class sales orders, pick/pack, customer/supplier management, procurement, POS, wholesale order lifecycle, accounting, taxes, payments and full manufacturing execution.
 - Scheduled reservation expiry/release worker and order-cancellation integration.
-- Ensure every non-reservation outbound stock flow (including compatibility transfers and controlled warehouse dispatch) protects active reservations before enabling reservation-backed live order traffic.
-- Scheduled reservation expiry/release worker and order-cancellation integration.
-- First-class sales orders, pick/pack, customer/supplier management, procurement, POS, wholesale order lifecycle, accounting, taxes, payments and full manufacturing execution.
+- Any future outbound stock operation must enforce active reservations before it is enabled for reservation-backed live order traffic.
 - Offline sync protocol, conflict resolution and device registration.
 - Inventory costing/valuation policy and official financial postings.
 - Production deployment, monitoring, backup/DR automation, runbooks and legacy import/reconciliation.
