@@ -4,12 +4,14 @@ import { PrismaService } from '../database/prisma.service';
 import { InventoryService } from './inventory.service';
 import type { ReceiveStockDto } from './dto/receive-stock.dto';
 import type { TransferStockDto } from './dto/transfer-stock.dto';
+import type { CreateCycleCountDto } from './dto/create-cycle-count.dto';
 
 describe('InventoryService', () => {
   const prisma = {
-    product: { findFirst: jest.fn() },
+    product: { findFirst: jest.fn(), findMany: jest.fn() },
     location: { findFirst: jest.fn() },
     inventoryMovement: { findUnique: jest.fn(), findMany: jest.fn() },
+    cycleCountSession: { findUnique: jest.fn(), findFirst: jest.fn(), findMany: jest.fn() },
     $transaction: jest.fn(),
   };
   const service = new InventoryService(prisma as unknown as PrismaService);
@@ -27,6 +29,10 @@ describe('InventoryService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    prisma.cycleCountSession.findUnique.mockResolvedValue(null);
+    prisma.cycleCountSession.findFirst.mockResolvedValue(null);
+    prisma.cycleCountSession.findMany.mockResolvedValue([]);
+    prisma.product.findMany.mockResolvedValue([{ id: receipt.productId, baseUom: { code: 'METER' } }]);
     prisma.product.findFirst.mockResolvedValue({ id: receipt.productId, legalEntityId: 'legal-1', baseUom: { code: 'METER' } });
     prisma.location.findFirst.mockImplementation(async ({ where }: { where: { id: string } }) => ({ id: where.id, legalEntityId: 'legal-1' }));
     prisma.inventoryMovement.findUnique.mockResolvedValue(null);
@@ -89,6 +95,67 @@ describe('InventoryService', () => {
     expect(out).toHaveBeenCalled();
     expect(into).toHaveBeenCalled();
     expect(audit).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ action: 'inventory.transfer.created' }) }));
+  });
+
+
+  it('creates a cycle count with expected quantities snapshotted from the ledger', async () => {
+    const input: CreateCycleCountDto = {
+      locationId: receipt.locationId, productIds: [receipt.productId], idempotencyKey: 'count-001',
+    };
+    prisma.inventoryMovement.findMany.mockResolvedValue([
+      { productId: receipt.productId, movementType: 'RECEIPT', quantity: new Prisma.Decimal('12.500') },
+      { productId: receipt.productId, movementType: 'SALE', quantity: new Prisma.Decimal('2.000') },
+    ]);
+    const createSession = jest.fn().mockResolvedValue({
+      id: 'count-session-1', status: 'IN_PROGRESS',
+      lines: [{ productId: receipt.productId, expectedQuantity: new Prisma.Decimal('10.500') }],
+    });
+    const audit = jest.fn().mockResolvedValue({});
+    prisma.$transaction.mockImplementationOnce(async (callback: (tx: unknown) => unknown) => callback({
+      cycleCountSession: { create: createSession },
+      auditEvent: { create: audit },
+    }));
+    const result = await service.createCycleCount('org-1', principal, input);
+    expect(result.replayed).toBe(false);
+    expect(createSession).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        lines: { create: [{ productId: receipt.productId, expectedQuantity: new Prisma.Decimal('10.500') }] },
+      }),
+    }));
+    expect(audit).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ action: 'inventory.cycle_count.created' }),
+    }));
+  });
+
+  it('submits a completed cycle count as pending adjustment requests, not direct ledger changes', async () => {
+    const session = {
+      id: 'count-session-1', organizationId: 'org-1', legalEntityId: 'legal-1',
+      locationId: receipt.locationId, status: 'IN_PROGRESS',
+      lines: [{
+        id: 'line-1', productId: receipt.productId,
+        expectedQuantity: new Prisma.Decimal('10.000'), countedQuantity: new Prisma.Decimal('8.000'),
+        product: { id: receipt.productId, baseUom: { code: 'METER' } },
+      }],
+    };
+    prisma.cycleCountSession.findFirst.mockResolvedValue(session);
+    const createAdjustment = jest.fn().mockResolvedValue({ id: 'adjustment-1' });
+    const updateSession = jest.fn().mockResolvedValue({ count: 1 });
+    const audit = jest.fn().mockResolvedValue({});
+    prisma.$transaction.mockImplementationOnce(async (callback: (tx: unknown) => unknown) => callback({
+      $queryRawUnsafe: jest.fn().mockResolvedValue([]),
+      cycleCountSession: { findFirst: jest.fn().mockResolvedValue(session), updateMany: updateSession },
+      stockAdjustmentRequest: { create: createAdjustment },
+      auditEvent: { create: audit },
+    }));
+    const result = await service.submitCycleCount('org-1', principal, session.id);
+    expect(result.status).toBe('SUBMITTED');
+    expect(result.adjustmentRequests).toHaveLength(1);
+    expect(createAdjustment).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ quantityDelta: new Prisma.Decimal('-2.000'), uomCode: 'METER' }),
+    }));
+    expect(audit).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ action: 'inventory.cycle_count.submitted' }),
+    }));
   });
 
   it('rejects transfers when stock is insufficient or the legal entity differs', async () => {
