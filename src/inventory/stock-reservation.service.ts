@@ -208,7 +208,7 @@ export class StockReservationService {
       if (activeCount) throw new ConflictException('Fulfillment is paused while a cycle count is in progress at this location');
       const current = await tx.stockReservation.findFirst({ where: { id, organizationId }, include: { lines: true } });
       if (!current) throw new NotFoundException('Stock reservation was not found');
-      if (![StockReservationStatus.ACTIVE, StockReservationStatus.PARTIALLY_FULFILLED].includes(current.status)) {
+      if (current.status !== StockReservationStatus.ACTIVE && current.status !== StockReservationStatus.PARTIALLY_FULFILLED) {
         throw new ConflictException('Only active reservations can be fulfilled');
       }
       if (current.expiresAt && current.expiresAt <= new Date()) throw new ConflictException('Reservation has expired');
