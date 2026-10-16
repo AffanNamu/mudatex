@@ -16,7 +16,7 @@
 
 - Secure login/user provisioning and granular branch/warehouse permissions.
 - Product update/archive, variants, barcodes, price lists and richer textile attributes.
-- Cycle counts, controlled stock adjustments, returns, transfer dispatch/receipt workflow, reservations and optimized persisted balance projections.
+- Cycle-count sessions and reconciliation, returns, transfer dispatch/receipt workflow, reservations and optimized persisted balance projections.
 - Procurement, POS, wholesale orders, customer/supplier management, accounting, taxes, payments and full manufacturing execution.
 - Offline sync protocol, conflict resolution and device registration.
 - Inventory costing/valuation policy and official financial postings.
@@ -24,4 +24,4 @@
 
 ## Verification status
 
-Transfer and balance changes require successful CI schema validation, migrations, typecheck, tests and build before merge/deployment. No production deployment or production-data migration has occurred.
+The transfer/balance baseline passed CI on commit `e637dca098a5d7294890613e5ac9377eb212abb0`. Stock adjustment approval changes are a new draft branch and must pass CI schema validation, migrations, typecheck, tests and build before merge/deployment. No production deployment or production-data migration has occurred.

@@ -21,6 +21,12 @@ enum ProductStatus {
   ARCHIVED
 }
 
+enum StockAdjustmentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 enum InventoryMovementType {
   OPENING_BALANCE
   RECEIPT
@@ -43,6 +49,7 @@ model Organization {
   updatedAt   DateTime     @updatedAt @db.Timestamptz(6)
   legalEntities LegalEntity[]
   memberships  OrganizationMembership[]
+  stockAdjustmentRequests StockAdjustmentRequest[]
 }
 
 model LegalEntity {
@@ -58,6 +65,7 @@ model LegalEntity {
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   locations      Location[]
   products       Product[]
+  stockAdjustmentRequests StockAdjustmentRequest[]
   @@unique([organizationId, code])
   @@index([countryCode, active])
 }
@@ -77,6 +85,7 @@ model Location {
   parent        Location?    @relation("LocationTree", fields: [parentId], references: [id], onDelete: Restrict)
   children      Location[]   @relation("LocationTree")
   inventoryMovements InventoryMovement[]
+  stockAdjustmentRequests StockAdjustmentRequest[]
   @@unique([legalEntityId, code])
   @@index([legalEntityId, type, active])
   @@index([parentId])
@@ -113,6 +122,7 @@ model Product {
   legalEntity   LegalEntity   @relation(fields: [legalEntityId], references: [id], onDelete: Restrict)
   baseUom       UnitOfMeasure @relation(fields: [baseUomId], references: [id], onDelete: Restrict)
   movements     InventoryMovement[]
+  stockAdjustmentRequests StockAdjustmentRequest[]
   @@unique([legalEntityId, sku])
   @@index([legalEntityId, status, name])
   @@index([categoryCode])
@@ -194,4 +204,29 @@ model OrganizationMembership {
   organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   @@unique([organizationId, issuer, subject])
   @@index([issuer, subject, status])
+}
+
+
+model StockAdjustmentRequest {
+  id             String                @id @default(uuid()) @db.Uuid
+  organizationId String                @db.Uuid
+  legalEntityId  String                @db.Uuid
+  locationId     String                @db.Uuid
+  productId      String                @db.Uuid
+  requestedBy    String                @db.VarChar(160)
+  reviewedBy     String?               @db.VarChar(160)
+  quantityDelta  Decimal               @db.Decimal(20, 6)
+  uomCode        String                @db.VarChar(20)
+  reason         String                @db.VarChar(500)
+  status         StockAdjustmentStatus @default(PENDING)
+  idempotencyKey String                @unique @db.VarChar(160)
+  reviewedAt     DateTime?             @db.Timestamptz(6)
+  createdAt      DateTime              @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime              @updatedAt @db.Timestamptz(6)
+  organization   Organization          @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  legalEntity    LegalEntity           @relation(fields: [legalEntityId], references: [id], onDelete: Restrict)
+  location       Location              @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  product        Product               @relation(fields: [productId], references: [id], onDelete: Restrict)
+  @@index([organizationId, status, createdAt])
+  @@index([locationId, productId, status])
 }
