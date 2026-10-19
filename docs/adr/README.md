@@ -14,6 +14,7 @@ This file is a starter register. Each decision should be created as an individua
 | 008 | Country/localization and data residency | Open | Actual operating-country list and jurisdiction-specific advice |
 | 009 | Deployment, backup, RPO/RTO and monitoring | Open | Business impact assessment and restore/disaster-recovery exercise |
 | 010 | Sakash data ownership and parallel migration boundary | Proposed: no dual authoritative writer | Source profiling, ownership matrix and reconciliation rehearsal |
+| 011 | Product baseline: PFB feature parity on the enterprise backend, no PFB code copied | Proposed by owner direction | Owner confirmation; workflow review with PFB operators |
 
 ## ADR template
 
