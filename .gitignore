@@ -1,0 +1,17 @@
+node_modules/
+dist/
+coverage/
+.env
+.env.*
+!.env.example
+
+# Signing and credential material must never be committed
+*.jks
+*.keystore
+*.p12
+*.pem
+key.properties
+google-services.json
+GoogleService-Info.plist
+service-account*.json
+*.base64
