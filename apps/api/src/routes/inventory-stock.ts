@@ -17,6 +17,7 @@ import {
   uuid,
 } from '../inventory/common.js';
 import { postMovements, type Posting } from '../inventory/ledger.js';
+import { resolveReceiptLot } from '../inventory/service.js';
 
 const receiptBody = z.object({
   locationId: uuid,
@@ -60,27 +61,7 @@ export const inventoryStockRoutes: FastifyPluginAsync<{ db: Db }> = async (app, 
         const variant = await loadVariant(tx, actor.organizationId, line.variantId);
         const quantity = await resolveQuantity(tx, variant, line.quantity, line.unitId);
 
-        let lotId: string | null = null;
-        if (variant.tracking === 'none') {
-          if (line.lotCode) throw invalid(`${variant.sku} is not lot or roll tracked`);
-        } else {
-          if (!line.lotCode) throw invalid(`${variant.sku} is ${variant.tracking}-tracked; lotCode is required`);
-          const existing = await tx.query<{ id: string; kind: string }>(
-            'SELECT id, kind FROM stock_lots WHERE organization_id = $1 AND variant_id = $2 AND code = $3',
-            [actor.organizationId, variant.id, line.lotCode],
-          );
-          if (existing.rows[0]) {
-            if (variant.tracking === 'roll') throw conflict(`Roll ${line.lotCode} already exists`);
-            lotId = existing.rows[0].id;
-          } else {
-            const created = await tx.query<{ id: string }>(
-              `INSERT INTO stock_lots (organization_id, variant_id, kind, code, initial_quantity)
-               VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-              [actor.organizationId, variant.id, variant.tracking, line.lotCode, quantity],
-            );
-            lotId = created.rows[0]!.id;
-          }
-        }
+        const lotId = await resolveReceiptLot(tx, actor.organizationId, variant, line.lotCode, quantity);
         postings.push({ locationId: location.id, variantId: variant.id, lotId, state: 'on_hand', delta: quantity, type: 'receipt' });
         lines.push({ variantId: variant.id, lotId, quantity });
       }

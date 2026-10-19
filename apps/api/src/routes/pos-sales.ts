@@ -69,7 +69,7 @@ export async function readSale(db: Db | Tx, organizationId: string, id: string) 
   const returns = await db.query(
     `SELECT id, return_number AS "returnNumber", refund_method AS "refundMethod", refund_total_minor AS "refundTotalMinor",
             refund_status AS "refundStatus", created_at AS "createdAt"
-       FROM pos_returns WHERE sale_id = $1 ORDER BY created_at, id`,
+       FROM pos_returns WHERE sale_id = $1 ORDER BY return_number`,
     [id],
   );
   const num = (v: unknown) => Number(v);

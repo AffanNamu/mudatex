@@ -10,7 +10,8 @@ export type MovementType =
   | 'transfer_receive'
   | 'transfer_cancel'
   | 'roll_split'
-  | 'sale_return';
+  | 'sale_return'
+  | 'supplier_return';
 
 export interface StockKey {
   locationId: string;

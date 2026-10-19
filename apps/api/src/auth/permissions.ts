@@ -24,6 +24,12 @@ export const PERMISSIONS = [
   'pos.refund',
   'pos.refund.approve',
   'pos.read',
+  'procurement.read',
+  'procurement.supplier.manage',
+  'procurement.create',
+  'procurement.approve',
+  'procurement.receive',
+  'procurement.return',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];

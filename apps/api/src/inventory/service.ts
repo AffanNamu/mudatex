@@ -1,4 +1,6 @@
 import type { Tx } from '../db.js';
+import { conflict, invalid } from '../errors.js';
+import type { VariantInfo } from './common.js';
 import { fromScaled, toScaled } from '../domain/decimal.js';
 import { adjustReserved, postMovements } from './ledger.js';
 
@@ -80,4 +82,36 @@ export async function releaseReferenceReservations(tx: Tx, referenceType: string
       [r.id, qty],
     );
   }
+}
+
+/**
+ * Finds or creates the lot/roll a received quantity belongs to. Untracked variants get no lot; roll codes
+ * must be new; lot codes accumulate into the existing lot.
+ */
+export async function resolveReceiptLot(
+  tx: Tx,
+  organizationId: string,
+  variant: VariantInfo,
+  lotCode: string | undefined,
+  quantity: string,
+): Promise<string | null> {
+  if (variant.tracking === 'none') {
+    if (lotCode) throw invalid(`${variant.sku} is not lot or roll tracked`);
+    return null;
+  }
+  if (!lotCode) throw invalid(`${variant.sku} is ${variant.tracking}-tracked; lotCode is required`);
+  const existing = await tx.query<{ id: string }>(
+    'SELECT id FROM stock_lots WHERE organization_id = $1 AND variant_id = $2 AND code = $3',
+    [organizationId, variant.id, lotCode],
+  );
+  if (existing.rows[0]) {
+    if (variant.tracking === 'roll') throw conflict(`Roll ${lotCode} already exists`);
+    return existing.rows[0].id;
+  }
+  const created = await tx.query<{ id: string }>(
+    `INSERT INTO stock_lots (organization_id, variant_id, kind, code, initial_quantity)
+     VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+    [organizationId, variant.id, variant.tracking, lotCode, quantity],
+  );
+  return created.rows[0]!.id;
 }

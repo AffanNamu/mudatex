@@ -12,6 +12,8 @@ import { inventoryReservationRoutes } from './routes/inventory-reservations.js';
 import { inventoryStockRoutes } from './routes/inventory-stock.js';
 import { inventoryTransferRoutes } from './routes/inventory-transfers.js';
 import { orgRoutes } from './routes/org.js';
+import { purchaseOrderRoutes } from './routes/purchase-orders.js';
+import { supplierRoutes } from './routes/suppliers.js';
 import { posRegisterRoutes } from './routes/pos-registers.js';
 import { posReturnRoutes } from './routes/pos-returns.js';
 import { posSaleRoutes } from './routes/pos-sales.js';
@@ -85,6 +87,8 @@ export async function buildServer({ config, db, verifier }: ServerDeps): Promise
       await v1.register(posRegisterRoutes, { db });
       await v1.register(posSaleRoutes, { db });
       await v1.register(posReturnRoutes, { db });
+      await v1.register(supplierRoutes, { db });
+      await v1.register(purchaseOrderRoutes, { db });
     },
     { prefix: '/v1' },
   );
