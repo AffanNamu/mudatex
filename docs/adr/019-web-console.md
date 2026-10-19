@@ -1,6 +1,6 @@
 # ADR 019 — Web console
 
-**Status:** Proposed (implemented for sign-in, catalogue, stock, point of sale, returns, payment and refund confirmation, and access view)
+**Status:** Proposed (implemented for sign-in, catalogue, stock, point of sale, returns, payment and refund confirmation, purchasing, and access view)
 **Decision owner:** Product / engineering lead
 **Supersedes:** nothing. Narrows the client-app question left open in the specification.
 
@@ -21,13 +21,13 @@ The API enforces every permission. Staff need a way to use it that works on a sh
 ## Consequences
 
 - Online only: the till stops working without a connection. Offline selling needs its own design (ADR 002).
-- Server changes this work needed, all additive: location names visible to anyone who works there; product name / SKU / lot code on stock balances and sale lines; a `receipt` filter on the sales list; and a list of returns (to find refunds awaiting payout).
+- Server changes this work needed, all additive: location names visible to anyone who works there; product name / SKU / lot code on stock balances and sale lines; a `receipt` filter on the sales list; a list of returns (to find refunds awaiting payout); and supplier, destination and product labels on purchase orders.
 - Confirming a non-cash payment is a separate screen for a different person than the cashier (the API already forbids confirming your own).
 
 ## Evidence
 
 - `npm test` in `apps/web` (money parsing, API client behaviour, discount parsing).
-- `npm run e2e` in `apps/web`: 19 browser tests against the built API and a clean database, including a cash sale with change, a stock shortage, a refused discount, a card sale that holds stock until a supervisor confirms, cancelling a pending sale, closing the session with a cash variance, a partial return over the refund limit, a card refund paid out by a second person, axe checks and a phone-width layout check. CI runs them in the `web` job.
+- `npm run e2e` in `apps/web`: 23 browser tests against the built API and a clean database, including a cash sale with change, a stock shortage, a refused discount, a card sale that holds stock until a supervisor confirms, cancelling a pending sale, closing the session with a cash variance, a partial return over the refund limit, a card refund paid out by a second person, a purchase order drafted, approved by someone else and received in parts with a rejection and a roll, axe checks and a phone-width layout check. CI runs them in the `web` job.
 
 ## Revisit trigger
 

@@ -12,6 +12,7 @@ export function Home() {
     { to: '/payments', label: 'Confirm payments and refunds', needs: 'pos.payment.verify' },
     { to: '/catalogue', label: 'Browse the catalogue', needs: 'catalog.read' },
     { to: '/inventory', label: 'See stock', needs: 'inventory.read' },
+    { to: '/purchasing', label: 'Purchase orders', needs: 'procurement.read' },
     { to: '/access', label: 'People and access', needs: 'iam.manage' },
   ].filter((l) => can(l.needs));
   return (

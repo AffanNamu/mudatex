@@ -81,19 +81,23 @@ async function lockPo(tx: Tx, organizationId: string, id: string): Promise<PoRow
 
 async function readPo(db: Db | Tx, organizationId: string, id: string) {
   const o = await db.query(
-    `SELECT id, po_number AS "poNumber", status, supplier_id AS "supplierId", legal_entity_id AS "legalEntityId",
-            destination_location_id AS "destinationLocationId", currency, minor_unit AS "minorUnit", total_minor AS "totalMinor",
-            over_receipt_tolerance_bps AS "overReceiptToleranceBps", expected_date::text AS "expectedDate", note,
-            created_by AS "createdBy", decided_by AS "decidedBy", decision_note AS "decisionNote",
-            created_at AS "createdAt", submitted_at AS "submittedAt", decided_at AS "decidedAt"
-       FROM purchase_orders WHERE id = $1 AND organization_id = $2`,
+    `SELECT o.id, o.po_number AS "poNumber", o.status, o.supplier_id AS "supplierId", s.code AS "supplierCode", s.name AS "supplierName",
+            o.legal_entity_id AS "legalEntityId", o.destination_location_id AS "destinationLocationId", l.name AS "destinationName",
+            o.currency, o.minor_unit AS "minorUnit", o.total_minor AS "totalMinor",
+            o.over_receipt_tolerance_bps AS "overReceiptToleranceBps", o.expected_date::text AS "expectedDate", o.note,
+            o.created_by AS "createdBy", o.decided_by AS "decidedBy", o.decision_note AS "decisionNote",
+            o.created_at AS "createdAt", o.submitted_at AS "submittedAt", o.decided_at AS "decidedAt"
+       FROM purchase_orders o JOIN suppliers s ON s.id = o.supplier_id JOIN locations l ON l.id = o.destination_location_id
+      WHERE o.id = $1 AND o.organization_id = $2`,
     [id, organizationId],
   );
   if (!o.rows[0]) throw notFound('Purchase order');
   const lines = await db.query(
-    `SELECT id, line_no AS "lineNo", variant_id AS "variantId", quantity, unit_price AS "unitPrice", total_minor AS "totalMinor",
-            received_quantity AS "receivedQuantity", returned_quantity AS "returnedQuantity"
-       FROM purchase_order_lines WHERE purchase_order_id = $1 ORDER BY line_no`,
+    `SELECT pl.id, pl.line_no AS "lineNo", pl.variant_id AS "variantId", v.sku, p.name AS "productName", v.tracking,
+            pl.quantity, pl.unit_price AS "unitPrice", pl.total_minor AS "totalMinor",
+            pl.received_quantity AS "receivedQuantity", pl.returned_quantity AS "returnedQuantity"
+       FROM purchase_order_lines pl JOIN product_variants v ON v.id = pl.variant_id JOIN products p ON p.id = v.product_id
+      WHERE pl.purchase_order_id = $1 ORDER BY pl.line_no`,
     [id],
   );
   const receipts = await db.query(
@@ -199,9 +203,9 @@ export const purchaseOrderRoutes: FastifyPluginAsync<{ db: Db }> = async (app, {
     const grants = await grantsFor(db, req.actor, 'procurement.read');
     const scope = scopeFilter(grants, 5);
     const { rows } = await db.query(
-      `SELECT p.id, p.po_number AS "poNumber", p.status, p.supplier_id AS "supplierId", p.currency, p.total_minor::float8 AS "totalMinor",
-              p.destination_location_id AS "destinationLocationId", p.created_at AS "createdAt"
-         FROM purchase_orders p JOIN locations l ON l.id = p.destination_location_id
+      `SELECT p.id, p.po_number AS "poNumber", p.status, p.supplier_id AS "supplierId", s.name AS "supplierName", p.currency, p.minor_unit AS "minorUnit",
+              p.total_minor::float8 AS "totalMinor", p.destination_location_id AS "destinationLocationId", l.name AS "destinationName", p.created_at AS "createdAt"
+         FROM purchase_orders p JOIN locations l ON l.id = p.destination_location_id JOIN suppliers s ON s.id = p.supplier_id
         WHERE p.organization_id = $1 AND ($2::text IS NULL OR p.status = $2) AND ($3::uuid IS NULL OR p.supplier_id = $3) AND ${scope.clause}
         ORDER BY p.created_at DESC, p.id LIMIT $4`,
       [req.actor.organizationId, q.status ?? null, q.supplierId ?? null, q.limit, ...scope.params],

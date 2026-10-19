@@ -10,6 +10,7 @@ import { Inventory } from './pages/Inventory';
 import { Login } from './pages/Login';
 import { Payments } from './pages/Payments';
 import { Pos } from './pages/Pos';
+import { Procurement } from './pages/Procurement';
 import { Returns } from './pages/Returns';
 
 /** Hides a page the person cannot use. This is a courtesy: the server refuses the requests regardless. */
@@ -27,6 +28,7 @@ export function App() {
       <Route element={<Layout />}>
         <Route index element={<Home />} />
         <Route path="pos" element={<Needs permission="pos.sell"><Pos /></Needs>} />
+        <Route path="purchasing" element={<Needs permission="procurement.read"><Procurement /></Needs>} />
         <Route path="returns" element={<Needs permission="pos.refund"><Returns /></Needs>} />
         <Route path="payments" element={<Needs permission="pos.payment.verify"><Payments /></Needs>} />
         <Route path="catalogue" element={<Needs permission="catalog.read"><Catalogue /></Needs>} />

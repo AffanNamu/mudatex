@@ -17,6 +17,9 @@ export const USERS = {
   admin: 'admin@e2e.test',
   cashier: 'cashier@e2e.test',
   clerk: 'clerk@e2e.test',
+  buyer: 'buyer@e2e.test',
+  approver: 'approver@e2e.test',
+  receiver: 'receiver@e2e.test',
   supervisor: 'supervisor@e2e.test',
 } as const;
 
@@ -40,6 +43,9 @@ export default async function seed() {
   };
   await product('Ankara Wax Print', 'ANK-001', '1000', '50');
   await product('Lace Fabric', 'LCE-001', '2500', '3');
+  // Bought in rolls: nothing is stocked yet, so the purchasing tests can receive the first one.
+  await post('/v1/products', { name: 'Silk Roll', baseUnitId: metre.id, variants: [{ sku: 'SLK-R1', tracking: 'roll' }] });
+  await post('/v1/procurement/suppliers', { code: 'MILL-1', name: 'Kano Textile Mills', countryCode: 'NG', defaultCurrency: 'USD', paymentTermsDays: 30 });
 
   await post('/v1/pos/registers', { locationId: shop.id, code: 'LAG1', name: 'Front till', priceListId: list.id, maxDiscountBps: 1000, refundThresholdMinor: 200000 });
 
@@ -50,5 +56,8 @@ export default async function seed() {
   };
   await staff(USERS.cashier, 'Cashier Chi', ['pos.sell', 'pos.session', 'pos.discount', 'pos.refund', 'pos.read', 'inventory.read']);
   await staff(USERS.supervisor, 'Supervisor Sade', ['pos.sell', 'pos.session', 'pos.discount', 'pos.discount.override', 'pos.payment.verify', 'pos.read', 'inventory.read']);
+  await staff(USERS.buyer, 'Buyer Bola', ['procurement.create', 'procurement.approve', 'procurement.read', 'catalog.read']);
+  await staff(USERS.approver, 'Approver Amaka', ['procurement.approve', 'procurement.read']);
+  await staff(USERS.receiver, 'Receiver Rilwan', ['procurement.receive', 'procurement.read', 'inventory.read']);
   await staff(USERS.clerk, 'Clerk Kemi', ['catalog.read', 'inventory.read', 'inventory.receive']);
 }

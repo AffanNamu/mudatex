@@ -86,3 +86,5 @@ th[scope='row'] { font-weight: 500; }
 .row-between { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 0; }
 .section { margin-top: 24px; }
 h3 { font-size: 1rem; margin: 0 0 .5rem; }
+.link { font: inherit; background: none; border: 0; padding: 0; color: var(--primary); text-decoration: underline; cursor: pointer; }
+tfoot th, tfoot td { border-bottom: 0; }

@@ -44,6 +44,17 @@ const receive = (b: Buying, poId: string, lines: unknown[], auth: Headers = b.st
   cmd(ctx.app, auth, poPath(poId, '/receipts'), { lines }, key);
 const fabricStock = (b: Buying) => balance(ctx.app, b.org.auth, { locationId: b.w1, variantId: b.fabric.variantId });
 
+describe('labels for readers', () => {
+  it('names the supplier, destination and products on orders and lists', async () => {
+    const b = await buying();
+    const po = await approvedPo(b);
+    expect(po).toMatchObject({ supplierName: 'Textile Mills Ltd', supplierCode: 'TEX-1', destinationName: 'W1' });
+    expect(po.lines[0]).toMatchObject({ productName: 'Fabric', tracking: 'none', sku: expect.stringMatching(/^Fabric-/) });
+    const list = await call(ctx.app, 'GET', '/v1/procurement/purchase-orders', b.buyer.auth);
+    expect(list.body[0]).toMatchObject({ poNumber: po.poNumber, supplierName: 'Textile Mills Ltd', destinationName: 'W1', minorUnit: 2, currency: 'USD' });
+  });
+});
+
 describe('suppliers', () => {
   it('are shared master data that need a group-level grant to change', async () => {
     const b = await buying();
