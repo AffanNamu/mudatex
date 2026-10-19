@@ -11,6 +11,9 @@ const schema = z
     AUTH_AUDIENCE: z.string().optional(),
     // Development and tests only: shared HS256 secret.
     AUTH_DEV_SECRET: z.string().min(32).optional(),
+    // Local development and automated browser tests only: lets anyone who can reach the server sign in as any existing user.
+    // Off unless explicitly enabled, and refused outright in production.
+    DEV_TOKEN_ENDPOINT: z.enum(['true', 'false']).default('false').transform((v) => v === 'true'),
     // Comma-separated browser origins allowed to call the API. Empty means no cross-origin access.
     CORS_ORIGINS: z.string().default('').transform((v) => v.split(',').map((o) => o.trim()).filter(Boolean)),
     // Requests per minute per client address. Unset: 600 outside tests, off in tests.
@@ -35,6 +38,9 @@ const schema = z
     if (env.NODE_ENV === 'production') {
       if (env.AUTH_DEV_SECRET) {
         ctx.addIssue({ code: 'custom', message: 'AUTH_DEV_SECRET must not be set in production' });
+      }
+      if (env.DEV_TOKEN_ENDPOINT) {
+        ctx.addIssue({ code: 'custom', message: 'DEV_TOKEN_ENDPOINT must not be set in production' });
       }
       if (env.WEBHOOK_ALLOW_HTTP || env.WEBHOOK_ALLOW_PRIVATE) {
         ctx.addIssue({ code: 'custom', message: 'WEBHOOK_ALLOW_HTTP and WEBHOOK_ALLOW_PRIVATE must not be set in production' });

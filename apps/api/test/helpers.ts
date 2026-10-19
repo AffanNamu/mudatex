@@ -9,7 +9,7 @@ export const SECRET = 'test-secret-test-secret-test-secret-123';
 
 export async function setupApp(env: Record<string, string> = {}, deps: { migrationsDir?: string } = {}) {
   const db = new pg.Pool({ connectionString: process.env.TEST_DATABASE_URL });
-  const config = loadConfig({ NODE_ENV: 'test', DATABASE_URL: process.env.TEST_DATABASE_URL, AUTH_DEV_SECRET: SECRET, ...env });
+  const config = loadConfig({ NODE_ENV: 'test', DATABASE_URL: process.env.TEST_DATABASE_URL, AUTH_DEV_SECRET: SECRET, DEV_TOKEN_ENDPOINT: 'true', ...env });
   const app = await buildServer({ config, db, ...deps });
   return { app, db, close: async () => { await app.close(); await db.end(); } };
 }

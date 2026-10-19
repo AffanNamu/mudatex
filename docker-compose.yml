@@ -30,6 +30,7 @@ services:
       DATABASE_URL: postgres://mudatex:mudatex@db:5432/mudatex_dev
       AUTH_DEV_SECRET: local-dev-secret-local-dev-secret-0001
       CORS_ORIGINS: http://localhost:5173
+      DEV_TOKEN_ENDPOINT: "true"
       SECRETS_ENCRYPTION_KEY: bG9jYWwtZGV2LU9OTFkta2V5LW5vdC1hLXNlY3JldCE=
       WEBHOOK_ALLOW_HTTP: "true"
     ports: ["3000:3000"]
