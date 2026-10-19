@@ -10,6 +10,8 @@ describe('decimal', () => {
     expect(normalize('0.000000')).toBe('0');
     expect(sum(['0.1', '0.2'])).toBe('0.3');
     expect(fromScaled(-1500000n)).toBe('-1.5');
+    expect(normalize('1500.5000000000', 10)).toBe('1500.5');
+    expect(normalize('0.0000000001', 10)).toBe('0.0000000001');
   });
 
   it('rejects more than six decimal places', () => {

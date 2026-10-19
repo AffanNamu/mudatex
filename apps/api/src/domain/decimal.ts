@@ -21,9 +21,9 @@ export function fromScaled(n: bigint, scale = QTY_SCALE): string {
 }
 
 /** Canonical form of a numeric string coming from Postgres ("12.500000" -> "12.5"). */
-export function normalize(value: string): string {
+export function normalize(value: string, scale = QTY_SCALE): string {
   const negative = value.startsWith('-');
-  return fromScaled((negative ? -1n : 1n) * toScaled(negative ? value.slice(1) : value));
+  return fromScaled((negative ? -1n : 1n) * toScaled(negative ? value.slice(1) : value, scale), scale);
 }
 
 export function sum(values: string[]): string {

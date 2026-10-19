@@ -4,7 +4,7 @@ The new Mudatex platform is being designed for international retail, wholesale, 
 
 ## Status
 
-This repository contains the baseline specification and the implemented backend in [`apps/api`](apps/api/README.md): organization hierarchy, scoped IAM, audit log and product catalogue; the inventory ledger (receipts, issues, reservations, transfers, roll splitting, approved adjustments); online retail POS with pricing, tax snapshots, sessions, payments and returns; and procurement (suppliers, approved purchase orders, goods receipts, supplier returns). Offline POS, payment providers, payables, accounting, manufacturing and the client apps are not built yet. Technology choices and operational policies still require ADR approval, and inventory costing is intentionally undecided.
+This repository contains the baseline specification and the implemented backend in [`apps/api`](apps/api/README.md): organization hierarchy, scoped IAM, audit log and product catalogue; the inventory ledger (receipts, issues, reservations, transfers, roll splitting, approved adjustments); online retail POS with pricing, tax snapshots, sessions, payments and returns; procurement (suppliers, approved purchase orders, goods receipts, supplier returns); and the general ledger core (chart of accounts, fiscal periods, approved exchange rates, maker-checker journals, reversals, trial balance). Sales, receipts and other business events do not post to the ledger yet, and offline POS, payment providers, receivables/payables, financial statements, manufacturing and the client apps are not built. Technology choices and operational policies still require ADR approval, and inventory costing is intentionally undecided.
 
 ## Start here
 

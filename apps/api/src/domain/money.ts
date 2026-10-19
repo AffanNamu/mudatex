@@ -86,3 +86,13 @@ export function refundShare(lineAmount: bigint, quantity: string, returnedBefore
   const cumulative = (r: bigint) => roundDiv(lineAmount * r, q);
   return cumulative(toScaled(returnedAfter, QTY_SCALE)) - cumulative(toScaled(returnedBefore, QTY_SCALE));
 }
+
+/**
+ * Converts an amount in minor units of one currency into minor units of another using a rate quoted as
+ * "1 unit of the source currency = rate units of the target", rounded half-up. The rate has up to 10 decimals.
+ */
+export function convertMinor(amountMinor: bigint, rate: string, fromMinorUnit: number, toMinorUnit: number): bigint {
+  const RATE_DP = 10;
+  const r = toScaled(rate, RATE_DP);
+  return roundDiv(amountMinor * r * pow10(toMinorUnit), pow10(RATE_DP + fromMinorUnit));
+}

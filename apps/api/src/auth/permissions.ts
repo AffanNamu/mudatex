@@ -30,6 +30,14 @@ export const PERMISSIONS = [
   'procurement.approve',
   'procurement.receive',
   'procurement.return',
+  'accounting.read',
+  'accounting.manage',
+  'accounting.journal',
+  'accounting.post',
+  'accounting.period.close',
+  'accounting.period.reopen',
+  'accounting.rates.manage',
+  'accounting.rates.approve',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];

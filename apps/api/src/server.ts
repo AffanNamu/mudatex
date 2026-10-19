@@ -5,6 +5,9 @@ import { createTokenVerifier, type TokenVerifier } from './auth/token.js';
 import type { Config } from './config.js';
 import type { Db } from './db.js';
 import { AppError, forbidden, unauthorized } from './errors.js';
+import { accountingConfigRoutes } from './routes/accounting-config.js';
+import { accountingReportRoutes } from './routes/accounting-reports.js';
+import { journalRoutes } from './routes/journals.js';
 import { catalogRoutes } from './routes/catalog.js';
 import { iamRoutes } from './routes/iam.js';
 import { inventoryAdjustmentRoutes } from './routes/inventory-adjustments.js';
@@ -52,6 +55,7 @@ export async function buildServer({ config, db, verifier }: ServerDeps): Promise
     if (pg.code === '23503' || pg.code === '23514') {
       return reply.status(422).send({ error: 'invalid', message: `Constraint violated (${pg.constraint ?? 'check'})` });
     }
+    if (process.env.DEBUG_ERRORS) console.error(err);
     req.log.error(err);
     return reply.status(500).send({ error: 'internal', message: 'Internal server error' });
   });
@@ -89,6 +93,9 @@ export async function buildServer({ config, db, verifier }: ServerDeps): Promise
       await v1.register(posReturnRoutes, { db });
       await v1.register(supplierRoutes, { db });
       await v1.register(purchaseOrderRoutes, { db });
+      await v1.register(accountingConfigRoutes, { db });
+      await v1.register(journalRoutes, { db });
+      await v1.register(accountingReportRoutes, { db });
     },
     { prefix: '/v1' },
   );

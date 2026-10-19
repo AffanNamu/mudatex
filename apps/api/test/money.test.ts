@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { grossMinor, MoneyError, priceLine, refundShare, roundDiv } from '../src/domain/money.js';
+import { convertMinor, grossMinor, MoneyError, priceLine, refundShare, roundDiv } from '../src/domain/money.js';
 
 describe('money', () => {
   it('rounds half up and never uses floats', () => {
@@ -40,5 +40,13 @@ describe('money', () => {
     expect(a + b + c).toBe(total);
     expect(refundShare(total, '3', '0', '3')).toBe(total);
     expect(refundShare(total, '3', '1', '1')).toBe(0n);
+  });
+
+  it('converts between currencies of different minor units, half-up', () => {
+    expect(convertMinor(10000n, '1500.5', 2, 2)).toBe(15005000n);   // USD 100.00 -> NGN 150,050.00
+    expect(convertMinor(1000n, '1.0005', 2, 2)).toBe(1001n);          // 1000.5 -> 1001
+    expect(convertMinor(500n, '1.0005', 2, 2)).toBe(500n);            // 500.25 -> 500
+    expect(convertMinor(1000n, '600', 2, 0)).toBe(6000n);             // 10.00 x 600 = 6,000 (zero-decimal target)
+    expect(convertMinor(5n, '1', 0, 2)).toBe(500n);                   // zero-decimal source
   });
 });
