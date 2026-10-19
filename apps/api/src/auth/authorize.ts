@@ -123,3 +123,16 @@ export async function grantsFor(q: Q, actor: Actor, permission: Permission): Pro
   }
   return g;
 }
+
+/** The union of scopes over which the actor holds at least one of `permissions`. */
+export async function grantsForAny(q: Q, actor: Actor, permissions: readonly Permission[]): Promise<Grants> {
+  const merged: Grants = { group: false, countries: new Set(), legalEntities: new Set(), locations: new Set() };
+  for (const permission of permissions) {
+    const g = await grantsFor(q, actor, permission);
+    merged.group ||= g.group;
+    for (const c of g.countries) merged.countries.add(c);
+    for (const e of g.legalEntities) merged.legalEntities.add(e);
+    for (const l of g.locations) merged.locations.add(l);
+  }
+  return merged;
+}

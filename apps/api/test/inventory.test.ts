@@ -420,6 +420,7 @@ describe('ledger integrity and access', () => {
     expect((await cmd(ctx.app, w1Clerk.auth, '/v1/inventory/receipts', { locationId: w.w2, lines: [{ variantId: w.fabric.variantId, quantity: '1' }] })).status).toBe(403);
     const visible = await call(ctx.app, 'GET', '/v1/inventory/balances', w1Clerk.auth);
     expect(visible.body.map((b: any) => b.locationId)).toEqual([w.w1]);
+    expect(visible.body[0]).toMatchObject({ productName: 'Fabric', sku: expect.stringMatching(/^Fabric-/), lotCode: null });
     expect((await call(ctx.app, 'GET', `/v1/inventory/movements?locationId=${w.w2}`, w1Clerk.auth)).body).toEqual([]);
     // Reconciliation is organization-wide, so a location grant is not enough.
     expect((await call(ctx.app, 'GET', '/v1/inventory/reconciliation', w1Clerk.auth)).status).toBe(403);

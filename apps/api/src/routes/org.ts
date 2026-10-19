@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { writeAudit } from '../audit.js';
-import { authorize, grantsFor } from '../auth/authorize.js';
+import { authorize, grantsFor, grantsForAny } from '../auth/authorize.js';
 import { withTx, type Db } from '../db.js';
 import { notFound } from '../errors.js';
 
@@ -105,8 +105,9 @@ export const orgRoutes: FastifyPluginAsync<{ db: Db }> = async (app, { db }) => 
     return reply.status(201).send(created);
   });
 
+  // Anyone who works at a place may see its name: the same scopes that let them act there.
   app.get('/locations', async (req) => {
-    const grants = await grantsFor(db, req.actor, 'org.read');
+    const grants = await grantsForAny(db, req.actor, ['org.read', 'inventory.read', 'inventory.receive', 'pos.read', 'pos.sell', 'procurement.read', 'manufacturing.read']);
     const { rows } = await db.query<{
       id: string;
       legalEntityId: string;

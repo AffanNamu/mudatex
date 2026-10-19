@@ -49,6 +49,17 @@ describe('identity lists', () => {
   });
 });
 
+describe('location names', () => {
+  it('are visible to people who work at a place, but only that place, and not to people with no operational access', async () => {
+    const w = await buildWorld(ctx.app, await newOrg(ctx.db));
+    const clerk = await staff(ctx.app, w.org.auth, ['inventory.read'], { type: 'location', id: w.w1 });
+    const seen = (await call(ctx.app, 'GET', '/v1/locations', clerk.auth)).body.map((l: any) => l.id);
+    expect(seen).toEqual([w.w1]);
+    const catalogOnly = await staff(ctx.app, w.org.auth, ['catalog.read'], { type: 'group' });
+    expect((await call(ctx.app, 'GET', '/v1/locations', catalogOnly.auth)).body).toEqual([]);
+  });
+});
+
 describe('POS lists', () => {
   it('shows registers and price lists only where the caller can use them, with who has the session', async () => {
     const w = await buildPosWorld(ctx.app, await buildWorld(ctx.app, await newOrg(ctx.db)));

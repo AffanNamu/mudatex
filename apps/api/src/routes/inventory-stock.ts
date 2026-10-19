@@ -152,9 +152,13 @@ export const inventoryStockRoutes: FastifyPluginAsync<{ db: Db }> = async (app, 
     const q = z.object({ locationId: uuid.optional(), variantId: uuid.optional(), state: z.enum(['on_hand', 'in_transit']).optional() }).parse(req.query);
     const grants = await grantsFor(db, req.actor, 'inventory.read');
     const scope = scopeFilter(grants, 5);
-    const { rows } = await db.query<{ locationId: string; variantId: string; lotId: string | null; state: string; quantity: string; reserved: string }>(
-      `SELECT b.location_id AS "locationId", b.variant_id AS "variantId", b.lot_id AS "lotId", b.state, b.quantity, b.reserved
+    // sku, productName and lotCode are labels for people reading the list; they need no catalogue permission.
+    const { rows } = await db.query<{ locationId: string; variantId: string; sku: string; productName: string; lotId: string | null; lotCode: string | null; state: string; quantity: string; reserved: string }>(
+      `SELECT b.location_id AS "locationId", b.variant_id AS "variantId", v.sku, p.name AS "productName", b.lot_id AS "lotId", sl.code AS "lotCode",
+              b.state, b.quantity, b.reserved
          FROM stock_balances b JOIN locations l ON l.id = b.location_id
+         JOIN product_variants v ON v.id = b.variant_id JOIN products p ON p.id = v.product_id
+         LEFT JOIN stock_lots sl ON sl.id = b.lot_id
         WHERE b.organization_id = $1 AND (b.quantity <> 0 OR b.reserved <> 0)
           AND ($2::uuid IS NULL OR b.location_id = $2) AND ($3::uuid IS NULL OR b.variant_id = $3)
           AND ($4::stock_state IS NULL OR b.state = $4) AND ${scope.clause}

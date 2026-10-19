@@ -15,3 +15,7 @@ google-services.json
 GoogleService-Info.plist
 service-account*.json
 *.base64
+
+# Browser test output
+apps/web/test-results/
+apps/web/playwright-report/
