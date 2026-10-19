@@ -421,3 +421,46 @@ describe('access', () => {
     expect(log.body[0]).toMatchObject({ action: 'pos.sale', actorUserId: w.cashier.userId });
   });
 });
+
+describe('quote', () => {
+  it('prices a cart exactly as the sale then charges, without creating anything', async () => {
+    const w = await pos();
+    await openSession(ctx.app, w.cashier.auth, w.reg1);
+    const lines = [{ variantId: w.fabric.variantId, quantity: '7.5' }, { variantId: w.inclusive.variantId, quantity: '3', discount: { type: 'amount', amountMinor: 1 } }];
+    const q = await call(ctx.app, 'POST', `/v1/pos/registers/${w.reg1}/quote`, w.cashier.auth, { lines });
+    expect(q.status).toBe(200);
+    expect(q.body).toMatchObject({ currency: 'NGN', minorUnit: 2, subtotalMinor: 2625375 + 10002, discountMinor: 1, taxMinor: 196903 + 698, totalMinor: 2822278 + 10001, sellable: true });
+    expect(q.body.lines[0]).toMatchObject({ unitPrice: '3500.5', taxCode: 'VAT75', grossMinor: 2625375, taxMinor: 196903, totalMinor: 2822278, available: '100', insufficientStock: false });
+
+    // The sale charges exactly the quoted total, line by line.
+    const sale = await sell(ctx.app, w.cashier.auth, w.reg1, lines, [cash(q.body.totalMinor)], { expectedTotalMinor: q.body.totalMinor });
+    expect(sale.status).toBe(201);
+    expect(sale.body.lines.map((l: any) => [l.grossMinor, l.discountMinor, l.taxMinor, l.totalMinor])).toEqual(q.body.lines.map((l: any) => [l.grossMinor, l.discountMinor, l.taxMinor, l.totalMinor]));
+    expect(sale.body.totalMinor).toBe(q.body.totalMinor);
+
+    // Nothing was created by quoting, and the quote reflects the stock now taken.
+    const before = (await ctx.db.query('SELECT count(*)::int AS n FROM pos_sales WHERE organization_id = $1', [w.org.organizationId])).rows[0].n;
+    const q2 = await call(ctx.app, 'POST', `/v1/pos/registers/${w.reg1}/quote`, w.cashier.auth, { lines: [{ variantId: w.fabric.variantId, quantity: '1' }] });
+    expect((await ctx.db.query('SELECT count(*)::int AS n FROM pos_sales WHERE organization_id = $1', [w.org.organizationId])).rows[0].n).toBe(before);
+    expect(q2.body.lines[0].available).toBe('92.5');
+  });
+
+  it('warns about missing stock without refusing, applies the same discount rules, and needs sell permission', async () => {
+    const w = await pos('3');
+    const short = await call(ctx.app, 'POST', `/v1/pos/registers/${w.reg1}/quote`, w.cashier.auth, { lines: [{ variantId: w.fabric.variantId, quantity: '5' }] });
+    expect(short.status).toBe(200);
+    expect(short.body.lines[0]).toMatchObject({ available: '3', insufficientStock: true });
+    expect(short.body.sellable).toBe(false);
+    const q = (extra: any, auth = w.cashier.auth) => call(ctx.app, 'POST', `/v1/pos/registers/${w.reg1}/quote`, auth, { lines: [{ variantId: w.fabric.variantId, quantity: '1', ...extra }] });
+    expect((await q({ discount: { type: 'percent', basisPoints: 500 } })).status).toBe(200);
+    expect((await q({ discount: { type: 'percent', basisPoints: 2000 } })).status).toBe(403);               // over the register limit
+    expect((await q({ discount: { type: 'percent', basisPoints: 2000 } }, w.supervisor.auth)).status).toBe(200);   // may override
+    const noDiscount = await staff(ctx.app, w.org.auth, ['pos.sell'], { type: 'location', id: w.shop });
+    expect((await q({ discount: { type: 'percent', basisPoints: 100 } }, noDiscount.auth)).status).toBe(403);
+    const readOnly = await staff(ctx.app, w.org.auth, ['pos.read'], { type: 'location', id: w.shop });
+    expect((await q({}, readOnly.auth)).status).toBe(403);
+    expect((await call(ctx.app, 'POST', `/v1/pos/registers/${w.reg1}/quote`, (await newOrg(ctx.db)).auth, { lines: [{ variantId: w.fabric.variantId, quantity: '1' }] })).status).toBe(404);
+    const unpriced = await call(ctx.app, 'POST', '/v1/products', w.org.auth, { name: 'NoPrice', baseUnitId: w.m, variants: [{ sku: 'NP-Q' }] });
+    expect((await q({ variantId: unpriced.body.variantIds[0] })).status).toBe(422);
+  });
+});

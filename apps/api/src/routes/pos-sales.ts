@@ -2,11 +2,11 @@ import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { authorize, can, grantsFor } from '../auth/authorize.js';
 import type { Db, Tx } from '../db.js';
-import { normalize } from '../domain/decimal.js';
-import { MoneyError, priceLine, type DiscountInput } from '../domain/money.js';
+import { normalize, toScaled } from '../domain/decimal.js';
+import { priceSaleLines, saleTotals, type SaleLineInput } from '../pos/pricing.js';
 import { conflict, forbidden, invalid, notFound } from '../errors.js';
 import { idempotent } from '../idempotency.js';
-import { audit, checkLot, loadVariant, quantityField, resolveQuantity, scopeFilter, uuid } from '../inventory/common.js';
+import { audit, quantityField, scopeFilter, uuid } from '../inventory/common.js';
 import { postMovements, type Posting } from '../inventory/ledger.js';
 import { createReservation, fulfilReferenceReservations, releaseReferenceReservations } from '../inventory/service.js';
 
@@ -144,6 +144,48 @@ export const posSaleRoutes: FastifyPluginAsync<{ db: Db }> = async (app, { db })
     return { ...rows[0], unitPrice: normalize(rows[0].unitPrice), rate: rows[0].rate === null ? null : normalize(rows[0].rate) };
   });
 
+
+  // Prices a cart exactly as a sale would, without creating anything. Terminals show these numbers; they do not
+  // compute money themselves.
+  app.post('/pos/registers/:id/quote', async (req) => {
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const body = z.object({ lines: saleBody.shape.lines }).parse(req.body);
+    const { actor } = req;
+    const reg = await db.query<{ location_id: string; price_list_id: string; max_discount_bps: number; currency: string; minor_unit: number }>(
+      `SELECT r.location_id, r.price_list_id, r.max_discount_bps, pl.currency, c.minor_unit FROM pos_registers r
+         JOIN price_lists pl ON pl.id = r.price_list_id JOIN currencies c ON c.code = pl.currency WHERE r.id = $1 AND r.organization_id = $2`,
+      [id, actor.organizationId],
+    );
+    const register = reg.rows[0];
+    if (!register) throw notFound('Register');
+    const target = { kind: 'location', locationId: register.location_id } as const;
+    await authorize(db, actor, 'pos.sell', target);
+    if (body.lines.some((l) => l.discount) && !(await can(db, actor, 'pos.discount', target))) throw forbidden('You are not permitted to give discounts');
+    const mayOverride = await can(db, actor, 'pos.discount.override', target);
+
+    const priced = await priceSaleLines(db as unknown as Tx, { organizationId: actor.organizationId, priceListId: register.price_list_id, minorUnit: register.minor_unit, maxDiscountBps: register.max_discount_bps, mayOverride, now: new Date() }, body.lines as SaleLineInput[]);
+    const t = saleTotals(priced);
+    const lines = [];
+    for (const l of priced) {
+      const free = await db.query<{ free: string }>(
+        `SELECT COALESCE(sum(quantity - reserved), 0) AS free FROM stock_balances
+          WHERE location_id = $1 AND variant_id = $2 AND state = 'on_hand' AND lot_key = COALESCE($3::uuid, '00000000-0000-0000-0000-000000000000'::uuid)`,
+        [register.location_id, l.variantId, l.lotId],
+      );
+      lines.push({
+        variantId: l.variantId, sku: l.sku, lotId: l.lotId, quantity: l.quantity, unitPrice: l.unitPrice,
+        taxCode: l.tax?.code ?? null, taxRate: l.tax?.rate ?? '0', taxInclusive: l.tax?.inclusive ?? false, discountBps: l.p.discountBps,
+        grossMinor: Number(l.p.gross), discountMinor: Number(l.p.discount), taxMinor: Number(l.p.tax), totalMinor: Number(l.p.total),
+        available: normalize(free.rows[0]!.free), insufficientStock: toScaled(free.rows[0]!.free) < toScaled(l.quantity),
+      });
+    }
+    return {
+      currency: register.currency.trim(), minorUnit: register.minor_unit, lines,
+      subtotalMinor: Number(t.subtotal), discountMinor: Number(t.discount), taxMinor: Number(t.tax), totalMinor: Number(t.total),
+      sellable: t.total > 0n && lines.every((l) => !l.insufficientStock),
+    };
+  });
+
   app.post('/pos/sales', async (req, reply) => {
     const body = saleBody.parse(req.body);
     const { actor } = req;
@@ -173,42 +215,8 @@ export const posSaleRoutes: FastifyPluginAsync<{ db: Db }> = async (app, { db })
       const mayOverride = await can(tx, actor, 'pos.discount.override', target);
 
       const now = new Date();
-      const priced: {
-        variantId: string; lotId: string | null; quantity: string; unitPrice: string; itemId: string;
-        tax: { code: string; rate: string; inclusive: boolean } | null; p: ReturnType<typeof priceLine>;
-      }[] = [];
-      for (const line of body.lines) {
-        const variant = await loadVariant(tx, actor.organizationId, line.variantId);
-        const lotId = await checkLot(tx, actor.organizationId, variant, line.lotId);
-        const quantity = await resolveQuantity(tx, variant, line.quantity, line.unitId);
-        const price = await tx.query<{ id: string; unit_price: string; code: string | null; rate: string | null; price_inclusive: boolean | null }>(
-          `SELECT i.id, i.unit_price, t.code, t.rate, t.price_inclusive
-             FROM price_list_items i LEFT JOIN tax_codes t ON t.id = i.tax_code_id
-            WHERE i.price_list_id = $1 AND i.variant_id = $2 AND i.effective_from <= $3 AND (i.effective_to IS NULL OR i.effective_to > $3)`,
-          [register.price_list_id, variant.id, now],
-        );
-        const item = price.rows[0];
-        if (!item) throw invalid(`${variant.sku} has no current price on this register's price list`);
-        const tax = item.code ? { code: item.code, rate: normalize(item.rate!), inclusive: item.price_inclusive! } : null;
-        const unitPrice = normalize(item.unit_price);
-        let p;
-        try {
-          p = priceLine({ quantity, unitPrice, minorUnit: register.minor_unit, discount: line.discount as DiscountInput | undefined, tax });
-        } catch (err) {
-          if (err instanceof MoneyError) throw invalid(err.message);
-          throw err;
-        }
-        if (p.discount > 0n && p.gross * BigInt(register.max_discount_bps) < p.discount * 10000n && !mayOverride) {
-          throw forbidden(`Discount exceeds this register's limit of ${register.max_discount_bps / 100}%`);
-        }
-        priced.push({ variantId: variant.id, lotId, quantity, unitPrice, itemId: item.id, tax, p });
-      }
-
-      const sum = (f: (l: (typeof priced)[number]) => bigint) => priced.reduce((a, l) => a + f(l), 0n);
-      const subtotal = sum((l) => l.p.gross);
-      const discount = sum((l) => l.p.discount);
-      const taxTotal = sum((l) => l.p.tax);
-      const total = sum((l) => l.p.total);
+      const priced = await priceSaleLines(tx, { organizationId: actor.organizationId, priceListId: register.price_list_id, minorUnit: register.minor_unit, maxDiscountBps: register.max_discount_bps, mayOverride, now }, body.lines as SaleLineInput[]);
+      const { subtotal, discount, tax: taxTotal, total } = saleTotals(priced);
       if (total <= 0n) throw invalid('Sale total must be greater than zero');
       if (body.expectedTotalMinor !== undefined && BigInt(body.expectedTotalMinor) !== total) {
         throw conflict(`Total is now ${total}, not ${body.expectedTotalMinor}; prices changed`);
