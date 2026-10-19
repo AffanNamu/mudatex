@@ -1,6 +1,6 @@
 # Mudatex API
 
-Phase 1 foundation: organization hierarchy, scoped IAM, audit log and the product catalogue with units of measure. TypeScript, Fastify, PostgreSQL 16. See [ADR 001](../../docs/adr/001-backend-framework-and-database.md).
+Phase 1 foundation (organization hierarchy, scoped IAM, audit log, product catalogue with units) and the Phase 2 inventory ledger (receipts, issues, reservations, transfers, roll splitting, maker-checker adjustments). See [ADR 004](../../docs/adr/004-inventory-ledger.md). TypeScript, Fastify, PostgreSQL 16. See [ADR 001](../../docs/adr/001-backend-framework-and-database.md).
 
 ## Run locally
 
@@ -40,7 +40,11 @@ TEST_DATABASE_URL=postgres://mudatex:mudatex@localhost:5432/mudatex_test npm tes
 | Organization | `POST/GET /legal-entities`, `POST/GET /locations` |
 | Catalogue | `POST/GET /units`, `POST/GET /products`, `POST /products/:id/archive` |
 | Audit | `GET /audit-log` |
+| Inventory commands | `POST /inventory/receipts`, `/issues`, `/rolls/:lotId/split`, `/reservations`, `/reservations/:id/fulfil`, `/reservations/:id/release`, `/transfers`, `/transfers/:id/receive`, `/transfers/:id/cancel`, `/adjustments`, `/adjustments/:id/approve`, `/adjustments/:id/reject` |
+| Inventory reads | `GET /inventory/balances`, `/movements`, `/lots`, `/reservations/:id`, `/transfers/:id`, `/adjustments/:id`, `/reconciliation` |
+
+All inventory commands require an `Idempotency-Key` header (8-128 characters). Retrying with the same key and body returns the original response (`Idempotent-Replayed: true`); the same key with a different body is rejected.
 
 ## Not built yet
 
-Inventory ledger, POS, offline sync, procurement, accounting, manufacturing, payment adapters, notifications outbox, migration tooling, and the Flutter/web clients. The identity provider has not been chosen; token verification is provider-agnostic JWKS.
+POS, offline sync, procurement, cycle counts, accounting, manufacturing, payment adapters, notifications outbox, migration tooling, and the Flutter/web clients. No stock valuation exists: the costing method (ADR 005) is undecided. The identity provider has not been chosen; token verification is provider-agnostic JWKS.

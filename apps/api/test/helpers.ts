@@ -34,7 +34,7 @@ export async function newOrg(db: pg.Pool, name = 'Org') {
   return { ...ids, sub, auth: { authorization: `Bearer ${await token(sub)}` } };
 }
 
-export type Headers = { authorization: string };
+export type Headers = { authorization: string } & Record<string, string>;
 
 export async function call(app: FastifyInstance, method: 'GET' | 'POST' | 'DELETE', url: string, headers: Headers | undefined, payload?: unknown) {
   const res = await app.inject({ method, url, headers, payload: payload as never });

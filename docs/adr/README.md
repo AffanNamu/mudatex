@@ -7,7 +7,7 @@ This file is a starter register. Each decision should be created as an individua
 | [001](001-backend-framework-and-database.md) | Backend framework and primary database | Proposed: TypeScript/Fastify modular monolith + PostgreSQL (implemented in Phase 1; validate in spike) | Engineering spike, deployment/ops fit, team skill, transaction test |
 | 002 | Offline command and synchronization protocol | Open | POS/warehouse workshops, disconnected-site conflict prototype, security review |
 | 003 | Organization hierarchy and permission scoping | Proposed: legal entity and location scope enforced server-side | Finance/legal and security review |
-| 004 | Inventory ledger, reservations and movement states | Proposed: immutable movement ledger and transactional reservation | Inventory controller signoff and concurrency tests |
+| [004](004-inventory-ledger.md) | Inventory ledger, reservations and movement states | Proposed: immutable movement ledger and transactional reservation (implemented; awaiting sign-off) | Inventory controller signoff and concurrency tests |
 | 005 | Inventory costing method | **Open/blocking for valuation** | Qualified finance/accounting decision for all applicable jurisdictions |
 | 006 | Accounting functional currency, multi-currency and posting model | Open | Chart of accounts, tax, exchange rates and close policy approval |
 | 007 | Manufacturing model and costing | Open | Production-process workshops; BOM/routing/WIP/overhead policy |

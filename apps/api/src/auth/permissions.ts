@@ -6,6 +6,14 @@ export const PERMISSIONS = [
   'catalog.read',
   'catalog.write',
   'audit.read',
+  'inventory.read',
+  'inventory.receive',
+  'inventory.issue',
+  'inventory.transfer',
+  'inventory.reserve',
+  'inventory.split',
+  'inventory.adjust',
+  'inventory.adjust.approve',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];

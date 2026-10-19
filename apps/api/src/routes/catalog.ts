@@ -26,6 +26,7 @@ const productBody = z.object({
     .array(
       z.object({
         sku: z.string().min(1).max(100),
+        tracking: z.enum(['none', 'lot', 'roll']).default('none'),
         attributes: z.record(z.unknown()).default({}),
         barcodes: z.array(z.string().min(1).max(64)).default([]),
       }),
@@ -99,8 +100,8 @@ export const catalogRoutes: FastifyPluginAsync<{ db: Db }> = async (app, { db })
       const variantIds: string[] = [];
       for (const v of body.variants) {
         const r = await tx.query<{ id: string }>(
-          `INSERT INTO product_variants (organization_id, product_id, sku, attributes) VALUES ($1, $2, $3, $4) RETURNING id`,
-          [actor.organizationId, productId, v.sku, v.attributes],
+          `INSERT INTO product_variants (organization_id, product_id, sku, tracking, attributes) VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+          [actor.organizationId, productId, v.sku, v.tracking, v.attributes],
         );
         const variantId = r.rows[0]!.id;
         variantIds.push(variantId);
@@ -146,7 +147,7 @@ export const catalogRoutes: FastifyPluginAsync<{ db: Db }> = async (app, { db })
     const { rows } = await db.query(
       `SELECT p.id, p.name, p.description, p.category, p.base_unit_id AS "baseUnitId", p.attributes, p.status,
               COALESCE(json_agg(json_build_object(
-                'id', v.id, 'sku', v.sku, 'attributes', v.attributes, 'status', v.status,
+                'id', v.id, 'sku', v.sku, 'tracking', v.tracking, 'attributes', v.attributes, 'status', v.status,
                 'barcodes', COALESCE((SELECT json_agg(b.barcode ORDER BY b.barcode) FROM variant_barcodes b WHERE b.variant_id = v.id), '[]'::json)
               ) ORDER BY v.sku) FILTER (WHERE v.id IS NOT NULL), '[]'::json) AS variants
          FROM products p LEFT JOIN product_variants v ON v.product_id = p.id

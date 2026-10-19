@@ -7,6 +7,10 @@ import type { Db } from './db.js';
 import { AppError, forbidden, unauthorized } from './errors.js';
 import { catalogRoutes } from './routes/catalog.js';
 import { iamRoutes } from './routes/iam.js';
+import { inventoryAdjustmentRoutes } from './routes/inventory-adjustments.js';
+import { inventoryReservationRoutes } from './routes/inventory-reservations.js';
+import { inventoryStockRoutes } from './routes/inventory-stock.js';
+import { inventoryTransferRoutes } from './routes/inventory-transfers.js';
 import { orgRoutes } from './routes/org.js';
 
 declare module 'fastify' {
@@ -69,6 +73,10 @@ export async function buildServer({ config, db, verifier }: ServerDeps): Promise
       await v1.register(orgRoutes, { db });
       await v1.register(iamRoutes, { db });
       await v1.register(catalogRoutes, { db });
+      await v1.register(inventoryStockRoutes, { db });
+      await v1.register(inventoryReservationRoutes, { db });
+      await v1.register(inventoryTransferRoutes, { db });
+      await v1.register(inventoryAdjustmentRoutes, { db });
     },
     { prefix: '/v1' },
   );
