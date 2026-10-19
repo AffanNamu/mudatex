@@ -8,6 +8,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   secret-scan:
     runs-on: ubuntu-latest
@@ -22,6 +26,7 @@ jobs:
 
   api:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: apps/api
@@ -48,4 +53,31 @@ jobs:
       - run: npm run typecheck
       - run: npm run build
       - run: npm test
-      - run: npm audit --omit=dev --audit-level=high
+      - name: Dependency audit (all dependencies)
+        run: npm audit --audit-level=high
+      - name: Smoke test the built server on a fresh database
+        env:
+          DATABASE_URL: postgres://mudatex:mudatex@localhost:5432/mudatex_smoke
+        run: |
+          PGPASSWORD=mudatex psql -h localhost -U mudatex -d mudatex_test -c 'CREATE DATABASE mudatex_smoke'
+          ./scripts/smoke.sh
+
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate compose file
+        run: docker compose config -q
+      - name: Build the API image
+        run: docker build -t mudatex-api:ci apps/api
+      - name: Container starts and answers its probes
+        run: |
+          docker run -d --name api --network host \
+            -e NODE_ENV=development -e AUTH_DEV_SECRET=ci-secret-ci-secret-ci-secret-0001 \
+            -e DATABASE_URL=postgres://mudatex:mudatex@127.0.0.1:5432/none mudatex-api:ci
+          for i in $(seq 1 30); do curl -fs http://127.0.0.1:3000/health && break; sleep 1; done
+          curl -fs http://127.0.0.1:3000/health
+          # without a reachable database the container is alive but not ready
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/ready)" = "503"
+          docker rm -f api

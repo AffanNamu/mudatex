@@ -13,9 +13,15 @@
     "start": "node dist/index.js",
     "migrate": "tsx src/migrate-cli.ts",
     "test": "vitest run",
-    "bootstrap": "tsx src/bootstrap-cli.ts"
+    "bootstrap": "tsx src/bootstrap-cli.ts",
+    "migrate:prod": "node dist/migrate-cli.js",
+    "bootstrap:prod": "node dist/bootstrap-cli.js",
+    "audit": "npm audit --audit-level=high"
   },
   "dependencies": {
+    "@fastify/cors": "^11.3.1",
+    "@fastify/helmet": "^13.2.0",
+    "@fastify/rate-limit": "^10.3.0",
     "fastify": "^5.12.7",
     "jose": "^5.10.0",
     "pg": "^8.23.1",
@@ -26,6 +32,7 @@
     "@types/pg": "^8.23.1",
     "tsx": "^4.23.15",
     "typescript": "^5.9.3",
-    "vitest": "^2.1.9"
+    "vite": "^7.3.7",
+    "vitest": "^5.0.5"
   }
 }

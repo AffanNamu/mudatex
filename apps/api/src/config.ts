@@ -11,6 +11,17 @@ const schema = z
     AUTH_AUDIENCE: z.string().optional(),
     // Development and tests only: shared HS256 secret.
     AUTH_DEV_SECRET: z.string().min(32).optional(),
+    // Comma-separated browser origins allowed to call the API. Empty means no cross-origin access.
+    CORS_ORIGINS: z.string().default('').transform((v) => v.split(',').map((o) => o.trim()).filter(Boolean)),
+    // Requests per minute per client address. Unset: 600 outside tests, off in tests.
+    RATE_LIMIT_MAX: z.coerce.number().int().positive().optional(),
+    // Set true only behind a trusted reverse proxy, so client addresses come from X-Forwarded-For.
+    TRUST_PROXY: z.enum(['true', 'false']).default('false').transform((v) => v === 'true'),
+    BODY_LIMIT_BYTES: z.coerce.number().int().positive().default(1_048_576),
+    DB_POOL_MAX: z.coerce.number().int().positive().default(10),
+    // A statement running longer than this is cancelled, so one bad query cannot hold locks for long.
+    DB_STATEMENT_TIMEOUT_MS: z.coerce.number().int().positive().default(20_000),
+    DB_IDLE_IN_TX_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
   })
   .superRefine((env, ctx) => {
     if (env.NODE_ENV === 'production') {

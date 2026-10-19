@@ -21,6 +21,9 @@ export function createTokenVerifier(config: Config): TokenVerifier {
         algorithms,
         issuer: config.AUTH_ISSUER,
         audience: config.AUTH_AUDIENCE,
+        // Tokens must expire and name a subject; a token that never expires is rejected.
+        requiredClaims: ['exp', 'sub'],
+        clockTolerance: 5,
       });
       if (!payload.sub) throw new Error('missing sub');
       return { subject: payload.sub };

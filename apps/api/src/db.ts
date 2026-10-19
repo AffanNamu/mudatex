@@ -3,8 +3,22 @@ import pg from 'pg';
 export type Db = pg.Pool;
 export type Tx = pg.PoolClient;
 
-export function createPool(connectionString: string): Db {
-  return new pg.Pool({ connectionString, max: 10 });
+export interface PoolOptions {
+  max?: number;
+  statementTimeoutMs?: number;
+  idleInTransactionTimeoutMs?: number;
+}
+
+export function createPool(connectionString: string, opts: PoolOptions = {}): Db {
+  const pool = new pg.Pool({
+    connectionString,
+    max: opts.max ?? 10,
+    statement_timeout: opts.statementTimeoutMs,
+    idle_in_transaction_session_timeout: opts.idleInTransactionTimeoutMs,
+  });
+  // An idle client dropping (database restart, network) must not crash the process.
+  pool.on('error', (err) => console.error('Idle database client error:', err.message));
+  return pool;
 }
 
 /** Runs fn in one transaction; commits on return, rolls back on throw. */

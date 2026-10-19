@@ -7,20 +7,18 @@ import { buildServer } from '../src/server.js';
 
 export const SECRET = 'test-secret-test-secret-test-secret-123';
 
-export async function setupApp() {
+export async function setupApp(env: Record<string, string> = {}, deps: { migrationsDir?: string } = {}) {
   const db = new pg.Pool({ connectionString: process.env.TEST_DATABASE_URL });
-  const config = loadConfig({ NODE_ENV: 'test', DATABASE_URL: process.env.TEST_DATABASE_URL, AUTH_DEV_SECRET: SECRET });
-  const app = await buildServer({ config, db });
+  const config = loadConfig({ NODE_ENV: 'test', DATABASE_URL: process.env.TEST_DATABASE_URL, AUTH_DEV_SECRET: SECRET, ...env });
+  const app = await buildServer({ config, db, ...deps });
   return { app, db, close: async () => { await app.close(); await db.end(); } };
 }
 
-export async function token(subject: string, opts: { expiresIn?: string; secret?: string } = {}) {
-  return new SignJWT({})
-    .setProtectedHeader({ alg: 'HS256' })
-    .setSubject(subject)
-    .setIssuedAt()
-    .setExpirationTime(opts.expiresIn ?? '5m')
-    .sign(new TextEncoder().encode(opts.secret ?? SECRET));
+export async function token(subject: string, opts: { expiresIn?: string; secret?: string; noExpiry?: boolean; noSubject?: boolean } = {}) {
+  let jwt = new SignJWT({}).setProtectedHeader({ alg: 'HS256' }).setIssuedAt();
+  if (!opts.noSubject) jwt = jwt.setSubject(subject);
+  if (!opts.noExpiry) jwt = jwt.setExpirationTime(opts.expiresIn ?? '5m');
+  return jwt.sign(new TextEncoder().encode(opts.secret ?? SECRET));
 }
 
 export async function newOrg(db: pg.Pool, name = 'Org') {

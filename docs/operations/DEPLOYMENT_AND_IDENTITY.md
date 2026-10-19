@@ -1,0 +1,75 @@
+# Deployment and identity setup
+
+This describes how to run the Mudatex API and connect an identity provider. Nothing here has been run against a real cloud account: the API image is built by CI but has not been deployed anywhere by this project.
+
+## Running locally
+
+```bash
+docker compose up --build      # PostgreSQL, one-off migration, API on :3000
+```
+
+`docker-compose.yml` is for development only. It enables the shared development token secret, which the API refuses to use when `NODE_ENV=production`.
+
+## Environment variables
+
+| Variable | Required | Meaning |
+|---|---|---|
+| `NODE_ENV` | yes | `production` for any real deployment |
+| `DATABASE_URL` | yes | PostgreSQL 16 connection string |
+| `PORT` | no | default 3000 |
+| `AUTH_JWKS_URL`, `AUTH_ISSUER`, `AUTH_AUDIENCE` | production | token verification; see the provider sections below |
+| `AUTH_DEV_SECRET` | dev/test only | HS256 secret, 32+ characters. **Refused in production.** |
+| `CORS_ORIGINS` | no | comma-separated browser origins allowed to call the API. Empty = none |
+| `RATE_LIMIT_MAX` | no | requests per minute per client address, default 600 |
+| `TRUST_PROXY` | no | `true` only behind a trusted reverse proxy, so client addresses come from `X-Forwarded-For` (otherwise everyone shares the proxy's address and one limit) |
+| `BODY_LIMIT_BYTES` | no | default 1,048,576 |
+| `DB_POOL_MAX` | no | default 10 |
+| `DB_STATEMENT_TIMEOUT_MS` | no | cancel any statement longer than this, default 20,000 |
+| `DB_IDLE_IN_TX_TIMEOUT_MS` | no | close a session left idle inside a transaction, default 30,000 |
+
+Keep secrets in your platform's secret store. Never commit them.
+
+## Release steps
+
+1. Build the image: `docker build -t mudatex-api apps/api`.
+2. Run migrations **before** starting the new version, as a one-off job: `node dist/migrate-cli.js`. It is safe to run repeatedly and refuses to run if an applied migration file was edited.
+3. Start the API. `GET /health` is liveness (the process is up). `GET /ready` is readiness: it returns 503 until the database answers and every migration is applied, so a load balancer holds traffic off a version that is ahead of its schema.
+4. Create the first administrator once: `node dist/bootstrap-cli.js "<organization>" "<idp subject>" "<email>" "<name>"`. This is the only way to create an administrator without an existing one; it is not an HTTP endpoint.
+
+Migrations are forward-only. A bad migration is fixed with a new migration. Take a database backup before every production migration; backup and restore policy (RPO/RTO) is an open decision (ADR 009).
+
+## How authentication works
+
+The API trusts a bearer JWT only if its signature verifies against the identity provider's published keys, it names an issuer and audience you configured, it has an expiry, and it has a subject (`sub`). The `sub` must match a user created in Mudatex (`users.external_subject`); a valid token for an unknown person gets 401, and a suspended user gets 403. No passwords are stored by Mudatex.
+
+### Option A: Firebase Authentication
+
+You already use Firebase for PFB. In a **new** Firebase project for Mudatex (do not share PFB's project):
+
+1. Enable the sign-in methods you want (email/password, Google). For staff, prefer enforcing multi-factor authentication.
+2. Set:
+   ```
+   AUTH_JWKS_URL=https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com
+   AUTH_ISSUER=https://securetoken.google.com/<firebase-project-id>
+   AUTH_AUDIENCE=<firebase-project-id>
+   ```
+3. Clients send the Firebase **ID token** (`await user.getIdToken()`) as `Authorization: Bearer <token>`.
+4. A user's `sub` is the Firebase UID. Create their Mudatex user with that value as `externalSubject`.
+
+### Option B: Supabase Auth
+
+1. In a Supabase project, under Authentication, enable your methods. Use the project's asymmetric signing keys so tokens can be verified from a public JWKS (Project Settings, JWT keys). Tokens signed with a shared secret cannot be verified here without sharing that secret and are not supported.
+2. Set:
+   ```
+   AUTH_JWKS_URL=https://<project-ref>.supabase.co/auth/v1/.well-known/jwks.json
+   AUTH_ISSUER=https://<project-ref>.supabase.co/auth/v1
+   AUTH_AUDIENCE=authenticated
+   ```
+3. A user's `sub` is their Supabase user id.
+
+Either option works; do not enable both. Pick one before the first real user is created, because users are matched to Mudatex by `sub`.
+
+### Both providers
+
+- Add the same CORS origin as your web app to `CORS_ORIGINS`.
+- Disabling a person in the provider stops new tokens, but a token already issued stays valid until it expires. For immediate removal, also suspend the user in Mudatex (`POST /v1/users/:id/suspend`), which takes effect on the next request.

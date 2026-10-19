@@ -2,6 +2,8 @@
 
 Phase 1 foundation (organization hierarchy, scoped IAM, audit log, product catalogue with units) the Phase 2 inventory ledger (receipts, issues, reservations, transfers, roll splitting, maker-checker adjustments), retail POS with pricing and tax (registers, sessions, sales, payments, returns), procurement (suppliers, purchase orders, receiving, supplier returns), the general ledger core (chart of accounts, fiscal periods, approved exchange rates, maker-checker journals, reversals, trial balance), and manufacturing (versioned BOMs with routing, work orders, material reservation, issue and return, output, quality holds, reconciliation, genealogy). See [ADR 004](../../docs/adr/004-inventory-ledger.md) and [ADR 012](../../docs/adr/012-pos-pricing-tax-and-payments.md) [ADR 013](../../docs/adr/013-procurement.md) and [ADR 014](../../docs/adr/014-general-ledger-core.md) and [ADR 015](../../docs/adr/015-manufacturing-and-quality-holds.md). TypeScript, Fastify, PostgreSQL 16. See [ADR 001](../../docs/adr/001-backend-framework-and-database.md).
 
+See [deployment and identity setup](../../docs/operations/DEPLOYMENT_AND_IDENTITY.md) for environment variables, the release steps, health probes and Firebase/Supabase configuration.
+
 ## Run locally
 
 ```bash
