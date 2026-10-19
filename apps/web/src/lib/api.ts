@@ -1,4 +1,7 @@
-const BASE = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') ?? 'http://localhost:3000';
+declare global { interface Window { __MUDATEX__?: { apiUrl?: string } } }
+
+/** Where the API lives: set when the container starts (config.js), else at build time, else the local default. */
+const BASE = (window.__MUDATEX__?.apiUrl || (import.meta.env.VITE_API_URL as string | undefined) || 'http://localhost:3000').replace(/\/$/, '');
 
 export class ApiError extends Error {
   constructor(readonly status: number, readonly code: string, message: string, readonly details?: unknown) {

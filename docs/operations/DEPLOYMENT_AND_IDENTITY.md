@@ -29,6 +29,16 @@ docker compose up --build      # PostgreSQL, one-off migration, API on :3000
 
 Keep secrets in your platform's secret store. Never commit them.
 
+## The web console
+
+`apps/web` builds to static files served by nginx (`apps/web/Dockerfile`, listens on 8080, runs as a non-root user). One setting at container start controls where it talks to the API:
+
+| Variable | Meaning |
+|---|---|
+| `API_URL` | Public address of the API, such as `https://api.example.com`. Written to `config.js` and into the browser content-security policy (`connect-src`). The container refuses to start without a valid `http(s)://` value. |
+
+On the API side, add the console's address to `CORS_ORIGINS`. The console sends the sign-in token as a bearer header; it uses no cookies. Serve it over HTTPS in production. The development sign-in (`/v1/dev/token`) does not exist in production, so **the console cannot be signed in to in production until the identity provider is connected** (see below): this is the next piece of work once the provider's project values exist.
+
 ## Release steps
 
 1. Build the image: `docker build -t mudatex-api apps/api`.
