@@ -18,6 +18,14 @@ const schema = z
     // Set true only behind a trusted reverse proxy, so client addresses come from X-Forwarded-For.
     TRUST_PROXY: z.enum(['true', 'false']).default('false').transform((v) => v === 'true'),
     BODY_LIMIT_BYTES: z.coerce.number().int().positive().default(1_048_576),
+    // 32 random bytes, base64. Encrypts webhook signing secrets at rest. Webhooks cannot be created without it.
+    SECRETS_ENCRYPTION_KEY: z.string().optional(),
+    // Webhooks to http:// and to private addresses are for development and tests only.
+    WEBHOOK_ALLOW_HTTP: z.enum(['true', 'false']).default('false').transform((v) => v === 'true'),
+    WEBHOOK_ALLOW_PRIVATE: z.enum(['true', 'false']).default('false').transform((v) => v === 'true'),
+    // Run the delivery worker inside the API process. Prefer a separate `node dist/worker.js` in production.
+    RUN_WORKER_IN_API: z.enum(['true', 'false']).default('false').transform((v) => v === 'true'),
+    WORKER_POLL_MS: z.coerce.number().int().min(100).default(1000),
     DB_POOL_MAX: z.coerce.number().int().positive().default(10),
     // A statement running longer than this is cancelled, so one bad query cannot hold locks for long.
     DB_STATEMENT_TIMEOUT_MS: z.coerce.number().int().positive().default(20_000),
@@ -27,6 +35,9 @@ const schema = z
     if (env.NODE_ENV === 'production') {
       if (env.AUTH_DEV_SECRET) {
         ctx.addIssue({ code: 'custom', message: 'AUTH_DEV_SECRET must not be set in production' });
+      }
+      if (env.WEBHOOK_ALLOW_HTTP || env.WEBHOOK_ALLOW_PRIVATE) {
+        ctx.addIssue({ code: 'custom', message: 'WEBHOOK_ALLOW_HTTP and WEBHOOK_ALLOW_PRIVATE must not be set in production' });
       }
       if (!env.AUTH_JWKS_URL || !env.AUTH_ISSUER || !env.AUTH_AUDIENCE) {
         ctx.addIssue({

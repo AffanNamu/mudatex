@@ -1,4 +1,5 @@
 import type { Tx } from './db.js';
+import { publishEvent } from './events/publish.js';
 
 export interface AuditEntry {
   organizationId: string;
@@ -27,4 +28,13 @@ export async function writeAudit(tx: Tx, e: AuditEntry): Promise<void> {
       e.after === undefined ? null : JSON.stringify(e.after),
     ],
   );
+  // Every audited action is also published as an event, in the same transaction.
+  await publishEvent(tx, {
+    organizationId: e.organizationId,
+    type: e.action,
+    aggregateType: e.entityType,
+    aggregateId: e.entityId,
+    actorUserId: e.actorUserId,
+    requestId: e.requestId,
+  });
 }

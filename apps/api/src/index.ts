@@ -1,5 +1,8 @@
 import { loadConfig } from './config.js';
 import { createPool } from './db.js';
+import { allConsumers } from './consumers.js';
+import { createSecretBox } from './events/secretbox.js';
+import { startWorker } from './events/worker.js';
 import { buildServer } from './server.js';
 
 const config = loadConfig();
@@ -10,7 +13,17 @@ const db = createPool(config.DATABASE_URL, {
 });
 const app = await buildServer({ config, db });
 
+const worker = config.RUN_WORKER_IN_API
+  ? startWorker(db, {
+      pollMs: config.WORKER_POLL_MS,
+      secretBox: createSecretBox(config.SECRETS_ENCRYPTION_KEY),
+      urlPolicy: { allowHttp: config.WEBHOOK_ALLOW_HTTP, allowPrivate: config.WEBHOOK_ALLOW_PRIVATE },
+      consumers: allConsumers(),
+    })
+  : null;
+
 const close = async () => {
+  await worker?.stop();
   await app.close();
   await db.end();
 };

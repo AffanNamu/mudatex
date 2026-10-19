@@ -12,6 +12,8 @@ import { AppError, forbidden, unauthorized } from './errors.js';
 import { accountingConfigRoutes } from './routes/accounting-config.js';
 import { accountingReportRoutes } from './routes/accounting-reports.js';
 import { journalRoutes } from './routes/journals.js';
+import { createSecretBox } from './events/secretbox.js';
+import { integrationRoutes } from './routes/integrations.js';
 import { catalogRoutes } from './routes/catalog.js';
 import { iamRoutes } from './routes/iam.js';
 import { inventoryAdjustmentRoutes } from './routes/inventory-adjustments.js';
@@ -142,6 +144,11 @@ export async function buildServer({ config, db, verifier, migrationsDir }: Serve
       await v1.register(manufacturingMasterRoutes, { db });
       await v1.register(workOrderRoutes, { db });
       await v1.register(manufacturingTraceRoutes, { db });
+      await v1.register(integrationRoutes, {
+        db,
+        secretBox: createSecretBox(config.SECRETS_ENCRYPTION_KEY),
+        urlPolicy: { allowHttp: config.WEBHOOK_ALLOW_HTTP, allowPrivate: config.WEBHOOK_ALLOW_PRIVATE },
+      });
     },
     { prefix: '/v1' },
   );

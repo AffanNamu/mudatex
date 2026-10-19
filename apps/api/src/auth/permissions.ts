@@ -49,6 +49,7 @@ export const PERMISSIONS = [
   'manufacturing.close',
   'quality.hold',
   'quality.release',
+  'integrations.manage',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];

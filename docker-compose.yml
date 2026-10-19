@@ -30,7 +30,22 @@ services:
       DATABASE_URL: postgres://mudatex:mudatex@db:5432/mudatex_dev
       AUTH_DEV_SECRET: local-dev-secret-local-dev-secret-0001
       CORS_ORIGINS: http://localhost:5173
+      SECRETS_ENCRYPTION_KEY: bG9jYWwtZGV2LU9OTFkta2V5LW5vdC1hLXNlY3JldCE=
+      WEBHOOK_ALLOW_HTTP: "true"
     ports: ["3000:3000"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+  worker:
+    build: ./apps/api
+    command: ["node", "dist/worker.js"]
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgres://mudatex:mudatex@db:5432/mudatex_dev
+      AUTH_DEV_SECRET: local-dev-secret-local-dev-secret-0001
+      # Local only. Generate your own with: openssl rand -base64 32
+      SECRETS_ENCRYPTION_KEY: bG9jYWwtZGV2LU9OTFkta2V5LW5vdC1hLXNlY3JldCE=
+      WEBHOOK_ALLOW_HTTP: "true"
     depends_on:
       migrate: { condition: service_completed_successfully }
 
