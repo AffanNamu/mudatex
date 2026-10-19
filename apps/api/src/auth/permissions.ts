@@ -14,6 +14,16 @@ export const PERMISSIONS = [
   'inventory.split',
   'inventory.adjust',
   'inventory.adjust.approve',
+  'pricing.manage',
+  'pos.register.manage',
+  'pos.session',
+  'pos.sell',
+  'pos.discount',
+  'pos.discount.override',
+  'pos.payment.verify',
+  'pos.refund',
+  'pos.refund.approve',
+  'pos.read',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];

@@ -12,6 +12,10 @@ import { inventoryReservationRoutes } from './routes/inventory-reservations.js';
 import { inventoryStockRoutes } from './routes/inventory-stock.js';
 import { inventoryTransferRoutes } from './routes/inventory-transfers.js';
 import { orgRoutes } from './routes/org.js';
+import { posRegisterRoutes } from './routes/pos-registers.js';
+import { posReturnRoutes } from './routes/pos-returns.js';
+import { posSaleRoutes } from './routes/pos-sales.js';
+import { pricingRoutes } from './routes/pricing.js';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -77,6 +81,10 @@ export async function buildServer({ config, db, verifier }: ServerDeps): Promise
       await v1.register(inventoryReservationRoutes, { db });
       await v1.register(inventoryTransferRoutes, { db });
       await v1.register(inventoryAdjustmentRoutes, { db });
+      await v1.register(pricingRoutes, { db });
+      await v1.register(posRegisterRoutes, { db });
+      await v1.register(posSaleRoutes, { db });
+      await v1.register(posReturnRoutes, { db });
     },
     { prefix: '/v1' },
   );

@@ -1,0 +1,83 @@
+import type { Tx } from '../db.js';
+import { fromScaled, toScaled } from '../domain/decimal.js';
+import { adjustReserved, postMovements } from './ledger.js';
+
+/** Reservation helpers for other modules (POS). The reference ties reservations to a business document. */
+
+export interface ReserveInput {
+  organizationId: string;
+  userId: string;
+  locationId: string;
+  variantId: string;
+  lotId: string | null;
+  quantity: string; // base unit, positive
+  referenceType: string;
+  referenceId: string;
+}
+
+export async function createReservation(tx: Tx, r: ReserveInput): Promise<string> {
+  await adjustReserved(tx, { locationId: r.locationId, variantId: r.variantId, lotId: r.lotId }, r.quantity);
+  const { rows } = await tx.query<{ id: string }>(
+    `INSERT INTO stock_reservations
+       (organization_id, location_id, variant_id, lot_id, quantity, reference_type, reference_id, created_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+    [r.organizationId, r.locationId, r.variantId, r.lotId, r.quantity, r.referenceType, r.referenceId, r.userId],
+  );
+  return rows[0]!.id;
+}
+
+interface Open {
+  id: string;
+  location_id: string;
+  variant_id: string;
+  lot_id: string | null;
+  quantity: string;
+  fulfilled_quantity: string;
+  released_quantity: string;
+}
+
+async function lockOpen(tx: Tx, referenceType: string, referenceId: string): Promise<Open[]> {
+  const { rows } = await tx.query<Open>(
+    `SELECT id, location_id, variant_id, lot_id, quantity, fulfilled_quantity, released_quantity
+       FROM stock_reservations WHERE status = 'active' AND reference_type = $1 AND reference_id = $2
+      ORDER BY id FOR UPDATE`,
+    [referenceType, referenceId],
+  );
+  return rows;
+}
+
+const left = (r: Open) => toScaled(r.quantity) - toScaled(r.fulfilled_quantity) - toScaled(r.released_quantity);
+
+/** Turns every open reservation for the document into issued stock. */
+export async function fulfilReferenceReservations(
+  tx: Tx,
+  ctx: { organizationId: string; actorUserId: string; requestId?: string },
+  referenceType: string,
+  referenceId: string,
+  reason: string,
+): Promise<void> {
+  const rows = await lockOpen(tx, referenceType, referenceId);
+  for (const r of rows) {
+    const qty = fromScaled(left(r));
+    await postMovements(tx, { ...ctx, reason, referenceType, referenceId }, [
+      { locationId: r.location_id, variantId: r.variant_id, lotId: r.lot_id, state: 'on_hand', delta: `-${qty}`, reservedDelta: `-${qty}`, type: 'issue' },
+    ]);
+    await tx.query(
+      `UPDATE stock_reservations SET fulfilled_quantity = fulfilled_quantity + $2::numeric, status = 'closed', closed_at = now() WHERE id = $1`,
+      [r.id, qty],
+    );
+  }
+}
+
+/** Frees the stock held for the document. */
+export async function releaseReferenceReservations(tx: Tx, referenceType: string, referenceId: string): Promise<void> {
+  const rows = await lockOpen(tx, referenceType, referenceId);
+  for (const r of rows) {
+    const qty = fromScaled(left(r));
+    await adjustReserved(tx, { locationId: r.location_id, variantId: r.variant_id, lotId: r.lot_id }, `-${qty}`);
+    await tx.query(
+      `UPDATE stock_reservations SET released_quantity = released_quantity + $2::numeric, status = 'closed', closed_at = now() WHERE id = $1`,
+      [r.id, qty],
+    );
+  }
+}

@@ -36,7 +36,7 @@ export async function newOrg(db: pg.Pool, name = 'Org') {
 
 export type Headers = { authorization: string } & Record<string, string>;
 
-export async function call(app: FastifyInstance, method: 'GET' | 'POST' | 'DELETE', url: string, headers: Headers | undefined, payload?: unknown) {
+export async function call(app: FastifyInstance, method: 'GET' | 'POST' | 'PUT' | 'DELETE', url: string, headers: Headers | undefined, payload?: unknown) {
   const res = await app.inject({ method, url, headers, payload: payload as never });
   return { status: res.statusCode, body: res.body ? (JSON.parse(res.body) as any) : undefined };
 }
