@@ -59,6 +59,10 @@ See [events and webhooks](../../docs/operations/EVENTS_AND_WEBHOOKS.md).
 
 All inventory, POS, procurement, accounting and manufacturing commands require an `Idempotency-Key` header (8-128 characters). Retrying with the same key and body returns the original response (`Idempotent-Replayed: true`); the same key with a different body is rejected.
 
+## Migration from Sakash
+
+`node dist/migration/sakash-cli.js <profile|plan|import|reconcile>`; see [the runbook](../../docs/migration/SAKASH_MIGRATION.md).
+
 ## Not built yet
 
 Offline POS and sync, payment-provider adapters, automatic journal postings from POS and procurement, receivables/payables, bank reconciliation, financial statements, year-end close, requisitions, cycle counts, manufacturing costing and multi-level MRP, payment adapters, notifications outbox, migration tooling, and the Flutter/web clients. No stock valuation exists: the costing method (ADR 005) is undecided. The identity provider has not been chosen; token verification is provider-agnostic JWKS.

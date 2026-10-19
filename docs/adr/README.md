@@ -14,6 +14,7 @@ This file is a starter register. Each decision should be created as an individua
 | 008 | Country/localization and data residency | Open | Actual operating-country list and jurisdiction-specific advice |
 | 009 | Deployment, backup, RPO/RTO and monitoring | Open | Business impact assessment and restore/disaster-recovery exercise |
 | 010 | Sakash data ownership and parallel migration boundary | Proposed: no dual authoritative writer | Source profiling, ownership matrix and reconciliation rehearsal |
+| [018](018-sakash-migration.md) | Migration from Sakash (PFB) | Proposed (tooling built, untested on real data) | Run the rehearsal on real data; business sign-off on cutover plan |
 | [017](017-pos-revenue-posting.md) | Automatic drafting of POS revenue journals | Proposed (implemented, off by default) | Accountant review of accounts, timing and tax treatment |
 | [016](016-event-outbox.md) | Event outbox, webhooks and internal consumers | Proposed (implemented) | Security review of the webhook surface |
 | [015](015-manufacturing-and-quality-holds.md) | Manufacturing (quantity side) and quality holds | Proposed (implemented; costing gated on 005/007) | Production-process workshops; quality-team review |
