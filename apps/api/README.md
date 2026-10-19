@@ -52,6 +52,7 @@ TEST_DATABASE_URL=postgres://mudatex:mudatex@localhost:5432/mudatex_test npm tes
 | Accounting | `POST/GET /accounting/accounts`, `POST /accounting/accounts/:id/archive`, `PUT /accounting/settings/:legalEntityId`, `POST/GET /accounting/periods`, `POST .../periods/:id/close\|reopen`, `POST/GET /accounting/exchange-rates`, `POST .../exchange-rates/:id/approve\|reject`, `POST/GET /accounting/journals`, `PUT/DELETE/GET /accounting/journals/:id`, `POST .../journals/:id/post\|reverse`, `GET /accounting/trial-balance`, `GET /accounting/accounts/:id/ledger` |
 | Manufacturing | `POST/GET /manufacturing/work-centres`, `POST/GET/PUT /manufacturing/boms`, `POST .../boms/:id/approve\|retire`, `GET /manufacturing/requirements`, `POST/GET /manufacturing/work-orders`, `POST .../work-orders/:id/release\|cancel\|issues\|returns\|outputs\|complete\|close`, `POST .../work-orders/:id/operations/:opNo/start\|complete`, `GET .../work-orders/:id/reconciliation`, `GET /manufacturing/genealogy` |
 | Quality | `POST /quality/lots/:id/hold\|release` |
+| Posting rules | `PUT/GET /accounting/posting-rules/:legalEntityId/pos`, `POST .../posting-rules/:legalEntityId/backfill`, `GET /accounting/posting-log`, `POST /accounting/posting-log/:sourceType/:sourceId/retry` |
 | Integrations | `POST/GET /integrations/webhooks`, `POST .../webhooks/:id/pause\|resume\|disable\|rotate-secret\|test`, `GET /integrations/deliveries`, `POST .../deliveries/:id/retry`, `GET /integrations/events` |
 
 See [events and webhooks](../../docs/operations/EVENTS_AND_WEBHOOKS.md).

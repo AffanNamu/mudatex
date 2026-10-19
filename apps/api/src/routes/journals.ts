@@ -36,7 +36,7 @@ const updateBody = z.object({
 export async function readJournal(db: Db | Tx, organizationId: string, id: string) {
   const e = await db.query(
     `SELECT id, legal_entity_id AS "legalEntityId", journal_number AS "journalNumber", posting_date::text AS "postingDate",
-            description, source_type AS "sourceType", currency, exchange_rate AS "exchangeRate", status,
+            description, source_type AS "sourceType", source_id AS "sourceId", currency, exchange_rate AS "exchangeRate", status,
             created_by AS "createdBy", posted_by AS "postedBy", posted_at AS "postedAt",
             reverses_entry_id AS "reversesEntryId", reversed_by_entry_id AS "reversedByEntryId"
        FROM journal_entries WHERE id = $1 AND organization_id = $2`,

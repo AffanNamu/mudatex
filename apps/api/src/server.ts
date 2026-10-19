@@ -11,6 +11,7 @@ import { checkReadiness } from './readiness.js';
 import { AppError, forbidden, unauthorized } from './errors.js';
 import { accountingConfigRoutes } from './routes/accounting-config.js';
 import { accountingReportRoutes } from './routes/accounting-reports.js';
+import { postingRuleRoutes } from './routes/posting-rules.js';
 import { journalRoutes } from './routes/journals.js';
 import { createSecretBox } from './events/secretbox.js';
 import { integrationRoutes } from './routes/integrations.js';
@@ -140,6 +141,7 @@ export async function buildServer({ config, db, verifier, migrationsDir }: Serve
       await v1.register(purchaseOrderRoutes, { db });
       await v1.register(accountingConfigRoutes, { db });
       await v1.register(journalRoutes, { db });
+      await v1.register(postingRuleRoutes, { db });
       await v1.register(accountingReportRoutes, { db });
       await v1.register(manufacturingMasterRoutes, { db });
       await v1.register(workOrderRoutes, { db });
