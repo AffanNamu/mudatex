@@ -53,7 +53,7 @@ async function readAdjustment(db: Db | Tx, organizationId: string, id: string) {
   );
   if (!a.rows[0]) throw notFound('Adjustment');
   const lines = await db.query<{ delta: string }>(
-    'SELECT id, variant_id AS "variantId", lot_id AS "lotId", delta FROM stock_adjustment_lines WHERE adjustment_id = $1 ORDER BY id',
+    'SELECT id, variant_id AS "variantId", lot_id AS "lotId", delta FROM stock_adjustment_lines WHERE adjustment_id = $1 ORDER BY seq',
     [id],
   );
   return { ...a.rows[0], lines: lines.rows.map((l) => ({ ...l, delta: normalize(l.delta) })) };
@@ -73,7 +73,7 @@ export const inventoryAdjustmentRoutes: FastifyPluginAsync<{ db: Db }> = async (
       const id = a.rows[0]!.id;
       for (const line of body.lines) {
         const variant = await loadVariant(tx, actor.organizationId, line.variantId);
-        const lotId = await checkLot(tx, actor.organizationId, variant, line.lotId);
+        const lotId = await checkLot(tx, actor.organizationId, variant, line.lotId, { allowQuarantined: true });
         const quantity = await resolveQuantity(tx, variant, line.quantity, line.unitId);
         await tx.query(
           'INSERT INTO stock_adjustment_lines (adjustment_id, variant_id, lot_id, delta) VALUES ($1, $2, $3, $4)',

@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { Tx } from '../db.js';
 import { convertExact, toScaled } from '../domain/decimal.js';
 import { parseQuantity, QuantityError } from '../domain/quantity.js';
-import { invalid, notFound } from '../errors.js';
+import { conflict, invalid, notFound } from '../errors.js';
 
 export interface VariantInfo {
   id: string;
@@ -103,18 +103,24 @@ export async function resolveQuantity(tx: Tx, variant: VariantInfo, quantity: st
   }
 }
 
-/** Tracked variants need a lot/roll that belongs to them; untracked variants must not name one. */
-export async function checkLot(tx: Tx, organizationId: string, variant: VariantInfo, lotId: string | undefined) {
+/**
+ * Tracked variants need a lot/roll that belongs to them; untracked variants must not name one. Quarantined lots are
+ * refused unless the caller is disposing of them (adjustments, supplier returns, returning unused material).
+ */
+export async function checkLot(tx: Tx, organizationId: string, variant: VariantInfo, lotId: string | undefined, opts: { allowQuarantined?: boolean } = {}) {
   if (variant.tracking === 'none') {
     if (lotId) throw invalid(`${variant.sku} is not lot or roll tracked`);
     return null;
   }
   if (!lotId) throw invalid(`${variant.sku} is ${variant.tracking}-tracked; lotId is required`);
-  const { rows } = await tx.query<{ kind: string }>(
-    'SELECT kind FROM stock_lots WHERE id = $1 AND variant_id = $2 AND organization_id = $3',
+  const { rows } = await tx.query<{ kind: string; code: string; hold_status: string }>(
+    'SELECT kind, code, hold_status FROM stock_lots WHERE id = $1 AND variant_id = $2 AND organization_id = $3',
     [lotId, variant.id, organizationId],
   );
   if (!rows[0]) throw notFound('Lot');
+  if (rows[0].hold_status === 'quarantined' && !opts.allowQuarantined) {
+    throw conflict(`${rows[0].kind === 'roll' ? 'Roll' : 'Lot'} ${rows[0].code} is quarantined and cannot be used until a quality release`);
+  }
   return lotId;
 }
 

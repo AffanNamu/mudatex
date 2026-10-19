@@ -7,6 +7,7 @@ import { conflict, notFound } from '../errors.js';
 import { idempotent } from '../idempotency.js';
 import { audit, checkLot, loadStockLocation, loadVariant, quantityField, resolveQuantity, uuid } from '../inventory/common.js';
 import { adjustReserved, postMovements } from '../inventory/ledger.js';
+import { assertLotsReleased } from '../inventory/service.js';
 
 const reserveBody = z.object({
   locationId: uuid,
@@ -110,6 +111,7 @@ export const inventoryReservationRoutes: FastifyPluginAsync<{ db: Db }> = async 
       if (r.status !== 'active') throw conflict('Reservation is closed');
       if (r.expires_at && r.expires_at <= new Date()) throw conflict('Reservation has expired');
 
+      await assertLotsReleased(tx, [r.lot_id]);
       const variant = await loadVariant(tx, actor.organizationId, r.variant_id);
       const left = remaining(r);
       const quantity = body.quantity ? await resolveQuantity(tx, variant, body.quantity, body.unitId) : fromScaled(left);

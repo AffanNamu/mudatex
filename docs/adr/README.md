@@ -14,6 +14,7 @@ This file is a starter register. Each decision should be created as an individua
 | 008 | Country/localization and data residency | Open | Actual operating-country list and jurisdiction-specific advice |
 | 009 | Deployment, backup, RPO/RTO and monitoring | Open | Business impact assessment and restore/disaster-recovery exercise |
 | 010 | Sakash data ownership and parallel migration boundary | Proposed: no dual authoritative writer | Source profiling, ownership matrix and reconciliation rehearsal |
+| [015](015-manufacturing-and-quality-holds.md) | Manufacturing (quantity side) and quality holds | Proposed (implemented; costing gated on 005/007) | Production-process workshops; quality-team review |
 | [014](014-general-ledger-core.md) | General ledger core: journals, periods, exchange rates, reversals (mechanics only) | Proposed (implemented; policy still blocked on 005/006) | Qualified accounting review; chart, tax and costing decisions |
 | [013](013-procurement.md) | Procurement: purchase orders, receiving, supplier returns | Proposed (implemented; needs procurement/finance review) | Procurement and finance sign-off; quality and payables follow-ups |
 | [012](012-pos-pricing-tax-and-payments.md) | POS pricing, tax snapshots, rounding and payment verification | Proposed (implemented; needs finance/tax review) | Finance and local tax-adviser approval; offline scope from ADR 002 |

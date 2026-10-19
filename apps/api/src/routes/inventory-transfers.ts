@@ -57,7 +57,7 @@ async function readTransfer(db: Db | Tx, organizationId: string, id: string) {
   const lines = await db.query<{ quantity: string; receivedQuantity: string; cancelledQuantity: string }>(
     `SELECT id, variant_id AS "variantId", lot_id AS "lotId", quantity, received_quantity AS "receivedQuantity",
             cancelled_quantity AS "cancelledQuantity"
-       FROM stock_transfer_lines WHERE transfer_id = $1 ORDER BY id`,
+       FROM stock_transfer_lines WHERE transfer_id = $1 ORDER BY seq`,
     [id],
   );
   return {

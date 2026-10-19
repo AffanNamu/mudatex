@@ -38,6 +38,17 @@ export const PERMISSIONS = [
   'accounting.period.reopen',
   'accounting.rates.manage',
   'accounting.rates.approve',
+  'manufacturing.read',
+  'manufacturing.workcentre.manage',
+  'manufacturing.bom.manage',
+  'manufacturing.bom.approve',
+  'manufacturing.plan',
+  'manufacturing.issue',
+  'manufacturing.issue.exception',
+  'manufacturing.operate',
+  'manufacturing.close',
+  'quality.hold',
+  'quality.release',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];

@@ -15,6 +15,9 @@ import { inventoryReservationRoutes } from './routes/inventory-reservations.js';
 import { inventoryStockRoutes } from './routes/inventory-stock.js';
 import { inventoryTransferRoutes } from './routes/inventory-transfers.js';
 import { orgRoutes } from './routes/org.js';
+import { manufacturingMasterRoutes } from './routes/manufacturing-master.js';
+import { manufacturingTraceRoutes } from './routes/manufacturing-trace.js';
+import { workOrderRoutes } from './routes/work-orders.js';
 import { purchaseOrderRoutes } from './routes/purchase-orders.js';
 import { supplierRoutes } from './routes/suppliers.js';
 import { posRegisterRoutes } from './routes/pos-registers.js';
@@ -43,7 +46,7 @@ export async function buildServer({ config, db, verifier }: ServerDeps): Promise
 
   app.setErrorHandler((err, req, reply) => {
     if (err instanceof AppError) {
-      return reply.status(err.status).send({ error: err.code, message: err.message });
+      return reply.status(err.status).send({ error: err.code, message: err.message, ...(err.details === undefined ? {} : { details: err.details }) });
     }
     if (err instanceof ZodError) {
       return reply.status(400).send({ error: 'bad_request', message: 'Invalid request', issues: err.issues });
@@ -96,6 +99,9 @@ export async function buildServer({ config, db, verifier }: ServerDeps): Promise
       await v1.register(accountingConfigRoutes, { db });
       await v1.register(journalRoutes, { db });
       await v1.register(accountingReportRoutes, { db });
+      await v1.register(manufacturingMasterRoutes, { db });
+      await v1.register(workOrderRoutes, { db });
+      await v1.register(manufacturingTraceRoutes, { db });
     },
     { prefix: '/v1' },
   );

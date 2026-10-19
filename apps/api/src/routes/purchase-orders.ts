@@ -354,7 +354,7 @@ export const purchaseOrderRoutes: FastifyPluginAsync<{ db: Db }> = async (app, {
         const line = l.rows[0];
         if (!line) throw notFound('Order line');
         const variant = await loadVariant(tx, actor.organizationId, line.variant_id);
-        const lotId = await checkLot(tx, actor.organizationId, variant, input.lotId);
+        const lotId = await checkLot(tx, actor.organizationId, variant, input.lotId, { allowQuarantined: true });
         const qty = await resolveQuantity(tx, variant, input.quantity, input.unitId);
         if (toScaled(line.returned_quantity) + toScaled(qty) > toScaled(line.received_quantity)) throw conflict('Return quantity exceeds what was received and not yet returned');
         await tx.query('UPDATE purchase_order_lines SET returned_quantity = returned_quantity + $2::numeric WHERE id = $1', [input.poLineId, qty]);

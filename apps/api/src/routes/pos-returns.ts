@@ -29,7 +29,7 @@ async function readReturn(db: Db | Tx, organizationId: string, id: string) {
   if (!r.rows[0]) throw notFound('Return');
   const lines = await db.query(
     `SELECT sale_line_id AS "saleLineId", quantity, restock, refund_minor AS "refundMinor", tax_refund_minor AS "taxRefundMinor"
-       FROM pos_return_lines WHERE return_id = $1 ORDER BY id`,
+       FROM pos_return_lines WHERE return_id = $1 ORDER BY seq`,
     [id],
   );
   return {

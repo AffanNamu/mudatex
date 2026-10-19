@@ -1,8 +1,9 @@
 import type { Tx } from '../db.js';
 import { conflict, invalid } from '../errors.js';
+import { postMovements, type MovementType } from './ledger.js';
 import type { VariantInfo } from './common.js';
 import { fromScaled, toScaled } from '../domain/decimal.js';
-import { adjustReserved, postMovements } from './ledger.js';
+import { adjustReserved } from './ledger.js';
 
 /** Reservation helpers for other modules (POS). The reference ties reservations to a business document. */
 
@@ -59,6 +60,7 @@ export async function fulfilReferenceReservations(
   reason: string,
 ): Promise<void> {
   const rows = await lockOpen(tx, referenceType, referenceId);
+  await assertLotsReleased(tx, rows.map((r) => r.lot_id));
   for (const r of rows) {
     const qty = fromScaled(left(r));
     await postMovements(tx, { ...ctx, reason, referenceType, referenceId }, [
@@ -114,4 +116,43 @@ export async function resolveReceiptLot(
     [organizationId, variant.id, variant.tracking, lotCode, quantity],
   );
   return created.rows[0]!.id;
+}
+
+/** Stops reserved stock from being issued or sold after its lot was put on quality hold. */
+export async function assertLotsReleased(tx: Tx, lotIds: (string | null)[]): Promise<void> {
+  const ids = [...new Set(lotIds.filter((x): x is string => !!x))];
+  if (!ids.length) return;
+  const { rows } = await tx.query<{ code: string }>(`SELECT code FROM stock_lots WHERE id = ANY($1::uuid[]) AND hold_status = 'quarantined'`, [ids]);
+  if (rows[0]) throw conflict(`Lot ${rows[0].code} is quarantined and cannot be used until a quality release`);
+}
+
+/**
+ * Issues part of a reservation: moves stock out and reduces both the balance and the reserved counter
+ * in one statement, then records the progress on the reservation.
+ */
+export async function consumeReservation(
+  tx: Tx,
+  ctx: { organizationId: string; actorUserId: string; requestId?: string; reason: string; referenceType: string; referenceId: string },
+  reservationId: string,
+  quantity: string,
+  type: MovementType,
+): Promise<void> {
+  const { rows } = await tx.query<Open>(
+    `SELECT id, location_id, variant_id, lot_id, quantity, fulfilled_quantity, released_quantity
+       FROM stock_reservations WHERE id = $1 AND status = 'active' FOR UPDATE`,
+    [reservationId],
+  );
+  const r = rows[0];
+  if (!r) throw conflict('Reservation is no longer active');
+  if (toScaled(quantity) > left(r)) throw conflict('Quantity exceeds the reserved remainder');
+  await assertLotsReleased(tx, [r.lot_id]);
+  await postMovements(tx, ctx, [
+    { locationId: r.location_id, variantId: r.variant_id, lotId: r.lot_id, state: 'on_hand', delta: `-${quantity}`, reservedDelta: `-${quantity}`, type },
+  ]);
+  const done = toScaled(quantity) === left(r);
+  await tx.query(
+    `UPDATE stock_reservations SET fulfilled_quantity = fulfilled_quantity + $2::numeric,
+            status = CASE WHEN $3 THEN 'closed' ELSE status END, closed_at = CASE WHEN $3 THEN now() ELSE closed_at END WHERE id = $1`,
+    [reservationId, quantity, done],
+  );
 }

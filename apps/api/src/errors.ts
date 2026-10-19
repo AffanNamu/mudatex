@@ -3,6 +3,7 @@ export class AppError extends Error {
     readonly status: number,
     readonly code: string,
     message: string,
+    readonly details?: unknown,
   ) {
     super(message);
   }
@@ -13,3 +14,5 @@ export const forbidden = (msg = 'Not permitted for this scope') => new AppError(
 export const notFound = (what: string) => new AppError(404, 'not_found', `${what} not found`);
 export const conflict = (msg: string) => new AppError(409, 'conflict', msg);
 export const invalid = (msg: string) => new AppError(422, 'invalid', msg);
+
+export const shortage = (msg: string, details: unknown) => new AppError(409, 'shortage', msg, details);

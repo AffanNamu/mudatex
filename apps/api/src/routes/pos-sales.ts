@@ -63,7 +63,7 @@ export async function readSale(db: Db | Tx, organizationId: string, id: string) 
   const payments = await db.query(
     `SELECT id, method, amount_minor AS "amountMinor", tendered_minor AS "tenderedMinor", change_minor AS "changeMinor",
             reference, status, verified_at AS "verifiedAt"
-       FROM pos_payments WHERE sale_id = $1 ORDER BY created_at, id`,
+       FROM pos_payments WHERE sale_id = $1 ORDER BY seq`,
     [id],
   );
   const returns = await db.query(
