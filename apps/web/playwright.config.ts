@@ -18,6 +18,12 @@ export default defineConfig({
   ],
   webServer: [
     {
+      command: 'node e2e/mock-supabase.mjs',
+      url: 'http://localhost:3200/__stats',
+      reuseExistingServer: false,
+      env: { AUTH_DEV_SECRET: 'e2e-dev-secret-e2e-dev-secret-0001' },
+    },
+    {
       // Reset + migrate + bootstrap, then serve the built API. The API must be built first (npm run build in apps/api).
       command: 'node e2e/prepare.mjs && node ../api/dist/index.js',
       url: 'http://localhost:3100/ready',

@@ -2,7 +2,9 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { Layout } from './components/Layout';
 import { Loading, Notice } from './components/ui';
+import { useEffect, useState } from 'react';
 import { useAuth } from './lib/auth';
+import { linkTokenFromHash } from './lib/identity';
 import { Access } from './pages/Access';
 import { Catalogue } from './pages/Catalogue';
 import { Home } from './pages/Home';
@@ -10,6 +12,7 @@ import { Inventory } from './pages/Inventory';
 import { Login } from './pages/Login';
 import { Payments } from './pages/Payments';
 import { Pos } from './pages/Pos';
+import { SetPassword } from './pages/SetPassword';
 import { Procurement } from './pages/Procurement';
 import { Returns } from './pages/Returns';
 
@@ -21,6 +24,10 @@ function Needs({ permission, children }: { permission: string; children: ReactNo
 
 export function App() {
   const { session, loading } = useAuth();
+  // A one-time token from a reset or invitation email is kept in memory only and removed from the address bar.
+  const [linkToken, setLinkToken] = useState(() => linkTokenFromHash(window.location.hash));
+  useEffect(() => { if (linkToken) history.replaceState(null, '', window.location.pathname); }, [linkToken]);
+  if (linkToken) return <SetPassword linkToken={linkToken} onDone={() => setLinkToken(null)} />;
   if (loading) return <div className="center"><Loading what="your session" /></div>;
   if (!session) return <Routes><Route path="*" element={<Login />} /></Routes>;
   return (

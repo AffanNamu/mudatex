@@ -12,7 +12,7 @@ cd apps/api && DATABASE_URL=... AUTH_DEV_SECRET=<32+ chars> DEV_TOKEN_ENDPOINT=t
 cd apps/web && cp .env.example .env && npm install && npm run dev      # http://localhost:5173
 ```
 
-Sign in with the administrator's email. Real identity-provider sign-in is not connected yet.
+Sign in with the administrator's email (development sign-in). To try real sign-in against a Supabase project, put its URL and publishable key in `public/config.js` (see `.env.example`) and give the API the project's `AUTH_*` settings; see the deployment guide.
 
 ## Checks
 

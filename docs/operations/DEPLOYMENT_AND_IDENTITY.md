@@ -35,9 +35,13 @@ Keep secrets in your platform's secret store. Never commit them.
 
 | Variable | Meaning |
 |---|---|
-| `API_URL` | Public address of the API, such as `https://api.example.com`. Written to `config.js` and into the browser content-security policy (`connect-src`). The container refuses to start without a valid `http(s)://` value. |
+| `API_URL` | Public address of the API, such as `https://api.example.com`. Required. |
+| `SUPABASE_URL` | The Supabase project address, `https://<project-ref>.supabase.co`. Set together with the next one to turn on password sign-in; leave both empty for the development sign-in. |
+| `SUPABASE_PUBLISHABLE_KEY` | The project's **publishable (anon) key** from Project Settings, API Keys. It is meant to be public. The container refuses a key that looks like a secret one (`sb_secret_…`, `service_role`). |
 
-On the API side, add the console's address to `CORS_ORIGINS`. The console sends the sign-in token as a bearer header; it uses no cookies. Serve it over HTTPS in production. The development sign-in (`/v1/dev/token`) does not exist in production, so **the console cannot be signed in to in production until the identity provider is connected** (see below): this is the next piece of work once the provider's project values exist.
+They are written to `config.js` and into the browser content-security policy (`connect-src`), so the page can only talk to the API and the Supabase project. The container refuses to start with an invalid combination.
+
+On the API side, add the console's address to `CORS_ORIGINS`. The console sends the access token as a bearer header, keeps it in the tab's `sessionStorage` (closing the tab signs out), refreshes it a minute before it expires, and uses no cookies. Serve it over HTTPS in production.
 
 ## Release steps
 
@@ -66,18 +70,22 @@ You already use Firebase for PFB. In a **new** Firebase project for Mudatex (do 
 3. Clients send the Firebase **ID token** (`await user.getIdToken()`) as `Authorization: Bearer <token>`.
 4. A user's `sub` is the Firebase UID. Create their Mudatex user with that value as `externalSubject`.
 
-### Option B: Supabase Auth
+### Option B: Supabase Auth (the console's sign-in is built for this)
 
-1. In a Supabase project, under Authentication, enable your methods. Use the project's asymmetric signing keys so tokens can be verified from a public JWKS (Project Settings, JWT keys). Tokens signed with a shared secret cannot be verified here without sharing that secret and are not supported.
-2. Set:
+Project: `https://xdgjomvsbjldmejwwoyb.supabase.co`.
+
+1. **Signing keys.** In the Supabase dashboard, Project Settings, JWT Keys: use an asymmetric key (ES256 or RS256), so the API can verify tokens from the public key set. A project that still signs with the legacy shared secret (HS256) is not supported; rotate to an asymmetric key first. The API's token check is tested against ES256 key sets, including wrong issuer, wrong audience, expired, unknown key, shared-secret and unsigned tokens.
+2. **API settings:**
    ```
-   AUTH_JWKS_URL=https://<project-ref>.supabase.co/auth/v1/.well-known/jwks.json
-   AUTH_ISSUER=https://<project-ref>.supabase.co/auth/v1
+   AUTH_JWKS_URL=https://xdgjomvsbjldmejwwoyb.supabase.co/auth/v1/.well-known/jwks.json
+   AUTH_ISSUER=https://xdgjomvsbjldmejwwoyb.supabase.co/auth/v1
    AUTH_AUDIENCE=authenticated
    ```
-3. A user's `sub` is their Supabase user id.
-
-Either option works; do not enable both. Pick one before the first real user is created, because users are matched to Mudatex by `sub`.
+3. **Who may have an account.** Authentication, Sign In / Providers, Email: switch **off** "Allow new users to sign up", so only people you invite exist. Turn on multi-factor authentication for staff when you are ready (the console does not prompt for a second factor yet).
+4. **Links in emails.** Authentication, URL Configuration: set the Site URL to the console's address and add it to the redirect URLs. Invitation and password-reset emails send people there, and the console lets them choose a password.
+5. **Web container:** set `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` as above.
+6. **People.** A person has two records that must agree: the Supabase account and the Mudatex user whose `externalSubject` equals the Supabase **user id** (a UUID, shown in Authentication, Users). Invite them in Supabase first, then create the Mudatex user with that id. Someone who signs in successfully but has no Mudatex user sees "you have not been set up in Mudatex yet".
+7. **First administrator.** Invite yourself in Supabase, copy your user id, then run `node dist/bootstrap-cli.js "<organization>" "<your Supabase user id>" "<your email>" "<your name>"` (see Release steps).
 
 ### Both providers
 

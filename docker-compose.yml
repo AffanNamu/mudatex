@@ -41,6 +41,7 @@ services:
     build: ./apps/web
     environment:
       API_URL: http://localhost:3000
+      # For real sign-in add SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY (see docs/operations/DEPLOYMENT_AND_IDENTITY.md)
     ports: ["8080:8080"]
     depends_on:
       - api
