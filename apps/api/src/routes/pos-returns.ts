@@ -1,12 +1,12 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
-import { authorize, can } from '../auth/authorize.js';
+import { authorize, can, grantsFor } from '../auth/authorize.js';
 import type { Db, Tx } from '../db.js';
 import { fromScaled, normalize, toScaled } from '../domain/decimal.js';
 import { refundShare } from '../domain/money.js';
 import { conflict, forbidden, invalid, notFound } from '../errors.js';
 import { idempotent } from '../idempotency.js';
-import { audit, loadVariant, quantityField, resolveQuantity, uuid } from '../inventory/common.js';
+import { audit, loadVariant, quantityField, resolveQuantity, scopeFilter, uuid } from '../inventory/common.js';
 import { postMovements, type Posting } from '../inventory/ledger.js';
 
 const returnBody = z.object({
@@ -114,6 +114,21 @@ export const posReturnRoutes: FastifyPluginAsync<{ db: Db }> = async (app, { db 
       await audit(tx, req, 'pos.return', 'pos_return', returnId, { returnNumber, saleId: id, refundTotalMinor: Number(total), method: body.refund.method });
       return { status: 201, body: await readReturn(tx, actor.organizationId, returnId) };
     });
+  });
+
+  app.get('/pos/returns', async (req) => {
+    const q = z.object({ status: z.enum(['recorded', 'pending_disbursement', 'disbursed']).optional(), limit: z.coerce.number().int().min(1).max(200).default(50) }).parse(req.query);
+    const grants = await grantsFor(db, req.actor, 'pos.read');
+    const scope = scopeFilter(grants, 4);
+    const { rows } = await db.query(
+      `SELECT r.id, r.return_number AS "returnNumber", s.receipt_number AS "receiptNumber", r.refund_method AS "refundMethod",
+              r.refund_total_minor::float8 AS "refundTotalMinor", r.refund_status AS "refundStatus", s.currency, s.minor_unit AS "minorUnit", r.created_at AS "createdAt"
+         FROM pos_returns r JOIN pos_sales s ON s.id = r.sale_id JOIN locations l ON l.id = s.location_id
+        WHERE r.organization_id = $1 AND ($2::text IS NULL OR r.refund_status = $2) AND ${scope.clause}
+        ORDER BY r.created_at DESC, r.return_number DESC LIMIT $3`,
+      [req.actor.organizationId, q.status ?? null, q.limit, ...scope.params],
+    );
+    return rows;
   });
 
   app.get('/pos/returns/:id', async (req) => {

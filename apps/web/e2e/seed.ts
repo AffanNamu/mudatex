@@ -41,14 +41,14 @@ export default async function seed() {
   await product('Ankara Wax Print', 'ANK-001', '1000', '50');
   await product('Lace Fabric', 'LCE-001', '2500', '3');
 
-  await post('/v1/pos/registers', { locationId: shop.id, code: 'LAG1', name: 'Front till', priceListId: list.id, maxDiscountBps: 1000, refundThresholdMinor: 100000 });
+  await post('/v1/pos/registers', { locationId: shop.id, code: 'LAG1', name: 'Front till', priceListId: list.id, maxDiscountBps: 1000, refundThresholdMinor: 200000 });
 
   const staff = async (email: string, name: string, permissions: string[]) => {
     const u = await post('/v1/users', { externalSubject: email, email, displayName: name });
     const r = await post('/v1/roles', { key: `e2e_${name.toLowerCase().replace(/\W/g, '_')}`, name, permissions });
     await post('/v1/memberships', { userId: u.id, roleId: r.id, scope: { type: 'location', id: shop.id } });
   };
-  await staff(USERS.cashier, 'Cashier Chi', ['pos.sell', 'pos.session', 'pos.discount', 'pos.read', 'inventory.read']);
+  await staff(USERS.cashier, 'Cashier Chi', ['pos.sell', 'pos.session', 'pos.discount', 'pos.refund', 'pos.read', 'inventory.read']);
   await staff(USERS.supervisor, 'Supervisor Sade', ['pos.sell', 'pos.session', 'pos.discount', 'pos.discount.override', 'pos.payment.verify', 'pos.read', 'inventory.read']);
   await staff(USERS.clerk, 'Clerk Kemi', ['catalog.read', 'inventory.read', 'inventory.receive']);
 }

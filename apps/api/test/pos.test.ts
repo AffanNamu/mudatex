@@ -358,6 +358,26 @@ describe('returns', () => {
     expect((await cmd(ctx.app, w.supervisor.auth, `/v1/pos/returns/${r.body.id}/disburse`, { reference: 'RF-2' })).status).toBe(409);
   });
 
+  it('lists returns awaiting payout for people who may see them, finds sales by receipt, and labels lines', async () => {
+    const w = await pos();
+    await openSession(ctx.app, w.cashier.auth, w.reg1);
+    const s = await sell(ctx.app, w.cashier.auth, w.reg1, [{ variantId: w.inclusive.variantId, quantity: '1' }], [card(3334)]);
+    await cmd(ctx.app, w.supervisor.auth, `/v1/pos/payments/${s.body.payments[0].id}/verify`, {});
+    expect(s.body.lines[0]).toMatchObject({ productName: 'Inclusive', sku: expect.stringMatching(/^INC-/) });
+    const found = await call(ctx.app, 'GET', `/v1/pos/sales?receipt=${s.body.receiptNumber}`, w.cashier.auth);
+    expect(found.body.map((x: any) => x.id)).toEqual([s.body.id]);
+    expect((await call(ctx.app, 'GET', '/v1/pos/sales?receipt=NOPE-000001', w.cashier.auth)).body).toEqual([]);
+    const r = await ret(w, w.cashier.auth, s.body.id, [{ saleLineId: s.body.lines[0].id, quantity: '1', restock: true }], 'card');
+    const waiting = await call(ctx.app, 'GET', '/v1/pos/returns?status=pending_disbursement', w.supervisor.auth);
+    expect(waiting.body).toEqual([expect.objectContaining({ id: r.body.id, receiptNumber: s.body.receiptNumber, refundStatus: 'pending_disbursement', refundTotalMinor: 3334, currency: 'NGN' })]);
+    await cmd(ctx.app, w.supervisor.auth, `/v1/pos/returns/${r.body.id}/disburse`, { reference: 'RF-9' });
+    expect((await call(ctx.app, 'GET', '/v1/pos/returns?status=pending_disbursement', w.supervisor.auth)).body).toEqual([]);
+    const outsider = await staff(ctx.app, w.org.auth, ['pos.read'], { type: 'location', id: w.w1 });
+    expect((await call(ctx.app, 'GET', '/v1/pos/returns', outsider.auth)).body).toEqual([]);
+    const other = await newOrg(ctx.db);
+    expect((await call(ctx.app, 'GET', '/v1/pos/returns', other.auth)).body).toEqual([]);
+  });
+
   it('requires an open session on the register', async () => {
     const w = await pos();
     const session = await openSession(ctx.app, w.cashier.auth, w.reg1);

@@ -84,3 +84,5 @@ th[scope='row'] { font-weight: 500; }
 @media print { .topbar, .row-end, .skip { display: none; } body { background: #fff; color: #000; } }
 .plain { list-style: none; padding: 0; margin: 0; }
 .row-between { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 0; }
+.section { margin-top: 24px; }
+h3 { font-size: 1rem; margin: 0 0 .5rem; }

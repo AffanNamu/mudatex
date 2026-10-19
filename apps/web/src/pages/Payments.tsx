@@ -1,5 +1,5 @@
-import { useRef, useState } from 'react';
-import { ErrorBanner, Loading, Notice, PageHeader } from '../components/ui';
+import { useRef, useState, type FormEvent } from 'react';
+import { ErrorBanner, Field, Loading, Notice, PageHeader } from '../components/ui';
 import { api, newKey } from '../lib/api';
 import { useLoad } from '../lib/hooks';
 import { formatMoney } from '../lib/money';
@@ -21,6 +21,7 @@ export function Payments() {
       <ul className="plain">
         {(pending.data ?? []).map((s) => <li key={s.id}><PendingSale id={s.id} onChanged={pending.reload} /></li>)}
       </ul>
+      <Refunds />
     </>
   );
 }
@@ -60,5 +61,42 @@ function PendingSale({ id, onChanged }: { id: string; onChanged(): void }) {
         ))}
       </ul>
     </section>
+  );
+}
+
+interface RefundRow { id: string; returnNumber: string; receiptNumber: string; refundMethod: string; refundTotalMinor: number; currency: string; minorUnit: number }
+
+/** A refund by card, transfer or mobile money is paid out by someone other than the person who took the goods back. */
+function Refunds() {
+  const refunds = useLoad<RefundRow[]>('/v1/pos/returns?status=pending_disbursement&limit=100');
+  const rows = refunds.data ?? [];
+  return (
+    <>
+      <h2 className="section">Refunds to pay out</h2>
+      <ErrorBanner error={refunds.error} />
+      {!refunds.loading && rows.length === 0 && <Notice>No refunds are waiting to be paid out.</Notice>}
+      <ul className="plain">{rows.map((r) => <li key={r.id}><Refund row={r} onDone={refunds.reload} /></li>)}</ul>
+    </>
+  );
+}
+
+function Refund({ row, onDone }: { row: RefundRow; onDone(): void }) {
+  const [reference, setReference] = useState('');
+  const [error, setError] = useState<unknown>(null);
+  const [busy, setBusy] = useState(false);
+  const key = useRef(newKey());
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true); setError(null);
+    try { await api(`/v1/pos/returns/${row.id}/disburse`, { method: 'POST', body: { reference: reference.trim() }, idempotencyKey: key.current }); onDone(); }
+    catch (err) { setError(err); setBusy(false); }
+  }
+  return (
+    <form className="card" onSubmit={submit} aria-label={`Refund ${row.returnNumber}`}>
+      <h3>{row.returnNumber} for {row.receiptNumber}: {formatMoney(row.refundTotalMinor, row.currency, row.minorUnit)} by {row.refundMethod.replace('_', ' ')}</h3>
+      <ErrorBanner error={error} />
+      <Field label="Payout reference"><input value={reference} onChange={(e) => { setReference(e.target.value); key.current = newKey(); }} /></Field>
+      <button className="btn btn-primary" disabled={busy || !reference.trim()} aria-label={`Mark paid out, ${row.returnNumber}`}>Mark paid out</button>
+    </form>
   );
 }

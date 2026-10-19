@@ -53,11 +53,12 @@ export async function readSale(db: Db | Tx, organizationId: string, id: string) 
   const sale = s.rows[0];
   if (!sale) throw notFound('Sale');
   const lines = await db.query(
-    `SELECT id, line_no AS "lineNo", variant_id AS "variantId", lot_id AS "lotId", quantity, returned_quantity AS "returnedQuantity",
-            unit_price AS "unitPrice", tax_code AS "taxCode", tax_rate AS "taxRate", tax_inclusive AS "taxInclusive",
-            discount_bps AS "discountBps", gross_minor AS "grossMinor", discount_minor AS "discountMinor",
-            tax_minor AS "taxMinor", total_minor AS "totalMinor"
-       FROM pos_sale_lines WHERE sale_id = $1 ORDER BY line_no`,
+    `SELECT l.id, l.line_no AS "lineNo", l.variant_id AS "variantId", v.sku, p.name AS "productName", l.lot_id AS "lotId", l.quantity,
+            l.returned_quantity AS "returnedQuantity", l.unit_price AS "unitPrice", l.tax_code AS "taxCode", l.tax_rate AS "taxRate",
+            l.tax_inclusive AS "taxInclusive", l.discount_bps AS "discountBps", l.gross_minor AS "grossMinor", l.discount_minor AS "discountMinor",
+            l.tax_minor AS "taxMinor", l.total_minor AS "totalMinor"
+       FROM pos_sale_lines l JOIN product_variants v ON v.id = l.variant_id JOIN products p ON p.id = v.product_id
+      WHERE l.sale_id = $1 ORDER BY l.line_no`,
     [id],
   );
   const payments = await db.query(
@@ -291,16 +292,16 @@ export const posSaleRoutes: FastifyPluginAsync<{ db: Db }> = async (app, { db })
   });
 
   app.get('/pos/sales', async (req) => {
-    const q = z.object({ registerId: uuid.optional(), sessionId: uuid.optional(), status: z.enum(['pending_payment', 'completed', 'cancelled']).optional(), limit: z.coerce.number().int().min(1).max(200).default(50) }).parse(req.query);
+    const q = z.object({ registerId: uuid.optional(), sessionId: uuid.optional(), receipt: z.string().trim().min(1).max(60).optional(), status: z.enum(['pending_payment', 'completed', 'cancelled']).optional(), limit: z.coerce.number().int().min(1).max(200).default(50) }).parse(req.query);
     const grants = await grantsFor(db, req.actor, 'pos.read');
-    const scope = scopeFilter(grants, 6);
+    const scope = scopeFilter(grants, 7);
     const { rows } = await db.query(
       `SELECT s.id, s.receipt_number AS "receiptNumber", s.status, s.total_minor::float8 AS "totalMinor", s.currency, s.created_at AS "createdAt"
          FROM pos_sales s JOIN locations l ON l.id = s.location_id
         WHERE s.organization_id = $1 AND ($2::uuid IS NULL OR s.register_id = $2) AND ($3::uuid IS NULL OR s.session_id = $3)
-          AND ($4::text IS NULL OR s.status = $4) AND ${scope.clause}
+          AND ($4::text IS NULL OR s.status = $4) AND ($6::text IS NULL OR s.receipt_number = $6) AND ${scope.clause}
         ORDER BY s.created_at DESC LIMIT $5`,
-      [req.actor.organizationId, q.registerId ?? null, q.sessionId ?? null, q.status ?? null, q.limit, ...scope.params],
+      [req.actor.organizationId, q.registerId ?? null, q.sessionId ?? null, q.status ?? null, q.limit, q.receipt ?? null, ...scope.params],
     );
     return rows;
   });

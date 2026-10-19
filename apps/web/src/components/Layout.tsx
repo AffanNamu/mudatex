@@ -3,6 +3,7 @@ import { useAuth } from '../lib/auth';
 
 const NAV: { to: string; label: string; needs: string }[] = [
   { to: '/pos', label: 'Point of sale', needs: 'pos.sell' },
+  { to: '/returns', label: 'Returns', needs: 'pos.refund' },
   { to: '/payments', label: 'Confirm payments', needs: 'pos.payment.verify' },
   { to: '/catalogue', label: 'Catalogue', needs: 'catalog.read' },
   { to: '/inventory', label: 'Inventory', needs: 'inventory.read' },

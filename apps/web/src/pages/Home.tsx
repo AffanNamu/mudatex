@@ -8,6 +8,8 @@ export function Home() {
   const perms = Object.keys(session.permissions).sort();
   const links = [
     { to: '/pos', label: 'Open the till', needs: 'pos.sell' },
+    { to: '/returns', label: 'Take a return', needs: 'pos.refund' },
+    { to: '/payments', label: 'Confirm payments and refunds', needs: 'pos.payment.verify' },
     { to: '/catalogue', label: 'Browse the catalogue', needs: 'catalog.read' },
     { to: '/inventory', label: 'See stock', needs: 'inventory.read' },
     { to: '/access', label: 'People and access', needs: 'iam.manage' },
