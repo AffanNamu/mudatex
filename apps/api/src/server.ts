@@ -63,6 +63,7 @@ export async function buildServer({ config, db, verifier, migrationsDir }: Serve
   await app.register(helmet);
   await app.register(cors, {
     origin: config.CORS_ORIGINS.length ? config.CORS_ORIGINS : false,
+    methods: ['GET', 'HEAD', 'POST', 'PUT', 'DELETE'],
     allowedHeaders: ['authorization', 'content-type', 'idempotency-key', 'x-request-id'],
     exposedHeaders: ['idempotent-replayed', 'x-request-id'],
     maxAge: 600,

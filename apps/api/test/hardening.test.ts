@@ -28,6 +28,11 @@ describe('HTTP hardening', () => {
       expect((await pre(open.app, 'https://app.example.com')).headers['access-control-allow-origin']).toBe('https://app.example.com');
       expect((await pre(open.app, 'https://admin.example.com')).headers['access-control-allow-origin']).toBe('https://admin.example.com');
       expect((await pre(open.app, 'https://evil.example.com')).headers['access-control-allow-origin']).toBeUndefined();
+      // Browsers refuse PUT and DELETE unless the preflight allows them (the default allows only GET, HEAD and POST).
+      for (const method of ['PUT', 'DELETE']) {
+        const r = await open.app.inject({ method: 'OPTIONS', url: '/v1/me', headers: { origin: 'https://app.example.com', 'access-control-request-method': method } });
+        expect(r.headers['access-control-allow-methods']).toContain(method);
+      }
       expect((await pre(closed.app, 'https://app.example.com')).headers['access-control-allow-origin']).toBeUndefined();
     } finally { await closed.close(); await open.close(); }
   });

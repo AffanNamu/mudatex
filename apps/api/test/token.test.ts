@@ -12,7 +12,7 @@ let verify: ReturnType<typeof createTokenVerifier>;
 let es: Awaited<ReturnType<typeof generateKeyPair>>;
 let stranger: Awaited<ReturnType<typeof generateKeyPair>>;
 
-const sign = (key: CryptoKey | Uint8Array, alg: string, claims: Record<string, unknown> = {}, o: { iss?: string; aud?: string; exp?: string | number; kid?: string } = {}) => {
+const sign = (key: Parameters<SignJWT['sign']>[0], alg: string, claims: Record<string, unknown> = {}, o: { iss?: string; aud?: string; exp?: string | number; kid?: string } = {}) => {
   const jwt = new SignJWT({ ...claims }).setProtectedHeader({ alg, kid: o.kid ?? 'k1' }).setSubject('11111111-2222-3333-4444-555555555555')
     .setIssuedAt().setIssuer(o.iss ?? ISSUER).setAudience(o.aud ?? 'authenticated');
   return (o.exp === undefined ? jwt.setExpirationTime('1h') : jwt.setExpirationTime(o.exp)).sign(key);

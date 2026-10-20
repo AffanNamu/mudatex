@@ -6,6 +6,12 @@ import { useEffect, useState } from 'react';
 import { useAuth } from './lib/auth';
 import { linkTokenFromHash } from './lib/identity';
 import { Access } from './pages/Access';
+import { Accounts } from './pages/accounting/Accounts';
+import { Journals } from './pages/accounting/Journals';
+import { AccountingLayout } from './pages/accounting/Layout';
+import { Periods } from './pages/accounting/Periods';
+import { Rates } from './pages/accounting/Rates';
+import { TrialBalance } from './pages/accounting/TrialBalance';
 import { Catalogue } from './pages/Catalogue';
 import { Home } from './pages/Home';
 import { Inventory } from './pages/Inventory';
@@ -40,6 +46,14 @@ export function App() {
         <Route path="payments" element={<Needs permission="pos.payment.verify"><Payments /></Needs>} />
         <Route path="catalogue" element={<Needs permission="catalog.read"><Catalogue /></Needs>} />
         <Route path="inventory" element={<Needs permission="inventory.read"><Inventory /></Needs>} />
+        <Route path="accounting" element={<Needs permission="accounting.read"><AccountingLayout /></Needs>}>
+          <Route index element={<Navigate to="journals" replace />} />
+          <Route path="journals" element={<Journals />} />
+          <Route path="accounts" element={<Accounts />} />
+          <Route path="trial-balance" element={<TrialBalance />} />
+          <Route path="periods" element={<Periods />} />
+          <Route path="rates" element={<Rates />} />
+        </Route>
         <Route path="access" element={<Needs permission="iam.manage"><Access /></Needs>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

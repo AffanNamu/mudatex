@@ -44,7 +44,7 @@ export async function readJournal(db: Db | Tx, organizationId: string, id: strin
   );
   if (!e.rows[0]) throw notFound('Journal');
   const lines = await db.query(
-    `SELECT l.line_no AS "lineNo", l.account_id AS "accountId", a.code AS "accountCode", l.debit_minor AS "debitMinor", l.credit_minor AS "creditMinor",
+    `SELECT l.line_no AS "lineNo", l.account_id AS "accountId", a.code AS "accountCode", a.name AS "accountName", l.debit_minor AS "debitMinor", l.credit_minor AS "creditMinor",
             l.functional_debit_minor AS "functionalDebitMinor", l.functional_credit_minor AS "functionalCreditMinor",
             l.description, l.location_id AS "locationId", l.is_fx_rounding AS "isFxRounding"
        FROM journal_lines l JOIN accounts a ON a.id = l.account_id WHERE l.entry_id = $1 ORDER BY l.line_no`,
@@ -182,7 +182,9 @@ export const journalRoutes: FastifyPluginAsync<{ db: Db }> = async (app, { db })
     const grants = await grantsFor(db, req.actor, 'accounting.read');
     const { rows } = await db.query<{ legalEntityId: string; countryCode: string }>(
       `SELECT j.id, j.legal_entity_id AS "legalEntityId", e.country_code AS "countryCode", j.journal_number AS "journalNumber",
-              j.posting_date::text AS "postingDate", j.description, j.status, j.currency
+              j.posting_date::text AS "postingDate", j.description, j.status, j.currency, j.created_by AS "createdBy",
+              j.source_type AS "sourceType",
+              (SELECT COALESCE(sum(debit_minor), 0)::float8 FROM journal_lines WHERE entry_id = j.id) AS "totalMinor"
          FROM journal_entries j JOIN legal_entities e ON e.id = j.legal_entity_id
         WHERE j.organization_id = $1 AND ($2::uuid IS NULL OR j.legal_entity_id = $2) AND ($3::text IS NULL OR j.status = $3)
           AND ($4::date IS NULL OR j.posting_date >= $4) AND ($5::date IS NULL OR j.posting_date <= $5)

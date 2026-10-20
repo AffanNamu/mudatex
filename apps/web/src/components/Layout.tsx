@@ -8,6 +8,7 @@ const NAV: { to: string; label: string; needs: string }[] = [
   { to: '/catalogue', label: 'Catalogue', needs: 'catalog.read' },
   { to: '/inventory', label: 'Inventory', needs: 'inventory.read' },
   { to: '/purchasing', label: 'Purchasing', needs: 'procurement.read' },
+  { to: '/accounting', label: 'Accounting', needs: 'accounting.read' },
   { to: '/access', label: 'People & access', needs: 'iam.manage' },
 ];
 

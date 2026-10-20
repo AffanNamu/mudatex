@@ -33,6 +33,20 @@ describe('chart of accounts', () => {
   });
 });
 
+describe('labels for readers', () => {
+  it('names accounts on journal lines, shows who made a draft and its size, and lists the companies a bookkeeper works for', async () => {
+    const b = await books();
+    const d = await draft(ctx.app, b, [dr(b.acc.cash, 1250), cr(b.acc.equity, 1250)]);
+    expect(d.body.lines[0]).toMatchObject({ accountCode: '1000', accountName: 'Cash' });
+    const list = await call(ctx.app, 'GET', `/v1/accounting/journals?legalEntityId=${b.ng}`, b.accountant.auth);
+    expect(list.body[0]).toMatchObject({ id: d.body.id, status: 'draft', createdBy: b.bookkeeper.userId, totalMinor: 1250, journalNumber: null });
+    const companies = await call(ctx.app, 'GET', '/v1/legal-entities', b.bookkeeper.auth);
+    expect(companies.body).toEqual([expect.objectContaining({ id: b.ng, functionalCurrency: 'NGN', minorUnit: 2 })]);
+    const noAccess = await staff(ctx.app, b.org.auth, ['catalog.read'], { type: 'group' });
+    expect((await call(ctx.app, 'GET', '/v1/legal-entities', noAccess.auth)).body).toEqual([]);
+  });
+});
+
 describe('journals', () => {
   it('rejects malformed or unbalanced journals', async () => {
     const b = await books();

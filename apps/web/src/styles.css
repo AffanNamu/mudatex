@@ -88,3 +88,6 @@ th[scope='row'] { font-weight: 500; }
 h3 { font-size: 1rem; margin: 0 0 .5rem; }
 .link { font: inherit; background: none; border: 0; padding: 0; color: var(--primary); text-decoration: underline; cursor: pointer; }
 tfoot th, tfoot td { border-bottom: 0; }
+.subnav { display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 12px; }
+.subnav a { padding: 8px 12px; color: var(--text); text-decoration: none; border-bottom: 3px solid transparent; }
+.subnav a.active { border-bottom-color: var(--primary); font-weight: 600; }

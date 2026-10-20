@@ -56,11 +56,12 @@ export const orgRoutes: FastifyPluginAsync<{ db: Db }> = async (app, { db }) => 
     return reply.status(201).send(created);
   });
 
+  // Anyone who works for a company may see its name, in the scopes they work in.
   app.get('/legal-entities', async (req) => {
-    const grants = await grantsFor(db, req.actor, 'org.read');
-    const { rows } = await db.query<{ id: string; name: string; countryCode: string; functionalCurrency: string }>(
-      `SELECT id, name, country_code AS "countryCode", functional_currency AS "functionalCurrency"
-         FROM legal_entities WHERE organization_id = $1 ORDER BY name`,
+    const grants = await grantsForAny(db, req.actor, ['org.read', 'accounting.read', 'accounting.journal', 'pricing.manage', 'procurement.read', 'pos.read', 'inventory.read']);
+    const { rows } = await db.query<{ id: string; name: string; countryCode: string; functionalCurrency: string; minorUnit: number }>(
+      `SELECT e.id, e.name, e.country_code AS "countryCode", e.functional_currency AS "functionalCurrency", c.minor_unit AS "minorUnit"
+         FROM legal_entities e JOIN currencies c ON c.code = e.functional_currency WHERE e.organization_id = $1 ORDER BY e.name`,
       [req.actor.organizationId],
     );
     return rows.filter(
