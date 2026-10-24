@@ -1,0 +1,57 @@
+# Render Blueprint: the API and the web console, both from this repository's Dockerfiles, in Frankfurt (next to the
+# Supabase project in eu-central-1). The database and sign-in are Supabase. Step-by-step: docs/operations/GO_LIVE.md
+services:
+  - type: web
+    name: mudatex-api
+    runtime: docker
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerContext: ./apps/api
+    region: frankfurt
+    plan: starter
+    healthCheckPath: /ready
+    # Applies pending database migrations before each new version starts; a failed migration stops the release.
+    preDeployCommand: node dist/migrate-cli.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: TRUST_PROXY
+        value: "true"
+      - key: RUN_WORKER_IN_API
+        value: "true"
+      - key: DB_POOL_MAX
+        value: "8"
+      - key: AUTH_JWKS_URL
+        value: https://xdgjomvsbjldmejwwoyb.supabase.co/auth/v1/.well-known/jwks.json
+      - key: AUTH_ISSUER
+        value: https://xdgjomvsbjldmejwwoyb.supabase.co/auth/v1
+      - key: AUTH_AUDIENCE
+        value: authenticated
+      # Render generates a random 256-bit value once and keeps it. Back it up: webhook secrets cannot be read without it.
+      - key: SECRETS_ENCRYPTION_KEY
+        generateValue: true
+      # You enter these three in Render's dashboard (see GO_LIVE.md). They are never stored in the repository.
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_SSL_CA
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+
+  - type: web
+    name: mudatex-web
+    runtime: docker
+    dockerfilePath: ./apps/web/Dockerfile
+    dockerContext: ./apps/web
+    region: frankfurt
+    plan: starter
+    healthCheckPath: /healthz
+    envVars:
+      - key: PORT
+        value: "8080"
+      - key: SUPABASE_URL
+        value: https://xdgjomvsbjldmejwwoyb.supabase.co
+      # The publishable key is public by design (it ships to every browser). Still entered in the dashboard.
+      - key: SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: API_URL
+        sync: false

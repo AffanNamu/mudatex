@@ -11,6 +11,7 @@ This repository contains the baseline specification and the implemented backend 
 - [Enterprise Architecture and Product Specification](docs/ENTERPRISE_ARCHITECTURE_AND_SPECIFICATION.md)
 - [PFB → Mudatex Feature Map and Roadmap](docs/PFB_TO_MUDATEX_FEATURE_MAP_AND_ROADMAP.md)
 - [Migrating Sakash (PFB) data](docs/migration/SAKASH_MIGRATION.md)
+- [Go live: Supabase + Render, step by step](docs/operations/GO_LIVE.md)
 - [Deployment and identity setup](docs/operations/DEPLOYMENT_AND_IDENTITY.md) and [events and webhooks](docs/operations/EVENTS_AND_WEBHOOKS.md)
 
 The specification covers:
