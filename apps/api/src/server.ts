@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'node:crypto';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
@@ -39,15 +40,22 @@ declare module 'fastify' {
   }
 }
 
+/** A scheduled trigger for hosts with no always-on process (for example Vercel Cron calling this API once a minute). */
+export interface CronDeps {
+  secret: string;
+  tick(): Promise<unknown>;
+}
+
 export interface ServerDeps {
   config: Config;
   db: Db;
   verifier?: TokenVerifier;
   /** Directory of SQL migrations the readiness check compares against the database. */
   migrationsDir?: string;
+  cron?: CronDeps;
 }
 
-export async function buildServer({ config, db, verifier, migrationsDir }: ServerDeps): Promise<FastifyInstance> {
+export async function buildServer({ config, db, verifier, migrationsDir, cron }: ServerDeps): Promise<FastifyInstance> {
   const verify = verifier ?? createTokenVerifier(config);
   const app = Fastify({
     logger: config.NODE_ENV === 'test' ? false : { redact: ['req.headers.authorization'] },
@@ -109,6 +117,16 @@ export async function buildServer({ config, db, verifier, migrationsDir }: Serve
     const r = await checkReadiness(db, migrationsDir);
     return reply.status(r.ready ? 200 : 503).send(r);
   });
+
+  if (cron) {
+    // One delivery pass per call, for hosts that cannot keep a worker running. The scheduler proves itself with a shared secret.
+    const expected = Buffer.from(`Bearer ${cron.secret}`);
+    app.get('/internal/cron/worker', async (req, reply) => {
+      const given = Buffer.from(req.headers.authorization ?? '');
+      if (given.length !== expected.length || !timingSafeEqual(given, expected)) throw unauthorized();
+      return reply.send({ ok: true, ...(await cron.tick() as object) });
+    });
+  }
 
   await app.register(devAuthRoutes, { db, config, prefix: '/v1' });
 

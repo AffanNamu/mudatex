@@ -1,6 +1,6 @@
 # Deployment and identity setup
 
-**Recommended first production setup, step by step: [GO_LIVE.md](GO_LIVE.md)** (Supabase database and sign-in, Render for the API and web console).
+**Recommended first production setup, step by step: [GO_LIVE.md](GO_LIVE.md)** (Vercel for the web console and API, Supabase for the database and sign-in).
 
 This describes how to run the Mudatex API and connect an identity provider. Nothing here has been run against a real cloud account: the API image is built by CI but has not been deployed anywhere by this project.
 
@@ -18,6 +18,7 @@ docker compose up --build      # PostgreSQL, one-off migration, API on :3000
 |---|---|---|
 | `NODE_ENV` | yes | `production` for any real deployment |
 | `DATABASE_URL` | yes | PostgreSQL connection string. Behind a hosted pooler use its **session** mode |
+| `CRON_SECRET` | no | Serverless hosting only: turns on `GET /internal/cron/worker`, which Vercel's scheduler calls every minute to deliver webhooks and tidy up (send it as `Authorization: Bearer <secret>`) |
 | `DATABASE_SSL_CA` | no | The hosted database's certificate authority (PEM text), to verify TLS. `\n` is accepted for line breaks |
 | `PORT` | no | default 3000 |
 | `AUTH_JWKS_URL`, `AUTH_ISSUER`, `AUTH_AUDIENCE` | production | token verification; see the provider sections below |

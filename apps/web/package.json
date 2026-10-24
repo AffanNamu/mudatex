@@ -12,7 +12,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "build:vercel": "npm run build && node scripts/write-runtime-config.mjs"
   },
   "dependencies": {
     "react": "^19.3.1",

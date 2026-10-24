@@ -14,6 +14,7 @@ This file is a starter register. Each decision should be created as an individua
 | 008 | Country/localization and data residency | Open | Actual operating-country list and jurisdiction-specific advice |
 | 009 | Deployment, backup, RPO/RTO and monitoring | Open | Business impact assessment and restore/disaster-recovery exercise |
 | 010 | Sakash data ownership and parallel migration boundary | Proposed: no dual authoritative writer | Source profiling, ownership matrix and reconciliation rehearsal |
+| [020](020-hosting-vercel-supabase.md) | First production hosting: Vercel (web and API) with Supabase (database and sign-in) | Proposed (implemented; untested on the real platforms) | First live run; load and connection-limit review; whether to move the API to an always-on host |
 | [019](019-web-console.md) | Web console (React) and its rules for money, retries and permissions | Proposed (implemented for sign-in, catalogue, stock, POS, returns, payment confirmation, purchasing, accounting, manufacturing, access view) | Real identity provider; offline decision; user feedback |
 | [018](018-sakash-migration.md) | Migration from Sakash (PFB) | Proposed (tooling built, untested on real data) | Run the rehearsal on real data; business sign-off on cutover plan |
 | [017](017-pos-revenue-posting.md) | Automatic drafting of POS revenue journals | Proposed (implemented, off by default) | Accountant review of accounts, timing and tax treatment |

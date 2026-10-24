@@ -96,6 +96,12 @@ jobs:
           npm run typecheck
           npm test
           npm audit --audit-level=high
+      - name: The Vercel build step writes its settings and security policy
+        working-directory: apps/web
+        run: |
+          API_URL=https://api.example.test SUPABASE_URL=https://example.supabase.co SUPABASE_PUBLISHABLE_KEY=sb_publishable_ci npm run build:vercel
+          grep -q 'https://api.example.test' dist/config.js
+          grep -q "connect-src 'self' https://api.example.test https://example.supabase.co" dist/index.html
       - name: Install the test browser
         working-directory: apps/web
         run: npx playwright install --with-deps chromium

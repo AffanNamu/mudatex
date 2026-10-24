@@ -1,95 +1,116 @@
-# Going live: Supabase (database and sign-in) + Render (API and web console)
+# Going live: Vercel (web console and API) + Supabase (database and sign-in)
 
-This is the recommended first production setup. Nothing here needs coding. You will copy a few values between two
-dashboards. Allow about an hour.
+Two Vercel projects from this one repository, and your Supabase project. Nothing here needs coding. You copy a few
+values between dashboards. Allow about an hour.
 
 | Piece | Where it runs | Rough cost (check current prices) |
 |---|---|---|
-| Database (PostgreSQL) | Supabase project `xdgjomvsbjldmejwwoyb`, Frankfurt | Free to test. **Pro (about $25/month) before real use**: the free plan pauses after a week of inactivity and has no point-in-time recovery. |
-| Sign-in | Supabase Auth, same project | Included |
-| API | Render web service, Frankfurt | Starter, about $7/month |
-| Web console | Render web service (Docker), Frankfurt | Starter, about $7/month |
+| Web console | Vercel project 1, root folder `apps/web` | Part of Vercel Pro |
+| API | Vercel project 2, root folder `apps/api` (one serverless function, Fluid compute) | Part of Vercel Pro |
+| Database + sign-in | Supabase project `xdgjomvsbjldmejwwoyb` (Frankfurt) | Free to test. **Pro (about $25/month) before real use**: the free plan pauses after a week of inactivity and has no point-in-time recovery. |
 
-Why Render: it builds straight from this repository's Dockerfiles, keeps the API always on (the background worker for
-webhooks runs inside it), runs database migrations before each release, and sits in the same region as the database.
-Any host that runs Docker images works; `render.yaml` only saves you typing.
+**Vercel plan:** use **Pro** (about $20 per user per month). The free Hobby plan is for non-commercial use only, and it
+also cannot run the every-minute scheduler the API needs for webhook deliveries.
+
+**What is different about running the API on Vercel** (see ADR 020): it runs as a function, not a server that stays on.
+So (1) webhook deliveries and housekeeping run when Vercel's scheduler calls the API once a minute, not continuously;
+(2) the request-rate limit is counted per running instance, so it is a speed bump rather than a hard cap; (3) each
+instance keeps a few database connections, so it uses Supabase's *session* pooler with a small pool. For a pilot with
+tens of users this is comfortable. If you outgrow it, the same code runs in a container on a host that stays on (the
+Dockerfiles are kept for that).
 
 ## Part A. Supabase
 
-1. **Database connection.** Dashboard, your project, **Connect** (top bar), choose **Session pooler**. Copy the string.
-   It looks like
+1. **Database connection.** Dashboard, your project, **Connect**, choose **Session pooler**. Copy the string, which
+   looks like
    `postgres://postgres.xdgjomvsbjldmejwwoyb:[YOUR-PASSWORD]@aws-0-eu-central-1.pooler.supabase.com:5432/postgres`.
-   Replace `[YOUR-PASSWORD]` with the database password (reset it under Project Settings, Database if you do not have
-   it). If the password contains symbols such as `@`, `/` or `#`, replace each with its percent code (`%40`, `%2F`, `%23`),
-   or choose a password with letters and digits only.
-   - Use the **session** pooler (port 5432). Do **not** use the transaction pooler (port 6543): the API relies on
-     session features.
-   - Keep this string private. It is the key to all your data.
-2. **Certificate.** Project Settings, Database, **SSL Configuration**, download the certificate and open it in a text
-   editor. You will paste its whole text into Render in step 7. (Fallback if you skip this: add `?sslmode=no-verify`
-   to the end of the connection string. The link is still encrypted, but the server's identity is not checked.)
-3. **Switch off the built-in data API.** Project Settings, Data API (or API), turn it off. Mudatex talks to the
-   database directly and never needs it. As a second layer, every time the API runs migrations it turns on row-level
-   security on all tables and removes access from Supabase's public roles, so the public keys cannot read your data
-   even if the data API is switched on by mistake.
+   Replace `[YOUR-PASSWORD]` with the database password (reset it under Project Settings, Database, if needed). If the
+   password has symbols like `@`, `/` or `#`, use their percent codes (`%40`, `%2F`, `%23`) or pick a password of
+   letters and digits only. Use port **5432** (session), never 6543. Keep this string private.
+2. **Certificate.** Project Settings, Database, **SSL Configuration**: download the certificate and open it in a text
+   editor; you will paste all of it into Vercel. (Fallback: add `?sslmode=no-verify` to the end of the connection
+   string. The link is encrypted but the server's identity is not checked.)
+3. **Switch off the built-in data API:** Project Settings, Data API. Mudatex never uses it. As a second layer, every
+   migration run turns on row-level security for all tables and removes access from Supabase's public roles.
 4. Already done: asymmetric signing key (ECC P-256), sign-ups off.
 
-## Part B. Render
+## Part B. The API on Vercel
 
-5. Create an account at render.com and connect your GitHub account. **New, Blueprint**, pick the repository
-   `AffanNamu/mudatex`, branch `main`. Render reads `render.yaml` and proposes two services: `mudatex-api` and
-   `mudatex-web`.
-6. Render asks for the values marked "enter in the dashboard". For the first pass:
+5. Vercel, **Add New, Project**, import the GitHub repository `AffanNamu/mudatex`. Set **Root Directory** to
+   `apps/api`. Leave the framework as detected ("Other"); `apps/api/vercel.json` sets the rest.
+6. Before the first deploy, add **Environment Variables** and tick **Production only** for each (so preview builds
+   never touch your database):
 
-   | Service | Variable | Value |
-   |---|---|---|
-   | mudatex-api | `DATABASE_URL` | the session-pooler string from step 1 |
-   | mudatex-api | `DATABASE_SSL_CA` | the certificate text from step 2 (leave empty if you used `sslmode=no-verify`) |
-   | mudatex-api | `CORS_ORIGINS` | `https://placeholder.invalid` for now |
-   | mudatex-web | `SUPABASE_PUBLISHABLE_KEY` | `sb_publishable_XRti9MZZYb8tTAlFIzzGCg_i6u9mBNu` |
-   | mudatex-web | `API_URL` | `https://placeholder.invalid` for now |
+   | Name | Value |
+   |---|---|
+   | `NODE_ENV` | `production` |
+   | `DATABASE_URL` | the session-pooler string from step 1 |
+   | `DATABASE_SSL_CA` | the certificate text from step 2 (omit if you used `sslmode=no-verify`) |
+   | `DB_POOL_MAX` | `5` |
+   | `TRUST_PROXY` | `true` |
+   | `AUTH_JWKS_URL` | `https://xdgjomvsbjldmejwwoyb.supabase.co/auth/v1/.well-known/jwks.json` |
+   | `AUTH_ISSUER` | `https://xdgjomvsbjldmejwwoyb.supabase.co/auth/v1` |
+   | `AUTH_AUDIENCE` | `authenticated` |
+   | `SECRETS_ENCRYPTION_KEY` | a new random key: run `openssl rand -base64 32` and paste the result. **Back it up**: stored webhook secrets cannot be read without it. |
+   | `CRON_SECRET` | a long random string (for example `openssl rand -hex 32`). Vercel's scheduler sends it with every call. |
+   | `CORS_ORIGINS` | `https://placeholder.invalid` for now (step 9 fixes it) |
 
-7. Apply. Render builds both images. The API's first release runs the database migrations; if one fails, the release
-   stops and the old version (none yet) keeps serving. Watch the logs for `Applied: 0001_…`.
-8. Both services get an address, such as `https://mudatex-api.onrender.com` and `https://mudatex-web.onrender.com`
-   (the exact names are shown on each service's page). Now fix the two placeholders:
-   - `mudatex-api`: `CORS_ORIGINS` = the **web** address (no trailing slash)
-   - `mudatex-web`: `API_URL` = the **API** address
-   Render redeploys each when you save.
-9. Check `https://<api address>/ready` shows `"ready":true`.
-   Back up the API's `SECRETS_ENCRYPTION_KEY` (Environment tab) somewhere safe: without it, stored webhook secrets
-   cannot be read.
+7. **Deploy.** The build compiles the API and, for production, applies the database migrations first. If a migration
+   fails, the deployment fails and nothing changes. Watch the build log for `Applied: 0001_…`.
+8. Note the API address Vercel shows (for example `https://mudatex-api.vercel.app`). Check
+   `https://<api address>/ready`: it should show `"ready":true`.
 
-## Part C. Connect sign-in to the web address
+## Part C. The web console on Vercel
 
-10. Supabase, Authentication, **URL Configuration**: Site URL = the web address; add it to Redirect URLs as well.
-11. Create your administrator in Mudatex. Render, `mudatex-api`, **Shell**, run (all one line):
+9. **Add New, Project**, import the same repository again, **Root Directory** `apps/web`. Environment variables
+   (Production only):
+
+   | Name | Value |
+   |---|---|
+   | `API_URL` | the API address from step 8 |
+   | `SUPABASE_URL` | `https://xdgjomvsbjldmejwwoyb.supabase.co` |
+   | `SUPABASE_PUBLISHABLE_KEY` | `sb_publishable_XRti9MZZYb8tTAlFIzzGCg_i6u9mBNu` |
+
+   Deploy. Note the web address (for example `https://mudatex.vercel.app`).
+10. Back in the **API** project, set `CORS_ORIGINS` to the **web** address (no trailing slash) and **redeploy** so it
+    takes effect. (Vercel settings apply to new deployments.)
+
+## Part D. Connect sign-in and create your administrator
+
+11. Supabase, Authentication, **URL Configuration**: Site URL = the web address; add it to Redirect URLs.
+12. Create your administrator in Mudatex. From your computer, with this repository checked out and Node 22 installed:
     ```
-    node dist/bootstrap-cli.js "<organization name>" "fa46a6c6-f214-428c-a633-20573ae9f0f5" "<your email>" "<your name>"
+    cd apps/api && npm ci && npm run build
+    DATABASE_URL='<the session-pooler string>' DATABASE_SSL_CA="$(cat supabase-ca.crt)" \
+      node dist/bootstrap-cli.js "<organization name>" "fa46a6c6-f214-428c-a633-20573ae9f0f5" "<your email>" "<your name>"
     ```
-    The id is your Supabase user id. Use the email that account signs in with.
-12. Open the web address, enter your email, and either type your password or use **Forgot your password?** to get an
-    email link (this needs step 10). You should land on a welcome page with every menu item.
+    (`supabase-ca.crt` is the certificate from step 2. The id is your Supabase user id. Use the email that account
+    signs in with.) Send me the organization name, email and name and I will write the exact line for you.
+13. Open the web address, enter your email, and either type your password or use **Forgot your password?** to get a
+    reset link by email. You should land on a welcome page with every menu item.
 
-## Part D. Add people
+## Part E. Add people
 
-For each person: (1) Supabase, Authentication, Users, **Invite user** (their email); (2) in Mudatex, People & access,
-create their user with the **Supabase user id** shown for them; (3) give them a role scoped to their company, country
-or shop. They open the invitation link, choose a password, and sign in.
+For each person: (1) Supabase, Authentication, Users, **Invite user**; (2) in Mudatex, People & access, create their
+user with the **Supabase user id** shown for them; (3) give them a role scoped to their company, country or shop. They
+open the invitation link, choose a password, and sign in.
 
 ## Checks after go-live
 
-- `/ready` is true on the API; the web page loads over https.
-- Sign in works, and a wrong password gives "Wrong email or password."
-- In Supabase, Table Editor shows the tables but a request with the publishable key to
-  `https://xdgjomvsbjldmejwwoyb.supabase.co/rest/v1/users` returns nothing or an error, never rows.
-- Upgrade Supabase to Pro and note the backup schedule before entering real data. Decide your recovery targets
+- `/ready` is true on the API; the web page loads over https; sign-in works, and a wrong password says "Wrong email or
+  password."
+- Vercel, API project, **Settings, Cron Jobs** shows the every-minute job; its log shows 200 responses.
+- A request with the publishable key to `https://xdgjomvsbjldmejwwoyb.supabase.co/rest/v1/users` returns nothing or an
+  error, never rows.
+- Upgrade Supabase to Pro and note its backup schedule before entering real data. Decide your recovery targets
   (ADR 009).
 
 ## Everyday operations
 
-- **Release:** push to `main` (or click Manual Deploy). Render builds, runs migrations, and swaps versions only if they
-  succeed.
-- **Roll back code:** Render, Deploys, redeploy an earlier one. Migrations are forward-only; a bad migration is fixed
-  with a new one.
+- **Release:** merge to `main`. Vercel builds both projects; the API build applies migrations before the new version
+  takes traffic. Every pull request gets a preview of the web console (it still talks to the production API, so use
+  test accounts) and a preview of the API that does **not** touch the database unless you give Preview its own
+  database settings.
+- **Roll back:** Vercel, Deployments, **Instant Rollback**. Migrations only go forward; a bad one is fixed with a new
+  migration.
 - **Secrets:** change them only in the dashboards; none are in the repository.
