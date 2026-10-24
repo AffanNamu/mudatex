@@ -69,7 +69,7 @@ Dockerfiles are kept for that).
    |---|---|
    | `API_URL` | the API address from step 8 |
    | `SUPABASE_URL` | `https://xdgjomvsbjldmejwwoyb.supabase.co` |
-   | `SUPABASE_PUBLISHABLE_KEY` | `sb_publishable_XRti9MZZYb8tTAlFIzzGCg_i6u9mBNu` |
+   | `SUPABASE_PUBLISHABLE_KEY` | the publishable key from Project Settings, API Keys (starts `sb_publishable_`) |
 
    Deploy. Note the web address (for example `https://mudatex.vercel.app`).
 10. Back in the **API** project, set `CORS_ORIGINS` to the **web** address (no trailing slash) and **redeploy** so it
@@ -82,9 +82,9 @@ Dockerfiles are kept for that).
     ```
     cd apps/api && npm ci && npm run build
     DATABASE_URL='<the session-pooler string>' DATABASE_SSL_CA="$(cat supabase-ca.crt)" \
-      node dist/bootstrap-cli.js "<organization name>" "fa46a6c6-f214-428c-a633-20573ae9f0f5" "<your email>" "<your name>"
+      node dist/bootstrap-cli.js "<organization name>" "<your Supabase user id>" "<your email>" "<your name>"
     ```
-    (`supabase-ca.crt` is the certificate from step 2. The id is your Supabase user id. Use the email that account
+    (`supabase-ca.crt` is the certificate from step 2. Use your Supabase user id (Authentication, Users) and the email that account
     signs in with.) Send me the organization name, email and name and I will write the exact line for you.
 13. Open the web address, enter your email, and either type your password or use **Forgot your password?** to get a
     reset link by email. You should land on a welcome page with every menu item.
