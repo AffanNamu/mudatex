@@ -13,6 +13,7 @@ export function Home() {
     { to: '/catalogue', label: 'Browse the catalogue', needs: 'catalog.read' },
     { to: '/inventory', label: 'See stock', needs: 'inventory.read' },
     { to: '/purchasing', label: 'Purchase orders', needs: 'procurement.read' },
+    { to: '/manufacturing', label: 'Production', needs: 'manufacturing.read' },
     { to: '/accounting', label: 'Open the books', needs: 'accounting.read' },
     { to: '/access', label: 'People and access', needs: 'iam.manage' },
   ].filter((l) => can(l.needs));

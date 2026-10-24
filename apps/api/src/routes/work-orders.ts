@@ -68,30 +68,39 @@ const ACTIVE = ['released', 'in_progress'];
 
 export async function readWorkOrder(db: Db | Tx, organizationId: string, id: string) {
   const w = await db.query(
-    `SELECT id, wo_number AS "woNumber", status, location_id AS "locationId", bom_id AS "bomId", output_variant_id AS "outputVariantId",
-            planned_quantity AS "plannedQuantity", produced_quantity AS "producedQuantity", requires_qc AS "requiresQc",
-            tolerance_bps AS "toleranceBps", over_production_bps AS "overProductionBps", planned_start::text AS "plannedStart", note,
-            variance_reason AS "varianceReason", created_by AS "createdBy", released_by AS "releasedBy", created_at AS "createdAt"
-       FROM work_orders WHERE id = $1 AND organization_id = $2`,
+    `SELECT w.id, w.wo_number AS "woNumber", w.status, w.location_id AS "locationId", w.bom_id AS "bomId", w.output_variant_id AS "outputVariantId",
+            v.sku AS "outputSku", p.name AS "outputProductName",
+            w.planned_quantity AS "plannedQuantity", w.produced_quantity AS "producedQuantity", w.requires_qc AS "requiresQc",
+            w.tolerance_bps AS "toleranceBps", w.over_production_bps AS "overProductionBps", w.planned_start::text AS "plannedStart", w.note,
+            w.variance_reason AS "varianceReason", w.created_by AS "createdBy", w.released_by AS "releasedBy", w.created_at AS "createdAt"
+       FROM work_orders w JOIN product_variants v ON v.id = w.output_variant_id JOIN products p ON p.id = v.product_id
+      WHERE w.id = $1 AND w.organization_id = $2`,
     [id, organizationId],
   );
   if (!w.rows[0]) throw notFound('Work order');
   const comps = await db.query(
-    `SELECT c.id, c.line_no AS "lineNo", c.variant_id AS "variantId", c.required_quantity AS "requiredQuantity",
+    `SELECT c.id, c.line_no AS "lineNo", c.variant_id AS "variantId", v.sku, p.name AS "productName", v.tracking, c.required_quantity AS "requiredQuantity",
             c.issued_quantity AS "issuedQuantity", c.returned_quantity AS "returnedQuantity",
             COALESCE((SELECT sum(a.quantity) FROM work_order_allocations a WHERE a.component_id = c.id), 0) AS "allocatedQuantity"
-       FROM work_order_components c WHERE c.work_order_id = $1 ORDER BY c.line_no`,
+       FROM work_order_components c JOIN product_variants v ON v.id = c.variant_id JOIN products p ON p.id = v.product_id
+      WHERE c.work_order_id = $1 ORDER BY c.line_no`,
+    [id],
+  );
+  const allocs = await db.query(
+    `SELECT a.component_id AS "componentId", a.lot_id AS "lotId", sl.code AS "lotCode", a.quantity, a.issued_quantity AS "issuedQuantity"
+       FROM work_order_allocations a LEFT JOIN stock_lots sl ON sl.id = a.lot_id WHERE a.work_order_id = $1 ORDER BY sl.code NULLS FIRST, a.id`,
     [id],
   );
   const ops = await db.query(
-    `SELECT op_no AS "opNo", name, work_centre_id AS "workCentreId", planned_minutes AS "plannedMinutes", qc_checkpoint AS "qcCheckpoint", status,
-            completed_quantity AS "completedQuantity", scrap_quantity AS "scrapQuantity", actual_minutes AS "actualMinutes"
-       FROM work_order_operations WHERE work_order_id = $1 ORDER BY op_no`,
+    `SELECT o.op_no AS "opNo", o.name, o.work_centre_id AS "workCentreId", w.name AS "workCentreName", o.planned_minutes AS "plannedMinutes",
+            o.qc_checkpoint AS "qcCheckpoint", o.status, o.completed_quantity AS "completedQuantity", o.scrap_quantity AS "scrapQuantity", o.actual_minutes AS "actualMinutes"
+       FROM work_order_operations o JOIN work_centres w ON w.id = o.work_centre_id WHERE o.work_order_id = $1 ORDER BY o.op_no`,
     [id],
   );
   const outs = await db.query(
-    `SELECT o.id, o.kind, o.variant_id AS "variantId", o.lot_id AS "lotId", l.code AS "lotCode", l.hold_status AS "holdStatus", o.quantity
-       FROM work_order_outputs o LEFT JOIN stock_lots l ON l.id = o.lot_id WHERE o.work_order_id = $1 ORDER BY o.seq`,
+    `SELECT o.id, o.kind, o.variant_id AS "variantId", v.sku, p.name AS "productName", o.lot_id AS "lotId", l.code AS "lotCode", l.hold_status AS "holdStatus", o.quantity
+       FROM work_order_outputs o JOIN product_variants v ON v.id = o.variant_id JOIN products p ON p.id = v.product_id
+       LEFT JOIN stock_lots l ON l.id = o.lot_id WHERE o.work_order_id = $1 ORDER BY o.seq`,
     [id],
   );
   const q = (v: string) => normalize(v);
@@ -99,7 +108,10 @@ export async function readWorkOrder(db: Db | Tx, organizationId: string, id: str
     ...w.rows[0],
     plannedQuantity: q(w.rows[0].plannedQuantity),
     producedQuantity: q(w.rows[0].producedQuantity),
-    components: comps.rows.map((c) => ({ ...c, requiredQuantity: q(c.requiredQuantity), issuedQuantity: q(c.issuedQuantity), returnedQuantity: q(c.returnedQuantity), allocatedQuantity: q(String(c.allocatedQuantity)) })),
+    components: comps.rows.map((c) => ({
+      ...c, requiredQuantity: q(c.requiredQuantity), issuedQuantity: q(c.issuedQuantity), returnedQuantity: q(c.returnedQuantity), allocatedQuantity: q(String(c.allocatedQuantity)),
+      allocations: allocs.rows.filter((a) => a.componentId === c.id).map(({ componentId: _c, ...a }) => ({ ...a, quantity: q(a.quantity), issuedQuantity: q(a.issuedQuantity) })),
+    })),
     operations: ops.rows.map((o) => ({ ...o, plannedMinutes: Number(o.plannedMinutes), actualMinutes: o.actualMinutes === null ? null : Number(o.actualMinutes), completedQuantity: o.completedQuantity === null ? null : q(o.completedQuantity), scrapQuantity: q(o.scrapQuantity) })),
     outputs: outs.rows.map((o) => ({ ...o, quantity: q(o.quantity) })),
   };
@@ -113,8 +125,8 @@ export async function reconcile(db: Db | Tx, organizationId: string, id: string)
   );
   const wo = w.rows[0];
   if (!wo) throw notFound('Work order');
-  const comps = await db.query<{ variant_id: string; line_no: number; required_quantity: string; issued_quantity: string; returned_quantity: string; scrap_bps: number; line_quantity: string; allocated: string }>(
-    `SELECT c.variant_id, c.line_no, c.required_quantity, c.issued_quantity, c.returned_quantity, bc.scrap_bps, bc.quantity AS line_quantity,
+  const comps = await db.query<{ variant_id: string; sku: string; line_no: number; required_quantity: string; issued_quantity: string; returned_quantity: string; scrap_bps: number; line_quantity: string; allocated: string }>(
+    `SELECT c.variant_id, (SELECT sku FROM product_variants WHERE id = c.variant_id) AS sku, c.line_no, c.required_quantity, c.issued_quantity, c.returned_quantity, bc.scrap_bps, bc.quantity AS line_quantity,
             COALESCE((SELECT sum(a.quantity) FROM work_order_allocations a WHERE a.component_id = c.id), 0) AS allocated
        FROM work_order_components c JOIN bom_components bc ON bc.bom_id = $2 AND bc.variant_id = c.variant_id
       WHERE c.work_order_id = $1 ORDER BY c.line_no`,
@@ -129,7 +141,7 @@ export async function reconcile(db: Db | Tx, organizationId: string, id: string)
     if (!ok) outside = true;
     const variance = net - expected;
     return {
-      lineNo: c.line_no, variantId: c.variant_id, required: normalize(c.required_quantity), allocated: normalize(String(c.allocated)),
+      lineNo: c.line_no, variantId: c.variant_id, sku: c.sku, required: normalize(c.required_quantity), allocated: normalize(String(c.allocated)),
       issued: normalize(c.issued_quantity), returned: normalize(c.returned_quantity), netConsumed: fromScaled(net),
       expectedForOutput: fromScaled(expected), variance: fromScaled(variance),
       status: ok ? 'within_tolerance' : variance > 0n ? 'over' : 'under',
@@ -230,8 +242,8 @@ export const workOrderRoutes: FastifyPluginAsync<{ db: Db }> = async (app, { db 
     const scope = scopeFilter(grants, 4);
     const { rows } = await db.query(
       `SELECT w.id, w.wo_number AS "woNumber", w.status, w.location_id AS "locationId", w.output_variant_id AS "outputVariantId",
-              w.planned_quantity AS "plannedQuantity", w.produced_quantity AS "producedQuantity"
-         FROM work_orders w JOIN locations l ON l.id = w.location_id
+              v.sku AS "outputSku", p.name AS "outputProductName", w.planned_quantity AS "plannedQuantity", w.produced_quantity AS "producedQuantity"
+         FROM work_orders w JOIN locations l ON l.id = w.location_id JOIN product_variants v ON v.id = w.output_variant_id JOIN products p ON p.id = v.product_id
         WHERE w.organization_id = $1 AND ($2::text IS NULL OR w.status = $2) AND ${scope.clause}
         ORDER BY w.wo_number DESC LIMIT $3`,
       [req.actor.organizationId, q.status ?? null, q.limit, ...scope.params],

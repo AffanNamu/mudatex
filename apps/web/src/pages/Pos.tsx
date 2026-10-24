@@ -3,7 +3,8 @@ import { ErrorBanner, Field, Loading, Notice, PageHeader } from '../components/u
 import { api, newKey } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useDebounced, useLoad } from '../lib/hooks';
-import { formatMoney, parseMoney, parseQuantity } from '../lib/money';
+import { formatMoney, parseMoney, parseQuantity, percentToBps } from '../lib/money';
+export { percentToBps };
 import type { PendingRow } from './Payments';
 
 interface Register {
@@ -22,16 +23,6 @@ interface Sale {
 interface SessionReport { sessionId: string; openingFloatMinor: number; salesByMethod: { method: string; totalMinor: number; sales: number }[]; pendingSales: number; expectedCashMinor: number }
 
 const METHODS = [['cash', 'Cash'], ['card', 'Card'], ['bank_transfer', 'Bank transfer'], ['mobile_money', 'Mobile money']] as const;
-
-/** Basis points from a typed percentage such as "12.5" (= 1250). Null when it is not a valid 0–100 value with ≤2 decimals. */
-export function percentToBps(text: string): number | null {
-  const t = text.trim();
-  if (t === '') return 0;
-  if (!/^\d+(\.\d{1,2})?$/.test(t)) return null;
-  const [w = '0', f = ''] = t.split('.');
-  const bps = Number(w) * 100 + Number(f.padEnd(2, '0'));
-  return bps <= 10000 ? bps : null;
-}
 
 const toLines = (cart: CartLine[]) => cart.map((l) => {
   const bps = percentToBps(l.discountPercent);

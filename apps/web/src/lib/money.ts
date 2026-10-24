@@ -30,3 +30,14 @@ export function parseQuantity(text: string): string | null {
   const t = text.trim();
   return /^\d+(\.\d+)?$/.test(t) && Number(t) > 0 ? t : null;
 }
+
+/** Basis points from a typed percentage such as "12.5" (= 1250). Null when it is not a valid 0–100 value with ≤2 decimals. */
+export function percentToBps(text: string): number | null {
+  const t = text.trim();
+  if (t === '') return 0;
+  if (!/^\d+(\.\d{1,2})?$/.test(t)) return null;
+  const [w = '0', f = ''] = t.split('.');
+  const bps = Number(w) * 100 + Number(f.padEnd(2, '0'));
+  return bps <= 10000 ? bps : null;
+}
+

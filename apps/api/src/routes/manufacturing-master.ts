@@ -70,18 +70,28 @@ async function writeBom(tx: Tx, organizationId: string, bomId: string, b: BomInp
 
 export async function readBom(db: Db | Tx, organizationId: string, id: string) {
   const b = await db.query(
-    `SELECT id, output_variant_id AS "outputVariantId", version, status, output_quantity AS "outputQuantity",
-            expected_yield_bps AS "expectedYieldBps", requires_qc AS "requiresQc", note,
-            created_by AS "createdBy", approved_by AS "approvedBy", approved_at AS "approvedAt"
-       FROM boms WHERE id = $1 AND organization_id = $2`,
+    `SELECT b.id, b.output_variant_id AS "outputVariantId", v.sku AS "outputSku", p.name AS "outputProductName", b.version, b.status,
+            b.output_quantity AS "outputQuantity", b.expected_yield_bps AS "expectedYieldBps", b.requires_qc AS "requiresQc", b.note,
+            b.created_by AS "createdBy", b.approved_by AS "approvedBy", b.approved_at AS "approvedAt"
+       FROM boms b JOIN product_variants v ON v.id = b.output_variant_id JOIN products p ON p.id = v.product_id
+      WHERE b.id = $1 AND b.organization_id = $2`,
     [id, organizationId],
   );
   if (!b.rows[0]) throw notFound('BOM');
-  const comps = await db.query('SELECT line_no AS "lineNo", variant_id AS "variantId", quantity, scrap_bps AS "scrapBps" FROM bom_components WHERE bom_id = $1 ORDER BY line_no', [id]);
-  const by = await db.query('SELECT line_no AS "lineNo", variant_id AS "variantId", quantity FROM bom_byproducts WHERE bom_id = $1 ORDER BY line_no', [id]);
+  const comps = await db.query(
+    `SELECT c.line_no AS "lineNo", c.variant_id AS "variantId", v.sku, p.name AS "productName", c.quantity, c.scrap_bps AS "scrapBps"
+       FROM bom_components c JOIN product_variants v ON v.id = c.variant_id JOIN products p ON p.id = v.product_id WHERE c.bom_id = $1 ORDER BY c.line_no`,
+    [id],
+  );
+  const by = await db.query(
+    `SELECT c.line_no AS "lineNo", c.variant_id AS "variantId", v.sku, p.name AS "productName", c.quantity
+       FROM bom_byproducts c JOIN product_variants v ON v.id = c.variant_id JOIN products p ON p.id = v.product_id WHERE c.bom_id = $1 ORDER BY c.line_no`,
+    [id],
+  );
   const ops = await db.query(
-    `SELECT op_no AS "opNo", name, work_centre_id AS "workCentreId", setup_minutes AS "setupMinutes",
-            run_minutes_per_unit AS "runMinutesPerUnit", qc_checkpoint AS "qcCheckpoint" FROM bom_operations WHERE bom_id = $1 ORDER BY op_no`,
+    `SELECT o.op_no AS "opNo", o.name, o.work_centre_id AS "workCentreId", w.name AS "workCentreName", o.setup_minutes AS "setupMinutes",
+            o.run_minutes_per_unit AS "runMinutesPerUnit", o.qc_checkpoint AS "qcCheckpoint"
+       FROM bom_operations o JOIN work_centres w ON w.id = o.work_centre_id WHERE o.bom_id = $1 ORDER BY o.op_no`,
     [id],
   );
   return {
@@ -213,12 +223,14 @@ export const manufacturingMasterRoutes: FastifyPluginAsync<{ db: Db }> = async (
     await authorizeAnywhere(db, req.actor, 'manufacturing.read');
     const q = z.object({ outputVariantId: uuid.optional(), status: z.enum(['draft', 'active', 'retired']).optional() }).parse(req.query);
     const { rows } = await db.query(
-      `SELECT id, output_variant_id AS "outputVariantId", version, status FROM boms
-        WHERE organization_id = $1 AND ($2::uuid IS NULL OR output_variant_id = $2) AND ($3::text IS NULL OR status = $3)
-        ORDER BY output_variant_id, version DESC`,
+      `SELECT b.id, b.output_variant_id AS "outputVariantId", v.sku AS "outputSku", p.name AS "outputProductName", b.version, b.status,
+              b.output_quantity AS "outputQuantity", b.created_by AS "createdBy"
+         FROM boms b JOIN product_variants v ON v.id = b.output_variant_id JOIN products p ON p.id = v.product_id
+        WHERE b.organization_id = $1 AND ($2::uuid IS NULL OR b.output_variant_id = $2) AND ($3::text IS NULL OR b.status = $3)
+        ORDER BY p.name, b.output_variant_id, b.version DESC`,
       [req.actor.organizationId, q.outputVariantId ?? null, q.status ?? null],
     );
-    return rows;
+    return rows.map((r) => ({ ...r, outputQuantity: normalize(r.outputQuantity) }));
   });
 
   // Single-level requirements for making a quantity at a location: what is needed, what is free, what is
@@ -248,6 +260,7 @@ export const manufacturingMasterRoutes: FastifyPluginAsync<{ db: Db }> = async (
       const inc = incoming.get(n.variantId) ?? 0n;
       return {
         variantId: n.variantId,
+        sku: n.sku,
         required: n.required,
         available: s ? s.available : n.required,
         shortage: fromScaled(short),

@@ -25,6 +25,13 @@ export const USERS = {
   controller: 'controller@e2e.test',
   rateEntry: 'rates@e2e.test',
   rateApprover: 'rates-approver@e2e.test',
+  bomMaker: 'bom-maker@e2e.test',
+  bomApprover: 'bom-approver@e2e.test',
+  planner: 'planner@e2e.test',
+  storeman: 'storeman@e2e.test',
+  operator: 'operator@e2e.test',
+  supervisor2: 'production-lead@e2e.test',
+  inspector: 'inspector@e2e.test',
   supervisor: 'supervisor@e2e.test',
 } as const;
 
@@ -51,6 +58,18 @@ export default async function seed() {
   // Bought in rolls: nothing is stocked yet, so the purchasing tests can receive the first one.
   await post('/v1/products', { name: 'Silk Roll', baseUnitId: metre.id, variants: [{ sku: 'SLK-R1', tracking: 'roll' }] });
   await post('/v1/procurement/suppliers', { code: 'MILL-1', name: 'Kano Textile Mills', countryCode: 'NG', defaultCurrency: 'USD', paymentTermsDays: 30 });
+
+  // Production: separate materials, so the till and stock tests are not disturbed.
+  const pieces = await post('/v1/units', { code: 'pcs', name: 'Pieces', kind: 'discrete', precision: 0 });
+  const stocked = async (name: string, sku: string, unitId: string, qty: string) => {
+    const p = await post('/v1/products', { name, baseUnitId: unitId, variants: [{ sku }] });
+    await post('/v1/inventory/receipts', { locationId: shop.id, lines: [{ variantId: p.variantIds[0], quantity: qty }] });
+  };
+  await stocked('Calico', 'CAL-001', metre.id, '500');
+  await stocked('Button', 'BTN-001', pieces.id, '2000');
+  await post('/v1/products', { name: 'Shirt', baseUnitId: pieces.id, variants: [{ sku: 'SHT-001', tracking: 'lot' }] });
+  await post('/v1/manufacturing/work-centres', { locationId: shop.id, code: 'CUT', name: 'Cutting table' });
+  await post('/v1/manufacturing/work-centres', { locationId: shop.id, code: 'SEW', name: 'Sewing line' });
 
   // A small set of books for the accounting tests (the real chart of accounts is a finance decision).
   const account = (code: string, name: string, type: string) => post('/v1/accounting/accounts', { legalEntityId: le.id, code, name, type });
@@ -79,5 +98,13 @@ export default async function seed() {
   await staff(USERS.controller, 'Controller Chike', ['accounting.period.close', 'accounting.period.reopen', 'accounting.read'], company);
   await staff(USERS.rateEntry, 'Rates Ruth', ['accounting.rates.manage', 'accounting.read'], { type: 'group' });
   await staff(USERS.rateApprover, 'Rates Approver Ola', ['accounting.rates.approve', 'accounting.read'], { type: 'group' });
+  const here = { type: 'location', id: shop.id };
+  await staff(USERS.bomMaker, 'BOM Maker Mide', ['manufacturing.bom.manage', 'manufacturing.read', 'catalog.read'], { type: 'group' });
+  await staff(USERS.bomApprover, 'BOM Approver Aisha', ['manufacturing.bom.approve', 'manufacturing.read'], { type: 'group' });
+  await staff(USERS.planner, 'Planner Paul', ['manufacturing.plan', 'manufacturing.read', 'inventory.read'], here);
+  await staff(USERS.storeman, 'Storeman Sule', ['manufacturing.issue', 'manufacturing.read'], here);
+  await staff(USERS.operator, 'Operator Obi', ['manufacturing.operate', 'manufacturing.read'], here);
+  await staff(USERS.supervisor2, 'Production Lead Lola', ['manufacturing.close', 'manufacturing.issue', 'manufacturing.read'], here);
+  await staff(USERS.inspector, 'Inspector Ife', ['quality.hold', 'quality.release', 'manufacturing.read'], here);
   await staff(USERS.clerk, 'Clerk Kemi', ['catalog.read', 'inventory.read', 'inventory.receive']);
 }

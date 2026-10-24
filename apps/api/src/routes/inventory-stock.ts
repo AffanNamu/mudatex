@@ -1,9 +1,9 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
-import { authorize, grantsFor } from '../auth/authorize.js';
+import { authorize, grantsFor, hasPermissionAnywhere } from '../auth/authorize.js';
 import type { Db } from '../db.js';
 import { fromScaled, normalize, sum, toScaled } from '../domain/decimal.js';
-import { conflict, invalid, notFound } from '../errors.js';
+import { conflict, forbidden, invalid, notFound } from '../errors.js';
 import { idempotent } from '../idempotency.js';
 import {
   audit,
@@ -203,9 +203,15 @@ export const inventoryStockRoutes: FastifyPluginAsync<{ db: Db }> = async (app, 
 
   app.get('/inventory/lots', async (req) => {
     const q = z.object({ variantId: uuid.optional() }).parse(req.query);
+    // Lot codes are visible to people who handle stock, production or quality; nobody else needs them.
+    let allowed = false;
+    for (const p of ['inventory.read', 'manufacturing.read', 'quality.hold', 'quality.release'] as const) allowed ||= await hasPermissionAnywhere(db, req.actor, p);
+    if (!allowed) throw forbidden();
     const { rows } = await db.query(
-      `SELECT id, variant_id AS "variantId", kind, code, parent_lot_id AS "parentLotId", initial_quantity AS "initialQuantity"
-         FROM stock_lots WHERE organization_id = $1 AND ($2::uuid IS NULL OR variant_id = $2) ORDER BY created_at, code`,
+      `SELECT l.id, l.variant_id AS "variantId", v.sku, p.name AS "productName", l.kind, l.code, l.parent_lot_id AS "parentLotId",
+              l.initial_quantity AS "initialQuantity", l.hold_status AS "holdStatus", l.hold_reason AS "holdReason", l.held_by AS "heldBy"
+         FROM stock_lots l JOIN product_variants v ON v.id = l.variant_id JOIN products p ON p.id = v.product_id
+        WHERE l.organization_id = $1 AND ($2::uuid IS NULL OR l.variant_id = $2) ORDER BY l.created_at, l.code`,
       [req.actor.organizationId, q.variantId ?? null],
     );
     return rows.map((r) => ({ ...r, initialQuantity: normalize(r.initialQuantity) }));

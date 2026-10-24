@@ -17,6 +17,10 @@ import { Home } from './pages/Home';
 import { Inventory } from './pages/Inventory';
 import { Login } from './pages/Login';
 import { Payments } from './pages/Payments';
+import { Boms } from './pages/manufacturing/Boms';
+import { ManufacturingLayout } from './pages/manufacturing/Layout';
+import { Quality } from './pages/manufacturing/Quality';
+import { WorkOrders } from './pages/manufacturing/WorkOrders';
 import { Pos } from './pages/Pos';
 import { SetPassword } from './pages/SetPassword';
 import { Procurement } from './pages/Procurement';
@@ -53,6 +57,12 @@ export function App() {
           <Route path="trial-balance" element={<TrialBalance />} />
           <Route path="periods" element={<Periods />} />
           <Route path="rates" element={<Rates />} />
+        </Route>
+        <Route path="manufacturing" element={<Needs permission="manufacturing.read"><ManufacturingLayout /></Needs>}>
+          <Route index element={<Navigate to="work-orders" replace />} />
+          <Route path="work-orders" element={<WorkOrders />} />
+          <Route path="boms" element={<Boms />} />
+          <Route path="quality" element={<Quality />} />
         </Route>
         <Route path="access" element={<Needs permission="iam.manage"><Access /></Needs>} />
         <Route path="*" element={<Navigate to="/" replace />} />

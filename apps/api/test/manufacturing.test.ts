@@ -109,6 +109,35 @@ describe('requirements (MRP-lite)', () => {
   });
 });
 
+describe('labels for readers', () => {
+  it('names products, lots and work centres on BOMs, work orders and lot lists, and shows holds', async () => {
+    const m = await mfg();
+    const lots = await stockUp(ctx.app, m);
+    const { bomId } = await makeBom(ctx.app, m);
+    const bom = await call(ctx.app, 'GET', `/v1/manufacturing/boms/${bomId}`, m.planner.auth);
+    expect(bom.body).toMatchObject({ outputProductName: 'Shirt', outputSku: expect.stringMatching(/^Shirt-/) });
+    expect(bom.body.components[0]).toMatchObject({ productName: 'Rolled', sku: expect.any(String) });
+    expect(bom.body.operations[0]).toMatchObject({ workCentreName: 'CUT' });
+    const list = await call(ctx.app, 'GET', '/v1/manufacturing/boms', m.planner.auth);
+    expect(list.body[0]).toMatchObject({ outputProductName: 'Shirt', outputQuantity: '1', createdBy: m.bomMaker.userId });
+
+    const wo = await released(m, bomId, '10');
+    const cloth = wo.components.find((c: any) => c.variantId === m.cloth);
+    expect(cloth).toMatchObject({ productName: 'Rolled', tracking: 'roll' });
+    expect(cloth.allocations).toEqual([expect.objectContaining({ lotCode: 'R1', quantity: '26.25', issuedQuantity: '0' })]);
+    expect(wo.operations[0]).toMatchObject({ workCentreName: 'CUT' });
+    const woList = await call(ctx.app, 'GET', '/v1/manufacturing/work-orders', m.planner.auth);
+    expect(woList.body[0]).toMatchObject({ outputProductName: 'Shirt' });
+
+    await cmd(ctx.app, m.inspector.auth, `/v1/quality/lots/${lots.R2}/hold`, { reason: 'Colour fading suspected' });
+    const lotList = await call(ctx.app, 'GET', '/v1/inventory/lots', m.base.org.auth);
+    expect(lotList.body.find((l: any) => l.code === 'R2')).toMatchObject({ holdStatus: 'quarantined', holdReason: 'Colour fading suspected', productName: 'Rolled' });
+    expect(lotList.body.find((l: any) => l.code === 'R1')).toMatchObject({ holdStatus: 'released' });
+    const outsider = await staff(ctx.app, m.base.org.auth, ['catalog.read'], { type: 'group' });
+    expect((await call(ctx.app, 'GET', '/v1/inventory/lots', outsider.auth)).status).toBe(403);
+  });
+});
+
 describe('work order planning', () => {
   it('snapshots requirements and routing from the active BOM and numbers orders', async () => {
     const m = await mfg();
