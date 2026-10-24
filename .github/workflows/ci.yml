@@ -126,12 +126,15 @@ jobs:
           docker build -t mudatex-web:ci apps/web
           docker run -d --name web -p 8080:8080 -e API_URL=https://api.example.test mudatex-web:ci
           for i in $(seq 1 20); do curl -fs http://127.0.0.1:8080/healthz && break; sleep 1; done
-          curl -fs http://127.0.0.1:8080/config.js | grep -q 'https://api.example.test'
-          curl -fsI http://127.0.0.1:8080/ | grep -qi "content-security-policy:.*connect-src 'self' https://api.example.test"
+          # Captured first: `grep -q` closing a pipe early would fail a `pipefail` shell even when it matched.
+          config=$(curl -fs http://127.0.0.1:8080/config.js); echo "$config"
+          grep -q 'https://api.example.test' <<<"$config"
+          headers=$(curl -fsI http://127.0.0.1:8080/)
+          grep -qi "content-security-policy:.*connect-src 'self' https://api.example.test" <<<"$headers"
           test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/some/deep/link)" = "200"   # single-page app fallback
           docker rm -f web
           # refuses to start without a valid API_URL
-          ! docker run --rm -e API_URL=not-a-url mudatex-web:ci
+          if docker run --rm -e API_URL=not-a-url mudatex-web:ci; then echo 'started with an invalid API_URL'; exit 1; fi
       - name: Container starts and answers its probes
         run: |
           docker run -d --name api --network host \
