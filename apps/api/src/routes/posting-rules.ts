@@ -8,7 +8,7 @@ import { audit, uuid } from '../inventory/common.js';
 
 const rulesBody = z.object({
   enabled: z.boolean(),
-  accounts: z.record(z.enum(POS_ROLES), uuid).default({}),
+  accounts: z.partialRecord(z.enum(POS_ROLES), uuid).default({}),
 });
 
 export const postingRuleRoutes: FastifyPluginAsync<{ db: Db }> = async (app, { db }) => {

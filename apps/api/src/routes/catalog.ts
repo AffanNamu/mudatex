@@ -21,13 +21,13 @@ const productBody = z.object({
   description: z.string().optional(),
   category: z.string().optional(),
   baseUnitId: z.string().uuid(),
-  attributes: z.record(z.unknown()).default({}),
+  attributes: z.record(z.string(), z.unknown()).default({}),
   variants: z
     .array(
       z.object({
         sku: z.string().min(1).max(100),
         tracking: z.enum(['none', 'lot', 'roll']).default('none'),
-        attributes: z.record(z.unknown()).default({}),
+        attributes: z.record(z.string(), z.unknown()).default({}),
         barcodes: z.array(z.string().min(1).max(64)).default([]),
       }),
     )

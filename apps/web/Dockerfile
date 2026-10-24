@@ -10,11 +10,11 @@ RUN npx vite build
 
 FROM nginxinc/nginx-unprivileged:1.27-alpine
 USER root
-COPY docker/nginx.conf.template /etc/nginx/templates-mudatex/nginx.conf.template
+COPY docker/nginx.conf.template docker/security-headers.inc.template /etc/nginx/templates-mudatex/
 COPY docker/40-runtime-config.sh /docker-entrypoint.d/40-runtime-config.sh
 COPY --from=build /app/dist /usr/share/nginx/html
 # The start-up script writes config.js and the server block, so the unprivileged user owns those places.
-RUN rm -f /etc/nginx/conf.d/default.conf && touch /etc/nginx/conf.d/default.conf \
+RUN rm -f /etc/nginx/conf.d/default.conf && touch /etc/nginx/conf.d/default.conf /etc/nginx/conf.d/security-headers.inc \
  && chown -R nginx:nginx /usr/share/nginx/html /etc/nginx/conf.d
 USER nginx
 EXPOSE 8080

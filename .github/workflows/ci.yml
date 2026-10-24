@@ -129,8 +129,16 @@ jobs:
           # Captured first: `grep -q` closing a pipe early would fail a `pipefail` shell even when it matched.
           config=$(curl -fs http://127.0.0.1:8080/config.js); echo "$config"
           grep -q 'https://api.example.test' <<<"$config"
-          headers=$(curl -fsI http://127.0.0.1:8080/)
-          grep -qi "content-security-policy:.*connect-src 'self' https://api.example.test" <<<"$headers"
+          # Every kind of response must carry the security headers (nginx drops outer headers when a location sets its own).
+          for path in / /config.js /some/deep/link; do
+            headers=$(curl -fsI "http://127.0.0.1:8080$path")
+            grep -qi "content-security-policy:.*connect-src 'self' https://api.example.test" <<<"$headers" || { echo "missing CSP on $path"; echo "$headers"; exit 1; }
+            grep -qi "x-content-type-options: nosniff" <<<"$headers" || { echo "missing nosniff on $path"; exit 1; }
+          done
+          page=$(curl -fs http://127.0.0.1:8080/)
+          asset=$(grep -o '/assets/[^"]*\.js' <<<"$page" | head -1)
+          headers=$(curl -fsI "http://127.0.0.1:8080$asset")
+          grep -qi "content-security-policy:" <<<"$headers" || { echo "missing CSP on $asset"; exit 1; }
           test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/some/deep/link)" = "200"   # single-page app fallback
           docker rm -f web
           # refuses to start without a valid API_URL

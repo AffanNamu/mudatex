@@ -15,6 +15,6 @@ export const importConfig = z.object({
     name: z.string().default('Piece'),
     kind: z.enum(['discrete', 'decimal']).default('discrete'),
     precision: z.number().int().min(0).max(6).default(0),
-  }).default({}),
+  }).prefault({}),
 });
 export type ImportConfig = z.infer<typeof importConfig>;

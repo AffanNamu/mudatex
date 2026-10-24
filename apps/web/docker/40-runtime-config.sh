@@ -29,4 +29,5 @@ if [ -n "$SUPABASE_URL" ]; then CONNECT_ORIGINS="$API_ORIGIN $(origin "$SUPABASE
 export CONNECT_ORIGINS
 
 printf 'window.__MUDATEX__ = { apiUrl: "%s", supabaseUrl: "%s", supabaseKey: "%s" };\n' "$API_URL" "$SUPABASE_URL" "$SUPABASE_PUBLISHABLE_KEY" > /usr/share/nginx/html/config.js
-envsubst '${CONNECT_ORIGINS}' < /etc/nginx/templates-mudatex/nginx.conf.template > /etc/nginx/conf.d/default.conf
+cp /etc/nginx/templates-mudatex/nginx.conf.template /etc/nginx/conf.d/default.conf
+envsubst '${CONNECT_ORIGINS}' < /etc/nginx/templates-mudatex/security-headers.inc.template > /etc/nginx/conf.d/security-headers.inc
