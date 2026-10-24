@@ -18,7 +18,7 @@ docker compose up --build      # PostgreSQL, one-off migration, API on :3000
 |---|---|---|
 | `NODE_ENV` | yes | `production` for any real deployment |
 | `DATABASE_URL` | yes | PostgreSQL connection string. Behind a hosted pooler use its **session** mode |
-| `CRON_SECRET` | no | Serverless hosting only: turns on `GET /internal/cron/worker`, which Vercel's scheduler calls every minute to deliver webhooks and tidy up (send it as `Authorization: Bearer <secret>`) |
+| `CRON_SECRET` | no | Serverless hosting only: turns on `GET /internal/cron/worker`, which Vercel's scheduler calls on a schedule (daily on the free plan, every minute on Pro) to deliver webhooks and tidy up (send it as `Authorization: Bearer <secret>`) |
 | `DATABASE_SSL_CA` | no | The hosted database's certificate authority (PEM text), to verify TLS. `\n` is accepted for line breaks |
 | `PORT` | no | default 3000 |
 | `AUTH_JWKS_URL`, `AUTH_ISSUER`, `AUTH_AUDIENCE` | production | token verification; see the provider sections below |

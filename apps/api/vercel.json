@@ -8,5 +8,5 @@
   "functions": {
     "api/index.js": { "maxDuration": 60, "includeFiles": "migrations/**" }
   },
-  "crons": [{ "path": "/internal/cron/worker", "schedule": "* * * * *" }]
+  "crons": [{ "path": "/internal/cron/worker", "schedule": "0 3 * * *" }]
 }

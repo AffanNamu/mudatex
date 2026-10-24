@@ -5,15 +5,25 @@ values between dashboards. Allow about an hour.
 
 | Piece | Where it runs | Rough cost (check current prices) |
 |---|---|---|
-| Web console | Vercel project 1, root folder `apps/web` | Part of Vercel Pro |
-| API | Vercel project 2, root folder `apps/api` (one serverless function, Fluid compute) | Part of Vercel Pro |
-| Database + sign-in | Supabase project `xdgjomvsbjldmejwwoyb` (Frankfurt) | Free to test. **Pro (about $25/month) before real use**: the free plan pauses after a week of inactivity and has no point-in-time recovery. |
+| Web console | Vercel project 1, root folder `apps/web` | Free on Hobby (test data only); Pro for business use |
+| API | Vercel project 2, root folder `apps/api` (one serverless function) | Same |
+| Database + sign-in | Supabase project `xdgjomvsbjldmejwwoyb` (Frankfurt) | Free to test; **Pro before real use** |
 
-**Vercel plan:** use **Pro** (about $20 per user per month). The free Hobby plan is for non-commercial use only, and it
-also cannot run the every-minute scheduler the API needs for webhook deliveries.
+## Start free, upgrade when it is real
+
+You can follow every step below on the free plans: **Vercel Hobby** and **Supabase Free**. Upgrading later is a button
+in each dashboard. There is no migration, no new project and no code change.
+
+| | Free (testing) | Upgrade before real business use |
+|---|---|---|
+| Vercel | Hobby is free but Vercel limits it to non-commercial use, so use it with **test data only**. Scheduled jobs run at most once a day (the repository is set to daily). | **Pro** (about $20 per user per month). Then change `schedule` in `apps/api/vercel.json` to `* * * * *` to deliver webhooks every minute. |
+| Supabase | Free pauses a project after a week without activity (open the dashboard and click Restore; your data is kept). No automatic backups you can rely on. | **Pro** (about $25 per month): no pausing, daily backups, point-in-time recovery. |
+
+Free-plan checklist: use fake products, prices and people; keep the real Sakash data out until you are on the paid plans;
+expect the first request after a quiet period to be slow; a free project that is left idle will need restoring.
 
 **What is different about running the API on Vercel** (see ADR 020): it runs as a function, not a server that stays on.
-So (1) webhook deliveries and housekeeping run when Vercel's scheduler calls the API once a minute, not continuously;
+So (1) webhook deliveries and housekeeping run when Vercel's scheduler calls the API (daily on Hobby, every minute on Pro), not continuously;
 (2) the request-rate limit is counted per running instance, so it is a speed bump rather than a hard cap; (3) each
 instance keeps a few database connections, so it uses Supabase's *session* pooler with a small pool. For a pilot with
 tens of users this is comfortable. If you outgrow it, the same code runs in a container on a host that stays on (the
@@ -99,7 +109,7 @@ open the invitation link, choose a password, and sign in.
 
 - `/ready` is true on the API; the web page loads over https; sign-in works, and a wrong password says "Wrong email or
   password."
-- Vercel, API project, **Settings, Cron Jobs** shows the every-minute job; its log shows 200 responses.
+- Vercel, API project, **Settings, Cron Jobs** shows the scheduled job. You can trigger it by hand there; its log should show a 200.
 - A request with the publishable key to `https://xdgjomvsbjldmejwwoyb.supabase.co/rest/v1/users` returns nothing or an
   error, never rows.
 - Upgrade Supabase to Pro and note its backup schedule before entering real data. Decide your recovery targets

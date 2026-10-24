@@ -15,8 +15,8 @@ server with an in-process delivery worker.
 - **API** on Vercel as one Node function: `apps/api/api/index.js` re-exports `src/vercel.ts`, which builds the same
   Fastify server once per warm instance and passes requests to it. No code path is specific to Vercel except that file
   and the scheduler route.
-- **Delivery worker** becomes `GET /internal/cron/worker`, guarded by `CRON_SECRET`, called every minute by Vercel
-  Cron. One call runs delivery passes for up to 45 seconds and then does housekeeping. Several overlapping calls are
+- **Delivery worker** becomes `GET /internal/cron/worker`, guarded by `CRON_SECRET`, called by Vercel Cron (daily on the
+  free Hobby plan, which is what the repository ships; every minute on Pro). One call runs delivery passes for up to 45 seconds and then does housekeeping. Several overlapping calls are
   safe (the database arbitrates with `SKIP LOCKED`).
 - **Migrations** run in the production build (`scripts/vercel-release.mjs`), only for `VERCEL_ENV=production`. A failed
   migration fails the deployment. Previews never touch the database.
@@ -27,10 +27,11 @@ server with an in-process delivery worker.
 
 ## Consequences
 
-- Vercel Pro is required (commercial use; per-minute cron).
+- Hobby (free) is for non-commercial testing only and limits cron to once a day; Pro is required for business use and
+  per-minute cron.
 - The rate limiter's counters live in each instance's memory, so the limit is per instance. It slows abuse; it is not
   a global cap. Moving counters to the database or a cache is possible if needed.
-- Webhook deliveries can lag by up to a minute.
+- Webhook deliveries can lag by up to a minute on Pro, and up to a day on Hobby.
 - Connections: instances × pool size must stay below the pooler's client limit. Pilot scale is far below it. At larger
   scale, switch the API to an always-on host, or move queries to Supabase's transaction pooler after replacing
   session-level settings with per-transaction ones.
