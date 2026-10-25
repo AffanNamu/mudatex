@@ -101,3 +101,37 @@ Keep Sakash's data read-only for as long as your retention policy requires. The 
 - There are no customers in Mudatex yet, so customer history is not migrated.
 - Orders and POS sales are archived, not replayed. Reports on them need the archive, and revenue history is not in the general ledger.
 - Timestamps in `orders` stored as strings are interpreted as given; ambiguous local-time strings without a zone are read as UTC.
+
+## What Sakash's Firestore security rules confirm
+
+Read from a sample of the production rules supplied by the owner (the rules themselves, which name individual accounts,
+are deliberately not stored here).
+
+- **Collections:** `products`, `categories`, `admins`, `drivers`, `app_settings`, `payment_attempts`, `payments`, `orders`,
+  `rides`, `users`, `pos_sales`, `pos_receipts`, `pos_analytics` (with `daily`, `weekly`, `monthly` sub-collections),
+  `admin_performance`, plus `notifications` sub-collections under `admins` and `users`. The migration reads exactly
+  `products`, `categories`, `orders`, `pos_sales`, `pos_receipts` and `payments`, and states why it leaves the rest out.
+- **POS sale fields:** `id`, `receiptId`, `branchId`, `branchName`, `cashierUid`, `cashierName`, `cashierEmail`, `items`,
+  `subtotal`, `finalTotal`, `paymentMethod`, `saleChannel` (`physical_shop`), `createdAt`, `status`. The cashier fields
+  are personal data and are not imported; everything else on the allow-list is. A sale can later become `voided`;
+  voided sales are archived with that status and are not treated as revenue in reconciliation.
+- **Stock:** each product carries `stockQuantity`, and POS checkout lowers it from the app. Opening stock in Mudatex is
+  taken from that figure at cutover (see "Opening stock" above), so the cutover must happen with the till closed.
+- **Derived data:** `pos_analytics` and `admin_performance` are written by the app, not computed from sales, so they can
+  drift from the sales themselves. They are not imported; Mudatex computes reports from the source documents.
+
+### Weaknesses in the live rules, worth fixing while Sakash stays in service
+
+These come from the rules as written; they are not Mudatex defects and Mudatex does not copy them.
+
+1. Super-administrators are hard-coded account ids in the rules.
+2. Any signed-in user may create a `payments` record for themselves, and the app trusts payment results the client
+   reports. A record in `payments` is therefore not proof that money arrived.
+3. Any signed-in user may create documents in anyone's `notifications` sub-collection.
+4. Sale totals are not checked against their items, so a POS operator can write a sale with any `finalTotal`.
+5. `pos_analytics` and `admin_performance` can be written by any POS operator, and an `admin_performance` document can
+   be created by any signed-in user who names themselves, so those figures cannot be trusted as audit evidence.
+6. A POS operator may lower `stockQuantity` to any smaller number, including a negative one.
+
+Consequence for the migration: reconcile Sakash's sales and payments against the bank or provider statements for a
+sample period before trusting them as the opening position, not only against the Sakash documents themselves.
