@@ -88,14 +88,12 @@ Dockerfiles are kept for that).
 ## Part D. Connect sign-in and create your administrator
 
 11. Supabase, Authentication, **URL Configuration**: Site URL = the web address; add it to Redirect URLs.
-12. Create your administrator in Mudatex. From your computer, with this repository checked out and Node 22 installed:
-    ```
-    cd apps/api && npm ci && npm run build
-    DATABASE_URL='<the session-pooler string>' DATABASE_SSL_CA="$(cat supabase-ca.crt)" \
-      node dist/bootstrap-cli.js "<organization name>" "<your Supabase user id>" "<your email>" "<your name>"
-    ```
-    (`supabase-ca.crt` is the certificate from step 2. Use your Supabase user id (Authentication, Users) and the email that account
-    signs in with.) Send me the organization name, email and name and I will write the exact line for you.
+12. Create your administrator in Mudatex. **Easiest, nothing to install:** Supabase, **SQL Editor**, New query. Paste the
+    whole of `apps/api/scripts/bootstrap.sql`, change the four values in the first block (organization name, your
+    Supabase user id from Authentication, Users, your sign-in email, your name), and press **Run**. It prints
+    `permissions_granted 50` and `memberships_created 1`. Run it once; a second run fails safely. (A test checks this script
+    against the real API.) **Alternative, from a computer with Node 22:** `cd apps/api && npm ci && npm run build`, then
+    `DATABASE_URL='<pooler string>' DATABASE_SSL_CA="$(cat supabase-ca.crt)" node dist/bootstrap-cli.js "<organization>" "<your Supabase user id>" "<your email>" "<your name>"`.
 13. Open the web address, enter your email, and either type your password or use **Forgot your password?** to get a
     reset link by email. You should land on a welcome page with every menu item.
 
