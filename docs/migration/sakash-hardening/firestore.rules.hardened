@@ -1,0 +1,51 @@
+// Replacement blocks for the payment-related rules. Apply ONLY after the functions in ./functions are deployed and the
+// app changes in ./app/APP_CHANGES.md are live in every installed version, or checkout stops working.
+// The functions use a service account, which bypasses these rules, so clients never need write access to payment data.
+
+    match /payments/{paymentId} {
+      allow read: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow write: if false;                       // written only by the Paystack webhook function
+    }
+
+    match /payment_attempts/{attemptId} {
+      allow read: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow write: if false;                       // written only by init-paystack-transaction and the webhook
+    }
+
+    match /orders/{orderId} {
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      // A customer can only open an unpaid order for themselves. Price, payment state and reference are server-owned.
+      allow create: if isSignedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.status == 'awaiting_payment'
+        && request.resource.data.paymentStatus == 'unpaid'
+        && request.resource.data.paymentReference == ''
+        && request.resource.data.totalAmount == 0;
+      // Assigned admins may move a PAID order along; nobody but the server may change payment fields.
+      allow update: if isSuperAdmin() ||
+        (assignedAdminCanUpdateOrder()
+          && resource.data.paymentStatus == 'paid'
+          && request.resource.data.paymentStatus == resource.data.paymentStatus
+          && request.resource.data.paymentReference == resource.data.paymentReference);
+      allow delete: if isSuperAdmin();
+    }
+    // Note: orderAssignmentFieldsUnchanged() must also compare paymentStatus, paymentReference, itemsSubtotal,
+    // couponDiscount and deliveryFee; add them to that function.
+
+    // Notifications are written by trusted code (functions or an admin), not by any signed-in user.
+    match /admins/{adminId}/notifications/{notificationId} {
+      allow read, update, delete: if isSignedIn() && request.auth.uid == adminId;
+      allow create: if isAdmin();                  // move to a function when FCM sending moves server-side
+    }
+    match /users/{userId}/notifications/{notificationId} {
+      allow read, update, delete: if isSignedIn() && request.auth.uid == userId;
+      allow create: if isSignedIn() && (request.auth.uid == userId || isAdmin());   // your own feed, or an admin's message to you
+    }
+
+    // POS: until sales are priced by a server function (or the till moves to Mudatex), at least stop the cheap forgeries.
+    match /admin_performance/{adminUid} {
+      allow read: if isSignedIn() && (request.auth.uid == adminUid || isAdmin());
+      allow create, update: if isPosOperator() && request.auth.uid == adminUid;   // not any signed-in customer
+      allow delete: if isSuperAdmin();
+    }
+    // In pos_sales create, add: finalTotal must equal subtotal minus discount, and be greater than zero.

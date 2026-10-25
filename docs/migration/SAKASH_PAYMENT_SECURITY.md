@@ -1,8 +1,9 @@
 # Sakash: payment security problems and how to fix them
 
-**Status:** Findings and a proposed order of work. Nothing in the live Sakash project has been changed. Based on a sample
-of Sakash's Firestore rules, plus the architecture notes in the feature map. The Flutter app and the Supabase payment
-functions were **not** read, so each item below says what the rules allow, not what the app does with it.
+**Status:** Findings and a proposed order of work. Nothing in the live Sakash project has been changed.
+**Update:** the Flutter app and the Supabase payment function have since been read, and a tested fix written: see
+[`sakash-hardening/`](sakash-hardening/README.md). The most serious finding is there: the app marks orders paid
+without asking Paystack. The table below describes what the *rules* allow.
 
 ## What the rules allow today
 
