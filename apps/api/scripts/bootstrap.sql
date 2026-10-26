@@ -76,7 +76,11 @@ perms AS (
       'quality.hold',
       'quality.release',
       'integrations.manage',
-      'storefront.manage'
+      'storefront.manage',
+      'orders.read',
+      'orders.fulfil',
+      'orders.payment.record',
+      'orders.cancel'
   ]) AS p
   RETURNING 1
 ),

@@ -1,45 +1,19 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { call, newOrg, setupApp, staff, token } from './helpers.js';
-import { buildWorld, cmd, receive } from './inventory-helpers.js';
-import { buildPosWorld, type PosWorld } from './pos-helpers.js';
+import { cmd, receive } from './inventory-helpers.js';
+import { goLive, shopper, shopWorld, uniq } from './shop-helpers.js';
 
 let ctx: Awaited<ReturnType<typeof setupApp>>;
 beforeAll(async () => { ctx = await setupApp(); });
 afterAll(async () => { await ctx.close(); });
 
-const uniq = () => crypto.randomUUID().slice(0, 8);
-
-async function shopWorld() {
-  const w = await buildPosWorld(ctx.app, await buildWorld(ctx.app, await newOrg(ctx.db)));
-  const a = w.org.auth;
-  const slug = `shop-${uniq()}`;
-  const sf = await call(ctx.app, 'POST', '/v1/storefronts', a, {
-    legalEntityId: w.ng, slug, name: 'Test Shop', priceListId: w.priceList, stockLocationIds: [w.shop],
-    contact: { whatsapp: '+2348000000000' },
-  });
-  expect(sf.status).toBe(201);
-  const id = sf.body.id as string;
-  const dept = await call(ctx.app, 'POST', `/v1/storefronts/${id}/departments`, a, { slug: 'fabrics', name: 'Fabrics' });
-  expect(dept.status).toBe(201);
-  const publish = (productId: string, body: Record<string, unknown> = {}) => call(ctx.app, 'PUT', `/v1/storefronts/${id}/products/${productId}`, a, body);
-  return { w, a, id, slug, deptId: dept.body.id as string, publish };
-}
-type Shop = Awaited<ReturnType<typeof shopWorld>>;
-
-async function goLive(s: Shop) {
-  const p = await s.publish(s.w.fabric.productId, { slug: 'ankara-wax', title: 'Ankara Wax', brand: 'Empire', departmentId: s.deptId, images: ['https://img.example.test/a.jpg'], badges: ['New'], published: true });
-  expect(p.status).toBe(200);
-  const live = await call(ctx.app, 'PUT', `/v1/storefronts/${s.id}`, s.a, { status: 'live' });
-  expect(live.status).toBe(200);
-}
-
 describe('storefront administration', () => {
   it('stays invisible until published products exist and the store is live', async () => {
-    const s = await shopWorld();
+    const s = await shopWorld(ctx);
     expect((await call(ctx.app, 'GET', `/shop/${s.slug}`, undefined)).status).toBe(404);
     const early = await call(ctx.app, 'PUT', `/v1/storefronts/${s.id}`, s.a, { status: 'live' });
     expect(early.status).toBe(409);
-    await goLive(s);
+    await goLive(ctx, s);
     const home = await call(ctx.app, 'GET', `/shop/${s.slug}`, undefined);
     expect(home.status).toBe(200);
     expect(home.body).toMatchObject({ name: 'Test Shop', currency: 'NGN', minorUnit: 2, contact: { whatsapp: '+2348000000000' } });
@@ -49,7 +23,7 @@ describe('storefront administration', () => {
   });
 
   it('refuses to publish an unpriced product, a foreign department or an insecure image', async () => {
-    const s = await shopWorld();
+    const s = await shopWorld(ctx);
     const unpriced = await call(ctx.app, 'POST', '/v1/products', s.a, { name: 'No price', baseUnitId: s.w.m, variants: [{ sku: `NP-${uniq()}` }] });
     expect((await s.publish(unpriced.body.id, { published: true })).status).toBe(409);
     // saved as a draft it is fine, and is listed as unpriced
@@ -57,13 +31,13 @@ describe('storefront administration', () => {
     const list = await call(ctx.app, 'GET', `/v1/storefronts/${s.id}/products`, s.a);
     expect(list.body).toEqual([expect.objectContaining({ productName: 'No price', priced: false, published: false })]);
 
-    const other = await shopWorld();
+    const other = await shopWorld(ctx);
     expect((await s.publish(s.w.fabric.productId, { departmentId: other.deptId })).status).toBe(422);
     expect((await s.publish(s.w.fabric.productId, { images: ['http://img.example.test/a.jpg'] })).status).toBe(400);
   });
 
   it('is scoped by legal entity and needs its own permission', async () => {
-    const s = await shopWorld();
+    const s = await shopWorld(ctx);
     const ghStaff = await staff(ctx.app, s.a, ['storefront.manage'], { type: 'legal_entity', id: s.w.gh });
     expect((await call(ctx.app, 'PUT', `/v1/storefronts/${s.id}`, ghStaff.auth, { name: 'Hijack' })).status).toBe(403);
     const none = await staff(ctx.app, s.a, ['catalog.read'], { type: 'group' });
@@ -75,13 +49,13 @@ describe('storefront administration', () => {
   });
 
   it('keeps one store per organisation out of another organisation\'s reach', async () => {
-    const s = await shopWorld();
+    const s = await shopWorld(ctx);
     const other = await newOrg(ctx.db);
     expect((await call(ctx.app, 'PUT', `/v1/storefronts/${s.id}`, other.auth, { name: 'Not yours' })).status).toBe(404);
   });
 
   it('checks stock locations and the price list belong to the legal entity', async () => {
-    const s = await shopWorld();
+    const s = await shopWorld(ctx);
     const bad = await call(ctx.app, 'POST', '/v1/storefronts', s.a, { legalEntityId: s.w.ng, slug: `x-${uniq()}`, name: 'Bad', priceListId: s.w.priceList, stockLocationIds: [s.w.g1] });
     expect(bad.status).toBe(422);
     const dup = await call(ctx.app, 'POST', '/v1/storefronts', s.a, { legalEntityId: s.w.ng, slug: s.slug, name: 'Dup', priceListId: s.w.priceList, stockLocationIds: [s.w.shop] });
@@ -91,8 +65,8 @@ describe('storefront administration', () => {
 
 describe('public catalogue', () => {
   it('prices from the server including tax, and caps what it reveals about stock', async () => {
-    const s = await shopWorld();
-    await goLive(s);
+    const s = await shopWorld(ctx);
+    await goLive(ctx, s);
     const list = await call(ctx.app, 'GET', `/shop/${s.slug}/products`, undefined);
     expect(list.body.total).toBe(1);
     // 3500.50 + 7.5% VAT = 3762.5375 -> 3,763.04 (line rounded half-up to minor units)
@@ -109,8 +83,8 @@ describe('public catalogue', () => {
   });
 
   it('does not offer reserved stock, other locations, quarantined rolls or unpublished products', async () => {
-    const s = await shopWorld();
-    await goLive(s);
+    const s = await shopWorld(ctx);
+    await goLive(ctx, s);
     // roll-tracked product with one roll that is then quarantined
     const roll = await receive(ctx.app, s.a, s.w.shop, s.w.rolled.variantId, '40', { lotCode: 'R-ONLY' });
     await s.publish(s.w.rolled.productId, { slug: 'rolled', title: 'Rolled', published: true });
@@ -133,8 +107,8 @@ describe('public catalogue', () => {
   });
 
   it('searches, filters, sorts and pages', async () => {
-    const s = await shopWorld();
-    await goLive(s);
+    const s = await shopWorld(ctx);
+    await goLive(ctx, s);
     await s.publish(s.w.rolled.productId, { slug: 'cheap-roll', title: 'Cheap Roll Fabric', brand: 'Florance', published: true, sort: 5 });
     await s.publish(s.w.inclusive.productId, { slug: 'budget-lace', title: '100% Lace', published: true, sort: 1 });
     const get = async (qs: string) => (await call(ctx.app, 'GET', `/shop/${s.slug}/products?${qs}`, undefined)).body;
@@ -155,8 +129,8 @@ describe('public catalogue', () => {
   });
 
   it('serves public reads with cache headers and nothing from staff-only endpoints', async () => {
-    const s = await shopWorld();
-    await goLive(s);
+    const s = await shopWorld(ctx);
+    await goLive(ctx, s);
     const res = await ctx.app.inject({ method: 'GET', url: `/shop/${s.slug}/products` });
     expect(res.headers['cache-control']).toMatch(/public/);
     expect((await call(ctx.app, 'GET', '/v1/storefronts', undefined)).status).toBe(401);
@@ -165,8 +139,8 @@ describe('public catalogue', () => {
 
 describe('delivery quotes', () => {
   it('picks the most specific zone and waives the fee above the free threshold', async () => {
-    const s = await shopWorld();
-    await goLive(s);
+    const s = await shopWorld(ctx);
+    await goLive(ctx, s);
     const zone = (body: Record<string, unknown>) => call(ctx.app, 'POST', `/v1/storefronts/${s.id}/delivery-zones`, s.a, body);
     expect((await zone({ name: 'Nigeria', countryCode: 'NG', feeMinor: 500000, freeOverMinor: 5000000, etaDaysMin: 3, etaDaysMax: 7 })).status).toBe(201);
     expect((await zone({ name: 'Kano', countryCode: 'NG', states: ['Kano', 'Kaduna'], feeMinor: 150000, etaDaysMin: 1, etaDaysMax: 2 })).status).toBe(201);
@@ -186,14 +160,9 @@ describe('delivery quotes', () => {
 });
 
 describe('shoppers', () => {
-  const shopper = async (email: string) => {
-    const sub = `cust-${uniq()}`;
-    return { sub, email, auth: { authorization: `Bearer ${await token(sub, { email })}` } };
-  };
-
   it('needs a sign-in, registers once, and is not staff', async () => {
-    const s = await shopWorld();
-    await goLive(s);
+    const s = await shopWorld(ctx);
+    await goLive(ctx, s);
     expect((await call(ctx.app, 'GET', `/shop/${s.slug}/me`, undefined)).status).toBe(401);
     const c = await shopper(`a-${uniq()}@example.test`);
     expect((await call(ctx.app, 'GET', `/shop/${s.slug}/me`, c.auth)).status).toBe(404);
@@ -215,10 +184,10 @@ describe('shoppers', () => {
   });
 
   it('keeps customers of one organisation apart from another and refuses blocked accounts', async () => {
-    const s1 = await shopWorld();
-    const s2 = await shopWorld();
-    await goLive(s1);
-    await goLive(s2);
+    const s1 = await shopWorld(ctx);
+    const s2 = await shopWorld(ctx);
+    await goLive(ctx, s1);
+    await goLive(ctx, s2);
     const c = await shopper(`b-${uniq()}@example.test`);
     expect((await call(ctx.app, 'POST', `/shop/${s1.slug}/me`, c.auth, { fullName: 'Bala Musa' })).status).toBe(201);
     expect((await call(ctx.app, 'GET', `/shop/${s2.slug}/me`, c.auth)).status).toBe(404);
@@ -230,8 +199,8 @@ describe('shoppers', () => {
   });
 
   it('manages addresses with exactly one default and a limit', async () => {
-    const s = await shopWorld();
-    await goLive(s);
+    const s = await shopWorld(ctx);
+    await goLive(ctx, s);
     const c = await shopper(`c-${uniq()}@example.test`);
     await call(ctx.app, 'POST', `/shop/${s.slug}/me`, c.auth, { fullName: 'Chika Obi' });
     const addr = (label: string, extra: Record<string, unknown> = {}) =>
@@ -262,8 +231,8 @@ describe('shoppers', () => {
   });
 
   it('keeps a wishlist of published products with live prices', async () => {
-    const s = await shopWorld();
-    await goLive(s);
+    const s = await shopWorld(ctx);
+    await goLive(ctx, s);
     const c = await shopper(`e-${uniq()}@example.test`);
     await call(ctx.app, 'POST', `/shop/${s.slug}/me`, c.auth, { fullName: 'Efe Okoro' });
     const put = await call(ctx.app, 'PUT', `/shop/${s.slug}/me/wishlist/ankara-wax`, c.auth);

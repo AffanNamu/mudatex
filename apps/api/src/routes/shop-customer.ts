@@ -4,6 +4,8 @@ import type { TokenVerifier } from '../auth/token.js';
 import { withTx, type Db } from '../db.js';
 import { conflict, forbidden, invalid, notFound, unauthorized } from '../errors.js';
 import { cardsFor, loadLiveStorefront, type Storefront } from '../shop/catalog.js';
+import { cancelOrder, MAX_ORDER_LINES, placeOrder, readOrder } from '../shop/orders.js';
+import { AppError } from '../errors.js';
 
 const slugParam = z.object({ slug: z.string().regex(/^[a-z0-9-]{1,60}$/) });
 const uuid = z.string().uuid();
@@ -26,6 +28,17 @@ const addressBody = z.object({
   state: z.string().trim().min(1).max(100),
   countryCode: z.string().regex(/^[A-Za-z]{2}$/).transform((c) => c.toUpperCase()),
   isDefault: z.boolean().optional(),
+});
+
+const orderBody = z.object({
+  lines: z.array(z.object({
+    variantId: z.string().uuid(),
+    quantity: z.string().regex(/^\d+(\.\d+)?$/, 'Quantity must be a positive decimal string'),
+    unitId: z.string().uuid().optional(),
+  })).min(1).max(MAX_ORDER_LINES),
+  addressId: z.string().uuid(),
+  paymentMethod: z.enum(['card', 'bank_transfer']),
+  note: z.string().trim().max(500).optional(),
 });
 
 const ADDRESS_COLUMNS = `id, label, recipient, phone, line1, line2, city, state, country_code AS "countryCode", is_default AS "isDefault"`;
@@ -206,5 +219,41 @@ export const shopCustomerRoutes: FastifyPluginAsync<{ db: Db; verify: TokenVerif
       [id, req.storefront.id, productSlug],
     );
     return reply.status(204).send();
+  });
+
+  // ---- orders. Prices, tax, delivery and stock are all decided here; the client sends only what it wants.
+  app.post('/shop/:slug/me/orders', async (req, reply) => {
+    const body = orderBody.parse(req.body);
+    const key = req.headers['idempotency-key'];
+    if (typeof key !== 'string' || key.length < 8 || key.length > 128) {
+      throw new AppError(400, 'idempotency_key_required', 'Idempotency-Key header (8-128 characters) is required');
+    }
+    const id = await customer(req);
+    const { order, replayed } = await placeOrder(db, req.storefront, id, body, key, req.id);
+    if (replayed) reply.header('Idempotent-Replayed', 'true');
+    return reply.status(replayed ? 200 : 201).send(order);
+  });
+
+  app.get('/shop/:slug/me/orders', async (req) => {
+    const id = await customer(req);
+    const { rows } = await db.query(
+      `SELECT order_no AS "orderNo", status, currency, total_minor::bigint AS "totalMinor", placed_at AS "placedAt",
+              (SELECT count(*)::int FROM sales_order_lines l WHERE l.order_id = o.id) AS "lineCount"
+         FROM sales_orders o WHERE customer_id = $1 ORDER BY placed_at DESC LIMIT 100`,
+      [id],
+    );
+    return rows.map((r) => ({ ...r, totalMinor: Number(r.totalMinor) }));
+  });
+
+  app.get('/shop/:slug/me/orders/:orderNo', async (req) => {
+    const { orderNo } = z.object({ orderNo: z.string().regex(/^[A-Z]{2,5}-\d{6,}$/) }).parse(req.params);
+    const id = await customer(req);
+    return readOrder(db, { orderNo, customerId: id, organizationId: req.storefront.organizationId });
+  });
+
+  app.post('/shop/:slug/me/orders/:orderNo/cancel', async (req) => {
+    const { orderNo } = z.object({ orderNo: z.string().regex(/^[A-Z]{2,5}-\d{6,}$/) }).parse(req.params);
+    const id = await customer(req);
+    return cancelOrder(db, req.storefront.organizationId, { orderNo, customerId: id }, { type: 'customer', id }, 'Cancelled by the customer', req.id);
   });
 };

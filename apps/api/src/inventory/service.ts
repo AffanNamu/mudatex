@@ -9,7 +9,8 @@ import { adjustReserved } from './ledger.js';
 
 export interface ReserveInput {
   organizationId: string;
-  userId: string;
+  /** The staff user, or null when a customer's order holds the stock. */
+  userId: string | null;
   locationId: string;
   variantId: string;
   lotId: string | null;

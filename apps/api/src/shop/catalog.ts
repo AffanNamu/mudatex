@@ -1,7 +1,7 @@
 import type { Db } from '../db.js';
 import { normalize } from '../domain/decimal.js';
 import { priceLine } from '../domain/money.js';
-import { notFound } from '../errors.js';
+import { invalid, notFound } from '../errors.js';
 
 export interface Storefront {
   id: string;
@@ -177,5 +177,39 @@ export async function productDetail(db: Db, sf: Storefront, productSlug: string)
         inStock: Number(available ?? '0') > 0,
       };
     }),
+  };
+}
+
+export interface DeliveryQuote {
+  zoneId: string;
+  zone: string;
+  feeMinor: number;
+  standardFeeMinor: number;
+  freeOverMinor: number | null;
+  currency: string;
+  etaDays: { min: number; max: number };
+}
+
+/** Delivery fee for a place and basket value. The most specific zone wins (a named state beats a whole country). */
+export async function quoteDelivery(db: Pick<Db, 'query'>, sf: Storefront, countryCode: string, state: string, subtotalMinor: number | bigint): Promise<DeliveryQuote> {
+  const { rows } = await db.query<{ id: string; name: string; fee: string; free: string | null; min: number; max: number }>(
+    `SELECT id, name, fee_minor AS fee, free_over_minor AS free, eta_days_min AS min, eta_days_max AS max
+       FROM delivery_zones
+      WHERE storefront_id = $1 AND active AND country_code = upper($2)
+        AND (cardinality(states) = 0 OR lower($3) = ANY(states))
+      ORDER BY (cardinality(states) = 0), fee_minor LIMIT 1`,
+    [sf.id, countryCode, state],
+  );
+  const zone = rows[0];
+  if (!zone) throw invalid('We do not deliver to that location yet');
+  const free = zone.free !== null && BigInt(subtotalMinor) >= BigInt(zone.free);
+  return {
+    zoneId: zone.id,
+    zone: zone.name,
+    feeMinor: free ? 0 : Number(zone.fee),
+    standardFeeMinor: Number(zone.fee),
+    freeOverMinor: zone.free === null ? null : Number(zone.free),
+    currency: sf.currency,
+    etaDays: { min: zone.min, max: zone.max },
   };
 }

@@ -4,6 +4,8 @@ import { allConsumers } from './consumers.js';
 import { loadConfig } from './config.js';
 import { createPool } from './db.js';
 import { Dispatcher } from './events/dispatcher.js';
+import { releaseExpiredReservations } from './inventory/expiry.js';
+import { expireUnpaidOrders } from './shop/orders.js';
 import { purgeDelivered, purgeIdempotencyKeys } from './events/maintenance.js';
 import { createSecretBox } from './events/secretbox.js';
 import { buildServer } from './server.js';
@@ -44,6 +46,8 @@ export function createHandler(env: NodeJS.ProcessEnv = process.env) {
               handled += n;
               if (!n) break;
             }
+            await expireUnpaidOrders(db);
+            await releaseExpiredReservations(db);
             await purgeIdempotencyKeys(db);
             await purgeDelivered(db);
             return { passes, handled };

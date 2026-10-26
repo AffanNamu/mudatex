@@ -51,6 +51,10 @@ export const PERMISSIONS = [
   'quality.release',
   'integrations.manage',
   'storefront.manage',
+  'orders.read',
+  'orders.fulfil',
+  'orders.payment.record',
+  'orders.cancel',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];

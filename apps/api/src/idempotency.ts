@@ -8,7 +8,7 @@ export interface CommandResult {
   body: unknown;
 }
 
-function stable(value: unknown): string {
+export function stable(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`;
   if (value && typeof value === 'object') {
     return `{${Object.keys(value)

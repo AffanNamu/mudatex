@@ -2,7 +2,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import type { Db } from '../db.js';
 import { invalid } from '../errors.js';
-import { cardsFor, loadLiveStorefront, productDetail } from '../shop/catalog.js';
+import { cardsFor, loadLiveStorefront, productDetail, quoteDelivery } from '../shop/catalog.js';
 
 const slugParam = z.object({ slug: z.string().regex(/^[a-z0-9-]{1,60}$/) });
 const money = z.string().regex(/^\d{1,12}(\.\d{1,4})?$/);
@@ -135,25 +135,6 @@ export const shopPublicRoutes: FastifyPluginAsync<{ db: Db }> = async (app, { db
     const { slug } = slugParam.parse(req.params);
     const body = quoteBody.parse(req.body);
     const sf = await loadLiveStorefront(db, slug);
-    const { rows } = await db.query<{ id: string; name: string; fee: string; free: string | null; min: number; max: number }>(
-      `SELECT id, name, fee_minor AS fee, free_over_minor AS free, eta_days_min AS min, eta_days_max AS max
-         FROM delivery_zones
-        WHERE storefront_id = $1 AND active AND country_code = upper($2)
-          AND (cardinality(states) = 0 OR lower($3) = ANY(states))
-        ORDER BY (cardinality(states) = 0), fee_minor LIMIT 1`,
-      [sf.id, body.countryCode, body.state],
-    );
-    const zone = rows[0];
-    if (!zone) throw invalid('We do not deliver to that location yet');
-    const free = zone.free !== null && BigInt(body.subtotalMinor) >= BigInt(zone.free);
-    return {
-      zoneId: zone.id,
-      zone: zone.name,
-      feeMinor: free ? 0 : Number(zone.fee),
-      standardFeeMinor: Number(zone.fee),
-      freeOverMinor: zone.free === null ? null : Number(zone.free),
-      currency: sf.currency,
-      etaDays: { min: zone.min, max: zone.max },
-    };
+    return quoteDelivery(db, sf, body.countryCode, body.state, body.subtotalMinor);
   });
 };

@@ -30,6 +30,8 @@ export interface PricingContext {
   maxDiscountBps: number;
   /** May exceed the register's discount limit. */
   mayOverride: boolean;
+  /** Online orders: lot and roll tracked variants are allocated by the server, so the line names no lot. */
+  lotsOptional?: boolean;
   now: Date;
 }
 
@@ -41,7 +43,7 @@ export async function priceSaleLines(tx: Tx, ctx: PricingContext, lines: SaleLin
   const priced: PricedSaleLine[] = [];
   for (const line of lines) {
     const variant = await loadVariant(tx, ctx.organizationId, line.variantId);
-    const lotId = await checkLot(tx, ctx.organizationId, variant, line.lotId);
+    const lotId = ctx.lotsOptional && !line.lotId ? null : await checkLot(tx, ctx.organizationId, variant, line.lotId);
     const quantity = await resolveQuantity(tx, variant, line.quantity, line.unitId);
     const price = await tx.query<{ id: string; unit_price: string; code: string | null; rate: string | null; price_inclusive: boolean | null }>(
       `SELECT i.id, i.unit_price, t.code, t.rate, t.price_inclusive

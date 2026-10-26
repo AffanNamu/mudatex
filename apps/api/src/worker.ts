@@ -3,6 +3,8 @@ import { createPool } from './db.js';
 import { createSecretBox } from './events/secretbox.js';
 import { startWorker } from './events/worker.js';
 import { allConsumers } from './consumers.js';
+import { releaseExpiredReservations } from './inventory/expiry.js';
+import { expireUnpaidOrders } from './shop/orders.js';
 
 // Standalone delivery worker: `node dist/worker.js`.
 const config = loadConfig();
@@ -13,7 +15,11 @@ const handle = startWorker(db, {
   urlPolicy: { allowHttp: config.WEBHOOK_ALLOW_HTTP, allowPrivate: config.WEBHOOK_ALLOW_PRIVATE },
   consumers: allConsumers(),
 });
-const close = async () => { await handle.stop(); await db.end(); };
+// Unpaid orders and expired reservations give their stock back about once a minute.
+const sweep = setInterval(() => {
+  expireUnpaidOrders(db).then(() => releaseExpiredReservations(db)).catch((err: Error) => console.error('expiry sweep failed', err.message));
+}, 60_000);
+const close = async () => { clearInterval(sweep); await handle.stop(); await db.end(); };
 process.once('SIGTERM', close);
 process.once('SIGINT', close);
 console.log('Mudatex delivery worker started');
