@@ -17,6 +17,8 @@ export const USERS = {
   admin: 'admin@e2e.test',
   cashier: 'cashier@e2e.test',
   clerk: 'clerk@e2e.test',
+  refundMaker: 'refund-maker@e2e.test',
+  refundChecker: 'refund-checker@e2e.test',
   buyer: 'buyer@e2e.test',
   approver: 'approver@e2e.test',
   receiver: 'receiver@e2e.test',
@@ -106,5 +108,7 @@ export default async function seed() {
   await staff(USERS.operator, 'Operator Obi', ['manufacturing.operate', 'manufacturing.read'], here);
   await staff(USERS.supervisor2, 'Production Lead Lola', ['manufacturing.close', 'manufacturing.issue', 'manufacturing.read'], here);
   await staff(USERS.inspector, 'Inspector Ife', ['quality.hold', 'quality.release', 'manufacturing.read'], here);
+  await staff(USERS.refundMaker, 'Refund Maker Mary', ['orders.read', 'orders.refund'], company);
+  await staff(USERS.refundChecker, 'Refund Checker Chuka', ['orders.read', 'orders.refund.approve'], company);
   await staff(USERS.clerk, 'Clerk Kemi', ['catalog.read', 'inventory.read', 'inventory.receive']);
 }

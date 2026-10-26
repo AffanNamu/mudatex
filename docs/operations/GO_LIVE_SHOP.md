@@ -76,7 +76,9 @@ Bank transfer works without this. Card and online-banking payments need a Paysta
 5. Test with Paystack's test card numbers. The server asks Paystack to confirm every payment and compares the amount with the order; a payment that does not match is held for a person to look at and the order stays unpaid.
 6. For real money, switch to the **live** key (`sk_live_…`) and the live webhook. The API refuses to start in production with a test key.
 
-If a customer's card payment arrives after their order has already lapsed, the money is kept on the order and recorded as owed back, so nothing is lost; paying it out is a manual step for now.
+If a customer's card payment arrives after their order has already lapsed, the money is kept on the order and recorded as owed back, so nothing is lost.
+
+**Refunds.** In the console, open the order and use *Refunds*. One person asks (permission `orders.refund`); a different person approves (`orders.refund.approve`). A card refund is then sent back through Paystack automatically. A bank refund is paid out by hand, and the approver records the bank reference. Two Paystack details still need checking on your test account before you rely on automatic card refunds: that the refund request succeeds, and that its "refund processed" notice reaches the webhook (an unconfirmed card refund can always be marked as paid out by hand).
 
 ## 7. Order emails (Resend)
 
@@ -92,7 +94,7 @@ Without these two settings no emails are sent and nothing else is affected. On V
 
 ## 8. What is not live yet
 
-- Refund payouts: cancelling a paid order records the refund owed; paying it out is manual.
+- Trade accounts are done (apply, approve with a trade price list, credit limit and terms, order on account, statements). Make a *wholesale price list* in Business setup first.
 - WhatsApp and SMS messages about order status (email is done).
 - Trade accounts with credit terms, statements and standing orders for wholesale buyers.
 - The free Vercel and Supabase plans are for testing. Move to the paid plans before taking real orders.

@@ -17,6 +17,7 @@ interface Detail {
   lines: { lineNo: number; title: string; sku: string; quantity: string; totalMinor: number }[];
   events: { status: string; actorType: string; note: string | null; at: string }[];
   payments: { method: string; reference: string; amountMinor: number; at: string }[];
+  refunds: { id: string; amountMinor: number; reason: string; method: string; status: string; requestedBy: string; payoutRef: string | null; detail: string | null }[];
 }
 
 /** Online orders: confirm that money arrived, prepare, ship (which takes stock off the shelf), deliver, or cancel. */
@@ -59,7 +60,7 @@ export function Orders() {
 }
 
 function OrderPanel({ id, onChanged }: { id: string; onChanged(): void }) {
-  const { can } = useAuth();
+  const { can, session } = useAuth();
   const d = useLoad<Detail>(`/v1/sales-orders/${id}`);
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
@@ -132,11 +133,57 @@ function OrderPanel({ id, onChanged }: { id: string; onChanged(): void }) {
           </form>
         </details>
       )}
+      <Refunds o={o} money={money} me={session?.user.id ?? ''} onChanged={() => { d.reload(); onChanged(); }} />
       {o.refundDueMinor > 0 && <Notice tone="warn">Refund owed to the customer: {money(o.refundDueMinor)}. Refunds are paid out manually for now.</Notice>}
       {o.trackingRef && <p>Courier: {o.carrier ?? '—'} · {o.trackingRef}</p>}
       <h3>History</h3>
       <ol className="plain">{o.events.map((e, i) => <li key={i}>{new Date(e.at).toLocaleString()} — {LABEL[e.status] ?? e.status} ({e.actorType}){e.note ? ` — ${e.note}` : ''}</li>)}</ol>
       {o.payments.length > 0 && <p className="muted">Payments: {o.payments.map((p) => `${p.method} ${p.reference} ${money(p.amountMinor)}`).join('; ')}</p>}
     </section>
+  );
+}
+
+const REFUND_LABEL: Record<string, string> = { requested: 'Waiting for approval', approved: 'Approved, to be paid out', processing: 'With the payment provider', paid: 'Paid', failed: 'Failed', rejected: 'Declined' };
+
+/** Money back to the customer: one person asks, another approves. */
+function Refunds({ o, money, me, onChanged }: { o: Detail; money(m: number): string; me: string; onChanged(): void }) {
+  const { can } = useAuth();
+  const [amount, setAmount] = useState(''); const [reason, setReason] = useState(''); const [ref, setRef] = useState<Record<string, string>>({});
+  const [error, setError] = useState<unknown>(null);
+  const [busy, setBusy] = useState(false);
+  const act = async (path: string, body: unknown) => {
+    setBusy(true); setError(null);
+    try { await api(path, { method: 'POST', body }); onChanged(); setAmount(''); setReason(''); } catch (e) { setError(e); } finally { setBusy(false); }
+  };
+  const asked = Math.round(Number(amount) * 10 ** o.minorUnit);
+  if (o.paidMinor === 0 && o.refunds.length === 0) return null;
+  return (
+    <details className="panel"><summary>Refunds{o.refunds.length ? ` (${o.refunds.length})` : ''}</summary>
+      <ul className="plain">
+        {o.refunds.map((r) => (
+          <li key={r.id}>
+            <strong>{money(r.amountMinor)}</strong> by {r.method.replace('_', ' ')} — {REFUND_LABEL[r.status] ?? r.status}. {r.reason}{r.detail ? ` (${r.detail})` : ''}{r.payoutRef ? ` · bank ref ${r.payoutRef}` : ''}
+            {r.status === 'requested' && can('orders.refund.approve') && (r.requestedBy === me
+              ? <span className="muted"> You asked for this one; someone else must approve it.</span>
+              : <span className="row"><button className="btn btn-primary" disabled={busy} onClick={() => act(`/v1/refunds/${r.id}/decision`, { decision: 'approve' })}>Approve{r.method === 'card' ? ' and send to card' : ''}</button>
+                  <button className="btn" disabled={busy} onClick={() => act(`/v1/refunds/${r.id}/decision`, { decision: 'reject' })}>Decline</button></span>)}
+            {['approved', 'processing', 'failed'].includes(r.status) && can('orders.refund.approve') && (
+              <form className="form-grid" onSubmit={(e) => { e.preventDefault(); act(`/v1/refunds/${r.id}/paid`, { payoutRef: ref[r.id] ?? '' }); }}>
+                <Field label="Bank reference of the payout"><input required minLength={4} value={ref[r.id] ?? ''} onChange={(e) => setRef({ ...ref, [r.id]: e.target.value })} /></Field>
+                <div className="form-actions"><button className="btn" disabled={busy || (ref[r.id] ?? '').trim().length < 4}>Mark as paid out</button></div>
+              </form>
+            )}
+          </li>
+        ))}
+      </ul>
+      {can('orders.refund') && o.paidMinor > 0 && (
+        <form className="form-grid" onSubmit={(e) => { e.preventDefault(); act(`/v1/sales-orders/${o.id}/refunds`, { amountMinor: asked, reason: reason.trim() }); }}>
+          <Field label={`Amount to refund (paid so far ${money(o.paidMinor)})`}><input required inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} /></Field>
+          <Field label="Reason"><input required minLength={5} value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} /></Field>
+          <div className="form-actions"><button className="btn" disabled={busy || !(asked > 0) || reason.trim().length < 5}>Ask for this refund</button></div>
+        </form>
+      )}
+      <ErrorBanner error={error} />
+    </details>
   );
 }

@@ -22,6 +22,8 @@ export interface PaymentProvider {
   readonly name: 'paystack';
   initialize(input: InitInput): Promise<{ authorizationUrl: string }>;
   verify(reference: string): Promise<VerifyResult>;
+  /** Sends money back to the card. `reference` is the original payment's. */
+  refund(input: { reference: string; amountMinor: number }): Promise<{ providerRef: string; status: 'processed' | 'pending' }>;
 }
 
 export function createPaystack(secretKey: string, fetchImpl: typeof fetch = fetch, base = 'https://api.paystack.co'): PaymentProvider {
@@ -50,6 +52,11 @@ export function createPaystack(secretKey: string, fetchImpl: typeof fetch = fetc
       const data = await call(`/transaction/verify/${encodeURIComponent(reference)}`);
       const status = ['success', 'failed', 'abandoned'].includes(data?.status) ? data.status : 'pending';
       return { status, amountMinor: Number(data?.amount), currency: String(data?.currency ?? ''), reference: String(data?.reference ?? reference) };
+    },
+    async refund(i) {
+      const data = await call('/refund', { method: 'POST', body: JSON.stringify({ transaction: i.reference, amount: i.amountMinor }) });
+      if (!data?.id) throw new AppError(502, 'payment_provider_error', 'The payment service gave an unexpected answer.');
+      return { providerRef: String(data.id), status: data.status === 'processed' ? 'processed' : 'pending' };
     },
   };
 }

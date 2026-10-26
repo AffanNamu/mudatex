@@ -83,7 +83,9 @@ perms AS (
       'orders.cancel',
       'enquiries.manage',
       'reviews.moderate',
-      'trade.manage'
+      'trade.manage',
+      'orders.refund',
+      'orders.refund.approve'
   ]) AS p
   RETURNING 1
 ),

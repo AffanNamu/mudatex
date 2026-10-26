@@ -127,3 +127,51 @@ test('staff approve a wholesale application with a price list and credit', async
   expect(me).toMatchObject({ status: 'approved', creditLimitMinor: 25_000_000, paymentTermsDays: 45 });
   await noA11yViolations(page);
 });
+
+test('one person asks for a refund and another approves it', async ({ page, request }) => {
+  const { createHmac } = await import('node:crypto');
+  const b64 = (o: object) => Buffer.from(JSON.stringify(o)).toString('base64url');
+  const email = 'refund-shopper@e2e.test';
+  const now = Math.floor(Date.now() / 1000);
+  const head = b64({ alg: 'HS256', typ: 'JWT' });
+  const body = b64({ sub: email, email, iat: now, exp: now + 3600, aud: 'authenticated' });
+  const auth = { authorization: `Bearer ${head}.${body}.${createHmac('sha256', 'e2e-dev-secret-e2e-dev-secret-0001').update(`${head}.${body}`).digest('base64url')}` };
+  test.skip((await request.get('http://localhost:3100/shop/console-shop')).status() !== 200, 'needs the store from the earlier test');
+  const api = 'http://localhost:3100';
+  await request.post(`${api}/shop/console-shop/me`, { headers: auth, data: { fullName: 'Refund Shopper' } });
+  const address = await (await request.post(`${api}/shop/console-shop/me/addresses`, { headers: auth, data: { label: 'H', recipient: 'Refund Shopper', phone: '+2348011111111', line1: '1 Road', city: 'Lagos', state: 'Lagos', countryCode: 'NG' } })).json();
+  const variant = (await (await request.get(`${api}/shop/console-shop/products/ankara-wax-print`)).json()).variants[0].variantId;
+  const placed = await request.post(`${api}/shop/console-shop/me/orders`, { headers: { ...auth, 'idempotency-key': crypto.randomUUID() }, data: { lines: [{ variantId: variant, quantity: '1' }], addressId: address.id, paymentMethod: 'bank_transfer' } });
+  expect(placed.status()).toBe(201);
+  const order = await placed.json();
+  const adminTok = (await (await request.post(`${api}/v1/dev/token`, { data: { email: 'admin@e2e.test' } })).json()).token;
+  const adminH = { authorization: `Bearer ${adminTok}` };
+  expect((await request.post(`${api}/v1/sales-orders/${order.id}/payments`, { headers: adminH, data: { method: 'bank_transfer', reference: `RF-${Date.now()}`, amountMinor: order.totalMinor } })).status()).toBe(200);
+
+  await signIn(page, 'refund-maker@e2e.test');
+  await nav(page, 'Online orders');
+  await page.getByRole('button', { name: order.orderNo }).first().click();
+  const panel = page.getByRole('region', { name: `Order ${order.orderNo}` });
+  await panel.getByText(/^Refunds/).click();
+  await panel.getByLabel(/Amount to refund/).fill('500');
+  await panel.getByLabel('Reason').fill('Customer returned part of the roll');
+  await panel.getByRole('button', { name: 'Ask for this refund' }).click();
+  await expect(panel.getByText('Waiting for approval')).toBeVisible();
+  await expect(panel.getByRole('button', { name: /Approve/ })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Sign out' }).click();
+
+  await signIn(page, 'refund-checker@e2e.test');
+  await nav(page, 'Online orders');
+  await page.getByRole('button', { name: order.orderNo }).first().click();
+  const p2 = page.getByRole('region', { name: `Order ${order.orderNo}` });
+  await p2.getByText(/^Refunds/).click();
+  await p2.getByRole('button', { name: 'Approve' }).click();
+  await expect(p2.getByText('Approved, to be paid out')).toBeVisible();
+  await p2.getByLabel('Bank reference of the payout').fill('PAYOUT-7788');
+  await p2.getByRole('button', { name: 'Mark as paid out' }).click();
+  await expect(p2.getByText(/Paid\./)).toBeVisible();
+  await expect(p2.getByText(/bank ref PAYOUT-7788/)).toBeVisible();
+  await noA11yViolations(page);
+  // give the reserved stock back so the till tests that follow see the shelf as they expect
+  expect((await request.post(`${api}/v1/sales-orders/${order.id}/cancel`, { headers: adminH, data: { reason: 'Test finished, release the stock' } })).status()).toBe(200);
+});

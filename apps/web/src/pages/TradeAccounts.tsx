@@ -32,7 +32,9 @@ export function TradeAccounts() {
 
 function Card({ a, lists, onChanged }: { a: Account; lists: PriceList[]; onChanged(): void }) {
   const eligible = lists.filter((l) => l.currency === a.currency);
-  const [listId, setListId] = useState(a.priceListId ?? eligible[0]?.id ?? '');
+  // The price lists may arrive after this card is first drawn, so the default is worked out each time rather than remembered.
+  const [chosen, setChosen] = useState(a.priceListId ?? '');
+  const listId = chosen || eligible[0]?.id || '';
   const [limit, setLimit] = useState(String(a.creditLimitMinor / 100 || ''));
   const [terms, setTerms] = useState(String(a.paymentTermsDays));
   const [note, setNote] = useState(a.note ?? '');
@@ -57,7 +59,7 @@ function Card({ a, lists, onChanged }: { a: Account; lists: PriceList[]; onChang
       <p className="muted">{a.contactName} · {a.phone ?? ''} · <a href={`mailto:${a.email}`}>{a.email}</a>{a.taxId ? ` · Tax ID ${a.taxId}` : ''} · applied {new Date(a.createdAt).toLocaleDateString()} · {a.storeName}</p>
       {a.status === 'approved' && <p>Credit {money(a.creditUsedMinor)} used of {money(a.creditLimitMinor)} · {a.paymentTermsDays} day terms.</p>}
       <form className="form-grid" onSubmit={(e) => decide('approved', e)}>
-        <Field label="Trade price list" hint="The shop charges this business the prices on this list."><select value={listId} onChange={(e) => setListId(e.target.value)}>{eligible.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</select></Field>
+        <Field label="Trade price list" hint="The shop charges this business the prices on this list."><select value={listId} onChange={(e) => setChosen(e.target.value)}>{eligible.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</select></Field>
         <Field label={`Credit limit (${a.currency})`}><input inputMode="decimal" value={limit} onChange={(e) => setLimit(e.target.value)} /></Field>
         <Field label="Payment terms (days)"><input type="number" min={0} max={180} value={terms} onChange={(e) => setTerms(e.target.value)} /></Field>
         <Field label="Note"><input value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} /></Field>

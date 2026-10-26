@@ -18,6 +18,7 @@ const MESSAGES: Record<string, (o: any, s: Store) => { subject: string; lead: st
   'order.ship': (o) => ({ subject: `Your order ${o.orderNo} is on its way`, lead: o.trackingRef ? `Your order has been sent with ${o.carrier ?? 'our courier'}. Tracking number: ${o.trackingRef}.` : 'Your order has been sent.' }),
   'order.deliver': (o) => ({ subject: `Your order ${o.orderNo} was delivered`, lead: 'Your order has been delivered. We hope you love it — a review helps other shoppers.' }),
   'order.cancel': (o) => ({ subject: `Your order ${o.orderNo} was cancelled`, lead: o.refundDueMinor > 0 ? 'Your order was cancelled. We owe you a refund and will be in touch about it.' : 'Your order was cancelled and nothing has been charged.' }),
+  'order.refund_paid': (o) => ({ subject: `Refund sent for ${o.orderNo}`, lead: 'We have sent your refund. Card refunds can take a few working days to show on your statement; bank refunds are usually quicker.' }),
   'order.expire': (o) => ({ subject: `Your order ${o.orderNo} has lapsed`, lead: 'We did not receive payment in time, so the fabric was released. You are welcome to order again.' }),
 };
 

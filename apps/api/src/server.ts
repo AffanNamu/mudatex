@@ -184,7 +184,7 @@ export async function buildServer({ config, db, verifier, migrationsDir, cron, p
       await v1.register(inventoryAdjustmentRoutes, { db });
       await v1.register(pricingRoutes, { db });
       await v1.register(storefrontAdminRoutes, { db });
-      await v1.register(salesOrderRoutes, { db });
+      await v1.register(salesOrderRoutes, { db, payments });
       await v1.register(enquiryRoutes, { db });
       await v1.register(reviewRoutes, { db });
       await v1.register(tradeAccountRoutes, { db });
