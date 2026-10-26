@@ -5,7 +5,7 @@ This file is a starter register. Each decision should be created as an individua
 | ADR | Decision | Status | Required evidence / approver |
 |---|---|---|---|
 | [001](001-backend-framework-and-database.md) | Backend framework and primary database | Proposed: TypeScript/Fastify modular monolith + PostgreSQL (implemented in Phase 1; validate in spike) | Engineering spike, deployment/ops fit, team skill, transaction test |
-| 002 | Offline command and synchronization protocol | Open | POS/warehouse workshops, disconnected-site conflict prototype, security review |
+| [002](002-offline-till.md) | Offline till: cash sales offline, idempotent catch-up, server re-pricing, stock exceptions | Proposed (implemented; untested in a real shop) | A real-shop trial; incident review; decision on card/tracked stock offline |
 | 003 | Organization hierarchy and permission scoping | Proposed: legal entity and location scope enforced server-side | Finance/legal and security review |
 | [004](004-inventory-ledger.md) | Inventory ledger, reservations and movement states | Proposed: immutable movement ledger and transactional reservation (implemented; awaiting sign-off) | Inventory controller signoff and concurrency tests |
 | 005 | Inventory costing method | **Open/blocking for valuation** | Qualified finance/accounting decision for all applicable jurisdictions |

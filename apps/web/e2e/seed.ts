@@ -17,6 +17,7 @@ export const USERS = {
   admin: 'admin@e2e.test',
   cashier: 'cashier@e2e.test',
   clerk: 'clerk@e2e.test',
+  offlineCashier: 'offline-cashier@e2e.test',
   refundMaker: 'refund-maker@e2e.test',
   refundChecker: 'refund-checker@e2e.test',
   buyer: 'buyer@e2e.test',
@@ -84,6 +85,8 @@ export default async function seed() {
 
   await post('/v1/pos/registers', { locationId: shop.id, code: 'LAG1', name: 'Front till', priceListId: list.id, maxDiscountBps: 1000, refundThresholdMinor: 200000 });
 
+  await post('/v1/pos/registers', { locationId: shop.id, code: 'LAG2', name: 'Back till', priceListId: list.id, maxDiscountBps: 500, refundThresholdMinor: 200000 });
+
   const staff = async (email: string, name: string, permissions: string[], scope: Record<string, string> = { type: 'location', id: shop.id }) => {
     const u = await post('/v1/users', { externalSubject: email, email, displayName: name });
     const r = await post('/v1/roles', { key: `e2e_${name.toLowerCase().replace(/\W/g, '_')}`, name, permissions });
@@ -110,5 +113,6 @@ export default async function seed() {
   await staff(USERS.inspector, 'Inspector Ife', ['quality.hold', 'quality.release', 'manufacturing.read'], here);
   await staff(USERS.refundMaker, 'Refund Maker Mary', ['orders.read', 'orders.refund'], company);
   await staff(USERS.refundChecker, 'Refund Checker Chuka', ['orders.read', 'orders.refund.approve'], company);
+  await staff(USERS.offlineCashier, 'Offline Cashier Ola', ['pos.sell', 'pos.session', 'pos.discount', 'pos.read', 'inventory.read']);
   await staff(USERS.clerk, 'Clerk Kemi', ['catalog.read', 'inventory.read', 'inventory.receive']);
 }

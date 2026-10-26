@@ -31,6 +31,7 @@ import { manufacturingTraceRoutes } from './routes/manufacturing-trace.js';
 import { workOrderRoutes } from './routes/work-orders.js';
 import { purchaseOrderRoutes } from './routes/purchase-orders.js';
 import { supplierRoutes } from './routes/suppliers.js';
+import { posOfflineRoutes } from './routes/pos-offline.js';
 import { posRegisterRoutes } from './routes/pos-registers.js';
 import { posReturnRoutes } from './routes/pos-returns.js';
 import { posSaleRoutes } from './routes/pos-sales.js';
@@ -191,6 +192,7 @@ export async function buildServer({ config, db, verifier, migrationsDir, cron, p
       await v1.register(posRegisterRoutes, { db });
       await v1.register(posSaleRoutes, { db });
       await v1.register(posReturnRoutes, { db });
+      await v1.register(posOfflineRoutes, { db });
       await v1.register(supplierRoutes, { db });
       await v1.register(purchaseOrderRoutes, { db });
       await v1.register(accountingConfigRoutes, { db });

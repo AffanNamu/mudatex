@@ -43,7 +43,7 @@ foundations that suit a large company, and does not copy Sakash's code or its we
 - **API:** the rules engine. Fastify (TypeScript). One deployment serves every screen and, later, apps and partners.
 - **Database:** PostgreSQL on Supabase. Tables are locked so Supabase's own public interface cannot read them.
 - **Sign-in:** Supabase Auth. Mudatex stores no passwords.
-- **Quality net:** automated tests (315 on the server, about 75 that drive real browsers across the console and the shop, including
+- **Quality net:** automated tests (325 on the server, about 80 that drive real browsers across the console and the shop, including
   accessibility and phone-width checks) run on every change in GitHub, along with a secret scan, a dependency security audit and container builds.
 
 ## 3. What is built
@@ -65,6 +65,7 @@ foundations that suit a large company, and does not copy Sakash's code or its we
 | **Orders** | Server-priced orders reserve stock, expire if unpaid, and move through paid, preparing, shipped (stock leaves the shelf) and delivered; cancellation, late-payment protection and refund-owed tracking; an order desk in the console; email to the customer at each step. |
 | **Wholesale** | Trade accounts: apply online, staff approve with a trade price list, credit limit and terms; orders on account with credit checked in the order's own transaction; part payments; a statement. |
 | **Refunds** | Two-person refunds on online orders: asked by one, approved by another; card refunds go back through Paystack, bank refunds are recorded when paid out. |
+| **Offline till** | Cash sales continue with no connection: a saved price list, local pricing identical to the server's, a safe on-device queue, automatic catch-up with official receipt numbers, server re-pricing with variance, shortfalls listed for the stock controller. Guide: `operations/OFFLINE_TILL.md`. |
 | **Company website** | Our story, what we do, brands, find us, careers, made-to-order, wholesale and contact pages; enquiries land in a staff inbox. |
 | **Hosting** | Web, API and database deployed and answering; setup guide in `docs/operations/GO_LIVE.md`. |
 
@@ -86,8 +87,8 @@ backups).
 
 1. **Standing orders and quotes** for wholesale buyers (trade accounts, trade prices, credit and statements are built).
 2. **Dunning for overdue trade balances** and credit holds that act automatically.
-3. **Offline till.** The till needs an internet connection. Selling offline needs its own design (ADR 002) and a decision on
-   how much a till may do without the server.
+3. **Wider offline work.** The till can now sell cash offline (see ADR 002); offline card payments, rolls and lots, stock
+   receiving and counts are not offline-capable.
 4. **Mobile apps** (Android/iPhone), **push, SMS and WhatsApp notifications** (email is done).
 5. **Delivery and riders,** order routing to the nearest shop, and **dashboards** for group and country performance.
 6. **Costing and valuation,** and automatic posting of stock and online sales to the ledger. Blocked on finance decisions.
@@ -120,7 +121,7 @@ be reset. Mudatex's own till avoids all of this by design.
 1. **Pilot run** with fake data on the free plans: set up a company, publish products, place and fulfil orders (guides:
    `operations/GO_LIVE.md` and `operations/GO_LIVE_SHOP.md`). Fix what real use shows.
 2. **Content and photos** from the company; connect Paystack (test keys) and an email sender.
-3. **Offline till,** once the owner decides it is required.
+3. **Trial the offline till** in one real shop.
 4. **Sakash migration rehearsal** on a real export, then plan cutover shop by shop.
 5. **Upgrade to paid plans** before any real data enters.
 6. WhatsApp and push notifications, delivery, dashboards, mobile apps, then costing and statements once finance has decided.

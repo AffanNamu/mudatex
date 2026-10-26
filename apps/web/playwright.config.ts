@@ -11,7 +11,8 @@ export default defineConfig({
   workers: 1,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
-  use: { baseURL: 'http://localhost:4173', trace: 'retain-on-failure', launchOptions: { executablePath } },
+  // The service worker would answer requests the tests intercept (for example the sign-in settings), so it is off except in the offline-till tests.
+  use: { baseURL: 'http://localhost:4173', serviceWorkers: 'block', trace: 'retain-on-failure', launchOptions: { executablePath } },
   projects: [
     { name: 'desktop', use: { ...devices['Desktop Chrome'], launchOptions: { executablePath } } },
     { name: 'phone', testMatch: 'responsive.spec.ts', use: { ...devices['Pixel 7'], launchOptions: { executablePath } } },

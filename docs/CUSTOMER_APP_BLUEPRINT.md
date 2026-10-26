@@ -90,4 +90,4 @@ Weak spots visible in the screenshots:
 | M6 | Trade accounts: application, approval, price tiers, credit, statements, reorder | The wholesale side | Done except standing orders and automatic credit holds |
 | M7 | Reviews and Q&A (verified), WhatsApp ordering and notifications, tailoring requests | Differentiators | Reviews, tailoring (made-to-order) and email done; Q&A, WhatsApp and push not yet |
 | M8 | Corporate pages (about, brands, locations, careers, contact), blog and lookbooks, languages | The company website | Done except blog, lookbooks and languages |
-| M9 | Offline till and mobile apps | Reach | Not started |
+| M9 | Offline till and mobile apps | Reach | Offline till done; mobile apps not started |

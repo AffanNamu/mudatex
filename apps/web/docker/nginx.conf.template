@@ -14,6 +14,7 @@ server {
   location /assets/ { add_header Cache-Control "public, max-age=31536000, immutable"; include /etc/nginx/conf.d/security-headers.inc; try_files $uri =404; }
 
   # The page and its runtime settings must never be served stale.
+  location = /sw.js { add_header Cache-Control "no-cache"; include /etc/nginx/conf.d/security-headers.inc; try_files $uri =404; }
   location = /config.js { add_header Cache-Control "no-store"; include /etc/nginx/conf.d/security-headers.inc; try_files $uri =404; }
   location / { add_header Cache-Control "no-cache"; include /etc/nginx/conf.d/security-headers.inc; try_files $uri /index.html; }
 }

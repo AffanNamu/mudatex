@@ -26,6 +26,7 @@ import { SetPassword } from './pages/SetPassword';
 import { Procurement } from './pages/Procurement';
 import { Returns } from './pages/Returns';
 import { Enquiries } from './pages/Enquiries';
+import { OfflineExceptions } from './pages/OfflineExceptions';
 import { Orders } from './pages/Orders';
 import { Reviews } from './pages/Reviews';
 import { Setup } from './pages/Setup';
@@ -58,6 +59,7 @@ export function App() {
         <Route path="enquiries" element={<Needs permission="enquiries.manage"><Enquiries /></Needs>} />
         <Route path="reviews" element={<Needs permission="reviews.moderate"><Reviews /></Needs>} />
         <Route path="trade" element={<Needs permission="trade.manage"><TradeAccounts /></Needs>} />
+        <Route path="till-exceptions" element={<Needs permission="inventory.adjust"><OfflineExceptions /></Needs>} />
         <Route path="store" element={<Needs permission="storefront.manage"><Store /></Needs>} />
         <Route path="setup" element={<Needs permission="org.manage"><Setup /></Needs>} />
         <Route path="catalogue" element={<Needs permission="catalog.read"><Catalogue /></Needs>} />

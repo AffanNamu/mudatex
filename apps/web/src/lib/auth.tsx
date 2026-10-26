@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { api, setOnUnauthorized, setToken } from './api';
-import { passwordSignIn, refreshDelay, refreshTokens, remoteSignOut, supabaseConfigured, type Tokens } from './identity';
+import { api, ApiError, setOnUnauthorized, setToken } from './api';
+import { passwordSignIn, refreshDelay, refreshTokens, remoteSignOut, SignInError, supabaseConfigured, type Tokens } from './identity';
 
 export interface Scope { scope: 'group' | 'country' | 'legal_entity' | 'location'; id?: string; country?: string; role: string }
 export interface Session {
@@ -26,6 +26,12 @@ const Ctx = createContext<AuthValue | null>(null);
 const KEY = 'mudatex.tokens';
 
 const read = (): Tokens | null => { try { const v = sessionStorage.getItem(KEY); return v ? (JSON.parse(v) as Tokens) : null; } catch { return null; } };
+// The last profile the server gave us. A till that loses its connection and is reloaded can carry on from this;
+// everything it then does is checked again by the server.
+const PROFILE_KEY = 'mudatex.profile';
+const readProfile = (): Session | null => { try { const v = sessionStorage.getItem(PROFILE_KEY); return v ? (JSON.parse(v) as Session) : null; } catch { return null; } };
+const writeProfile = (p: Session | null) => { try { p ? sessionStorage.setItem(PROFILE_KEY, JSON.stringify(p)) : sessionStorage.removeItem(PROFILE_KEY); } catch { /* ignore */ } };
+const isNetwork = (e: unknown) => (e instanceof ApiError && e.status === 0) || (e instanceof SignInError && e.kind === 'network');
 const write = (t: Tokens | null) => { try { t ? sessionStorage.setItem(KEY, JSON.stringify(t)) : sessionStorage.removeItem(KEY); } catch { /* storage unavailable: stay signed in for this page only */ } };
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -39,7 +45,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     clearTimeout(timer.current);
     const t = tokens.current;
     tokens.current = null;
-    setToken(null); write(null); setSession(null);
+    setToken(null); write(null); writeProfile(null); setSession(null);
     if (t && mode === 'password') void remoteSignOut(t.accessToken);
   }, [mode]);
   useEffect(() => { setOnUnauthorized(signOut); }, [signOut]);
@@ -49,13 +55,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(t.accessToken); write(t);
     clearTimeout(timer.current);
     if (t.refreshToken) {
-      timer.current = setTimeout(async () => {
-        try { adopt(await refreshTokens(t.refreshToken!)); } catch { signOut(); }
-      }, refreshDelay(t.expiresAt));
+      const refresh = async () => {
+        try { adopt(await refreshTokens(t.refreshToken!)); }
+        catch (e) {
+          // No connection is not the end of the session: try again shortly. Only a refusal ends it.
+          if (isNetwork(e)) timer.current = setTimeout(refresh, 20_000); else signOut();
+        }
+      };
+      timer.current = setTimeout(refresh, refreshDelay(t.expiresAt));
     }
   }, [signOut]);
 
-  const load = useCallback(async () => { setSession(await api<Session>('/v1/me/grants')); }, []);
+  const load = useCallback(async () => { const p = await api<Session>('/v1/me/grants'); writeProfile(p); setSession(p); }, []);
 
   useEffect(() => {
     const t = read();
@@ -64,10 +75,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       let cur = t;
       if (cur.expiresAt <= Date.now() + 5_000) {
         if (!cur.refreshToken) throw new Error('expired');
-        cur = await refreshTokens(cur.refreshToken);
+        try { cur = await refreshTokens(cur.refreshToken); }
+        catch (e) {
+          // Reloaded with no connection: keep working from the last known profile; the token is refreshed once we are back.
+          const cached = readProfile();
+          if (isNetwork(e) && cached) { adopt(cur); setSession(cached); return; }
+          throw e;
+        }
       }
       adopt(cur);
-      await load();
+      try { await load(); }
+      catch (e) {
+        const cached = readProfile();
+        if (isNetwork(e) && cached) { setSession(cached); return; }
+        throw e;
+      }
     })().catch(() => signOut()).finally(() => setLoading(false));
     return () => clearTimeout(timer.current);
   }, [adopt, load, signOut]);
