@@ -49,6 +49,7 @@ export function Setup() {
       <p className="muted">Set these up in order: company, places, units, tax, price list, prices, then till registers and the online store.</p>
       <ErrorBanner error={failure} />
       {entities.loading && !entities.data && <Loading what="your setup" />}
+      {entities.data && ents.length === 0 && can('org.manage') && <SampleData onDone={() => { entities.reload(); places.reload(); units.reload(); taxes.reload(); lists.reload(); registers.reload(); products.reload(); }} />}
 
       <Section title="1. Companies" count={ents.length}>
         <Table head={['Company', 'Country', 'Currency']} rows={ents.map((e) => [e.name, e.countryCode, e.functionalCurrency])} />
@@ -229,5 +230,25 @@ function NewRegister({ places, lists, onDone }: { places: Place[]; lists: PriceL
         <div className="form-actions"><button className="btn btn-primary" disabled={c.busy || !code || !name || !eligible.length}>Add register</button></div>
       </form><Result c={c} />
     </details>
+  );
+}
+
+/** For a system with nothing in it yet: fills it with a sample company, catalogue, till and live store so everything can be seen working. */
+function SampleData({ onDone }: { onDone(): void }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const [done, setDone] = useState<{ storefront: string; products: number } | null>(null);
+  const run = async () => {
+    setBusy(true); setError(null);
+    try { setDone(await api('/v1/demo/seed', { method: 'POST' })); onDone(); } catch (e) { setError(e); } finally { setBusy(false); }
+  };
+  if (done) return <Notice tone="ok">Sample data is loaded: {done.products} products, a till, and a live online store with the web name <strong>{done.storefront}</strong>. Use that name as <code>NEXT_PUBLIC_SHOP_SLUG</code> when you set up the shop website. You can change or remove anything later.</Notice>;
+  return (
+    <section className="panel" aria-label="Sample data">
+      <h2>Want to see it working first?</h2>
+      <p>Load a sample textile company with a catalogue, prices, stock, a till and a live online store. It takes a few seconds and can only be done while the system is empty.</p>
+      <ErrorBanner error={error} />
+      <button className="btn btn-primary" onClick={run} disabled={busy}>{busy ? 'Loading sample data…' : 'Start with sample data'}</button>
+    </section>
   );
 }

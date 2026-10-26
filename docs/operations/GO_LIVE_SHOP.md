@@ -23,7 +23,9 @@ Staff are invited, so sign-ups were switched off. Customers need to create their
 
 ## 2. Create the store in the staff console
 
-Sign in to the console and use the new screens, in this order:
+**Fastest way to see it working:** sign in to the console, open **Setup**, and press **Start with sample data**. It creates a sample textile company, 12 products with prices and stock, a till, and a live online store (web name `demo`) in a few seconds. It only works on an empty system. You can then skip to step 3 and use `demo` as the shop's web name. Change or remove anything later, and enter your own real data when you are ready.
+
+**Or set it up by hand.** Sign in to the console and use the screens in this order:
 
 1. **Setup**: add your company, its shops and warehouses, units (m, yd, roll), a tax code, a price list, and prices for your products. Add a till register for each shop.
 2. **Online store, Create a store**: pick the company, the price list customers should be charged, and the warehouses online orders may take stock from. Choose a *web name*, for example `mudatex`.
@@ -32,6 +34,8 @@ Sign in to the console and use the new screens, in this order:
 5. **Delivery zones**: add at least one. Shoppers cannot check out without a delivery zone for their address.
 6. **Contact and bank-transfer details**: WhatsApp number, phone, email, and the bank account customers pay into.
 7. Press **Go live**.
+
+> **Speed tip.** The API's Vercel project and the shop should run in the same region as the database. Your Supabase database is in Frankfurt (eu-central-1), so both projects are set to Frankfurt (`fra1`) in their `vercel.json`. If you ever see slow pages, check **Settings, Functions, Region** in Vercel shows Frankfurt.
 
 ## 3. Create the Vercel project for the shop
 
