@@ -1,0 +1,210 @@
+import type { FastifyPluginAsync, FastifyRequest } from 'fastify';
+import { z } from 'zod';
+import type { TokenVerifier } from '../auth/token.js';
+import { withTx, type Db } from '../db.js';
+import { conflict, forbidden, invalid, notFound, unauthorized } from '../errors.js';
+import { cardsFor, loadLiveStorefront, type Storefront } from '../shop/catalog.js';
+
+const slugParam = z.object({ slug: z.string().regex(/^[a-z0-9-]{1,60}$/) });
+const uuid = z.string().uuid();
+const MAX_ADDRESSES = 10;
+const MAX_WISHLIST = 200;
+
+const profileBody = z.object({
+  fullName: z.string().trim().min(2).max(120),
+  phone: z.string().trim().regex(/^\+?[0-9 ()-]{7,20}$/).nullable().optional(),
+  marketingOptIn: z.boolean().optional(),
+});
+
+const addressBody = z.object({
+  label: z.string().trim().min(1).max(40),
+  recipient: z.string().trim().min(2).max(120),
+  phone: z.string().trim().regex(/^\+?[0-9 ()-]{7,20}$/),
+  line1: z.string().trim().min(3).max(200),
+  line2: z.string().trim().max(200).nullable().optional(),
+  city: z.string().trim().min(1).max(100),
+  state: z.string().trim().min(1).max(100),
+  countryCode: z.string().regex(/^[A-Za-z]{2}$/).transform((c) => c.toUpperCase()),
+  isDefault: z.boolean().optional(),
+});
+
+const ADDRESS_COLUMNS = `id, label, recipient, phone, line1, line2, city, state, country_code AS "countryCode", is_default AS "isDefault"`;
+const CUSTOMER_COLUMNS = `id, email, full_name AS "fullName", phone, marketing_opt_in AS "marketingOptIn", status, created_at AS "createdAt"`;
+
+declare module 'fastify' {
+  interface FastifyRequest {
+    shopper: { subject: string; email?: string };
+    storefront: Storefront;
+  }
+}
+
+/**
+ * Signed-in shopper endpoints. A shopper is a customer of one organisation (the storefront's), never staff: the same
+ * identity provider signs both in, but customers live in their own table and reach only these endpoints.
+ */
+export const shopCustomerRoutes: FastifyPluginAsync<{ db: Db; verify: TokenVerifier }> = async (app, { db, verify }) => {
+  app.decorateRequest('shopper', undefined as never);
+  app.decorateRequest('storefront', undefined as never);
+
+  app.addHook('onRequest', async (req: FastifyRequest) => {
+    const { slug } = slugParam.parse(req.params);
+    const header = req.headers.authorization;
+    if (!header?.startsWith('Bearer ')) throw unauthorized();
+    req.shopper = await verify(header.slice('Bearer '.length));
+    req.storefront = await loadLiveStorefront(db, slug);
+  });
+  app.addHook('onSend', async (_req, reply) => {
+    reply.header('cache-control', 'private, no-store');
+  });
+
+  /** The signed-in customer of this storefront's organisation; blocked customers are refused. */
+  async function customer(req: FastifyRequest, db2: Pick<Db, 'query'> = db) {
+    const { rows } = await db2.query<{ id: string; status: string }>(
+      'SELECT id, status FROM customers WHERE external_subject = $1 AND organization_id = $2',
+      [req.shopper.subject, req.storefront.organizationId],
+    );
+    if (!rows[0]) throw notFound('Customer');
+    if (rows[0].status !== 'active') throw forbidden('This account is blocked');
+    return rows[0].id;
+  }
+
+  app.get('/shop/:slug/me', async (req) => {
+    const id = await customer(req);
+    const { rows } = await db.query(`SELECT ${CUSTOMER_COLUMNS} FROM customers WHERE id = $1`, [id]);
+    return rows[0];
+  });
+
+  // Creating the profile is idempotent: the same signed-in person calling it twice gets the same customer.
+  app.post('/shop/:slug/me', async (req, reply) => {
+    const body = profileBody.parse(req.body);
+    const { subject, email } = req.shopper;
+    if (!email) throw invalid('Your sign-in has no email address');
+    const { organizationId } = req.storefront;
+    const existing = await db.query(`SELECT ${CUSTOMER_COLUMNS} FROM customers WHERE external_subject = $1 AND organization_id = $2`, [subject, organizationId]);
+    if (existing.rows[0]) return existing.rows[0];
+    try {
+      const { rows } = await db.query(
+        `INSERT INTO customers (organization_id, external_subject, email, full_name, phone, marketing_opt_in)
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING ${CUSTOMER_COLUMNS}`,
+        [organizationId, subject, email, body.fullName, body.phone ?? null, body.marketingOptIn ?? false],
+      );
+      return reply.status(201).send(rows[0]);
+    } catch (err) {
+      if ((err as { code?: string }).code === '23505') throw conflict('An account with this email already exists');
+      throw err;
+    }
+  });
+
+  app.put('/shop/:slug/me', async (req) => {
+    const body = profileBody.parse(req.body);
+    const id = await customer(req);
+    const { rows } = await db.query(
+      `UPDATE customers SET full_name = $2, phone = COALESCE($3, phone), marketing_opt_in = COALESCE($4, marketing_opt_in)
+        WHERE id = $1 RETURNING ${CUSTOMER_COLUMNS}`,
+      [id, body.fullName, body.phone ?? null, body.marketingOptIn ?? null],
+    );
+    return rows[0];
+  });
+
+  app.get('/shop/:slug/me/addresses', async (req) => {
+    const id = await customer(req);
+    const { rows } = await db.query(`SELECT ${ADDRESS_COLUMNS} FROM customer_addresses WHERE customer_id = $1 ORDER BY is_default DESC, created_at`, [id]);
+    return rows;
+  });
+
+  app.post('/shop/:slug/me/addresses', async (req, reply) => {
+    const body = addressBody.parse(req.body);
+    const created = await withTx(db, async (tx) => {
+      const id = await customer(req, tx);
+      await tx.query('SELECT 1 FROM customers WHERE id = $1 FOR UPDATE', [id]);
+      const count = await tx.query<{ n: number }>('SELECT count(*)::int AS n FROM customer_addresses WHERE customer_id = $1', [id]);
+      if (count.rows[0]!.n >= MAX_ADDRESSES) throw conflict(`You can save up to ${MAX_ADDRESSES} addresses`);
+      // the first address is the default; choosing another default moves it
+      const makeDefault = body.isDefault === true || count.rows[0]!.n === 0;
+      if (makeDefault) await tx.query('UPDATE customer_addresses SET is_default = false WHERE customer_id = $1', [id]);
+      const { rows } = await tx.query(
+        `INSERT INTO customer_addresses (customer_id, label, recipient, phone, line1, line2, city, state, country_code, is_default)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING ${ADDRESS_COLUMNS}`,
+        [id, body.label, body.recipient, body.phone, body.line1, body.line2 ?? null, body.city, body.state, body.countryCode, makeDefault],
+      );
+      return rows[0];
+    });
+    return reply.status(201).send(created);
+  });
+
+  app.put('/shop/:slug/me/addresses/:addressId', async (req) => {
+    const { addressId } = z.object({ addressId: uuid }).parse(req.params);
+    const body = addressBody.parse(req.body);
+    return withTx(db, async (tx) => {
+      const id = await customer(req, tx);
+      await tx.query('SELECT 1 FROM customers WHERE id = $1 FOR UPDATE', [id]);
+      const own = await tx.query('SELECT 1 FROM customer_addresses WHERE id = $1 AND customer_id = $2', [addressId, id]);
+      if (!own.rowCount) throw notFound('Address');
+      if (body.isDefault) await tx.query('UPDATE customer_addresses SET is_default = false WHERE customer_id = $1', [id]);
+      const { rows } = await tx.query(
+        `UPDATE customer_addresses SET label = $3, recipient = $4, phone = $5, line1 = $6, line2 = $7, city = $8, state = $9,
+                country_code = $10, is_default = CASE WHEN $11::boolean IS TRUE THEN true ELSE is_default END
+          WHERE id = $1 AND customer_id = $2 RETURNING ${ADDRESS_COLUMNS}`,
+        [addressId, id, body.label, body.recipient, body.phone, body.line1, body.line2 ?? null, body.city, body.state, body.countryCode, body.isDefault ?? null],
+      );
+      return rows[0];
+    });
+  });
+
+  app.delete('/shop/:slug/me/addresses/:addressId', async (req, reply) => {
+    const { addressId } = z.object({ addressId: uuid }).parse(req.params);
+    await withTx(db, async (tx) => {
+      const id = await customer(req, tx);
+      await tx.query('SELECT 1 FROM customers WHERE id = $1 FOR UPDATE', [id]);
+      const gone = await tx.query<{ is_default: boolean }>('DELETE FROM customer_addresses WHERE id = $1 AND customer_id = $2 RETURNING is_default', [addressId, id]);
+      if (!gone.rows[0]) throw notFound('Address');
+      if (gone.rows[0].is_default) {
+        await tx.query(
+          `UPDATE customer_addresses SET is_default = true
+            WHERE id = (SELECT id FROM customer_addresses WHERE customer_id = $1 ORDER BY created_at LIMIT 1)`,
+          [id],
+        );
+      }
+    });
+    return reply.status(204).send();
+  });
+
+  app.get('/shop/:slug/me/wishlist', async (req) => {
+    const id = await customer(req);
+    const { rows } = await db.query(
+      `SELECT sp.id, sp.product_id AS "productId", sp.slug, sp.title, sp.brand, sp.images, sp.badges,
+              d.slug AS "departmentSlug", d.name AS "departmentName"
+         FROM wishlist_items w
+         JOIN storefront_products sp ON sp.id = w.storefront_product_id AND sp.published AND sp.storefront_id = $2
+         JOIN products p ON p.id = sp.product_id AND p.status = 'active'
+         LEFT JOIN storefront_departments d ON d.id = sp.department_id
+        WHERE w.customer_id = $1 ORDER BY w.created_at DESC`,
+      [id, req.storefront.id],
+    );
+    return cardsFor(db, req.storefront, rows);
+  });
+
+  app.put('/shop/:slug/me/wishlist/:productSlug', async (req, reply) => {
+    const { productSlug } = z.object({ productSlug: z.string().regex(/^[a-z0-9-]{1,80}$/) }).parse(req.params);
+    await withTx(db, async (tx) => {
+      const id = await customer(req, tx);
+      const product = await tx.query<{ id: string }>('SELECT id FROM storefront_products WHERE storefront_id = $1 AND slug = $2 AND published', [req.storefront.id, productSlug]);
+      if (!product.rows[0]) throw notFound('Product');
+      const count = await tx.query<{ n: number }>('SELECT count(*)::int AS n FROM wishlist_items WHERE customer_id = $1', [id]);
+      if (count.rows[0]!.n >= MAX_WISHLIST) throw conflict('Your wishlist is full');
+      await tx.query('INSERT INTO wishlist_items (customer_id, storefront_product_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [id, product.rows[0].id]);
+    });
+    return reply.status(204).send();
+  });
+
+  app.delete('/shop/:slug/me/wishlist/:productSlug', async (req, reply) => {
+    const { productSlug } = z.object({ productSlug: z.string().regex(/^[a-z0-9-]{1,80}$/) }).parse(req.params);
+    const id = await customer(req);
+    await db.query(
+      `DELETE FROM wishlist_items WHERE customer_id = $1
+          AND storefront_product_id IN (SELECT id FROM storefront_products WHERE storefront_id = $2 AND slug = $3)`,
+      [id, req.storefront.id, productSlug],
+    );
+    return reply.status(204).send();
+  });
+};

@@ -33,6 +33,9 @@ import { posRegisterRoutes } from './routes/pos-registers.js';
 import { posReturnRoutes } from './routes/pos-returns.js';
 import { posSaleRoutes } from './routes/pos-sales.js';
 import { pricingRoutes } from './routes/pricing.js';
+import { shopCustomerRoutes } from './routes/shop-customer.js';
+import { shopPublicRoutes } from './routes/shop-public.js';
+import { storefrontAdminRoutes } from './routes/storefront-admin.js';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -130,6 +133,10 @@ export async function buildServer({ config, db, verifier, migrationsDir, cron }:
 
   await app.register(devAuthRoutes, { db, config, prefix: '/v1' });
 
+  // The customer-facing shop: public catalogue reads and signed-in shopper endpoints, apart from staff routes.
+  await app.register(shopPublicRoutes, { db });
+  await app.register(shopCustomerRoutes, { db, verify });
+
   await app.register(
     async (v1) => {
       v1.decorateRequest('actor', undefined as never);
@@ -156,6 +163,7 @@ export async function buildServer({ config, db, verifier, migrationsDir, cron }:
       await v1.register(inventoryTransferRoutes, { db });
       await v1.register(inventoryAdjustmentRoutes, { db });
       await v1.register(pricingRoutes, { db });
+      await v1.register(storefrontAdminRoutes, { db });
       await v1.register(posRegisterRoutes, { db });
       await v1.register(posSaleRoutes, { db });
       await v1.register(posReturnRoutes, { db });

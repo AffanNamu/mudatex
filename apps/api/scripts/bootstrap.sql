@@ -75,7 +75,8 @@ perms AS (
       'manufacturing.close',
       'quality.hold',
       'quality.release',
-      'integrations.manage'
+      'integrations.manage',
+      'storefront.manage'
   ]) AS p
   RETURNING 1
 ),

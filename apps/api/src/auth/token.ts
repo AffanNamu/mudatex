@@ -2,7 +2,7 @@ import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from 'jose';
 import type { Config } from '../config.js';
 import { unauthorized } from '../errors.js';
 
-export type TokenVerifier = (token: string) => Promise<{ subject: string }>;
+export type TokenVerifier = (token: string) => Promise<{ subject: string; email?: string }>;
 
 export function createTokenVerifier(config: Config): TokenVerifier {
   let key: JWTVerifyGetKey | Uint8Array;
@@ -26,7 +26,8 @@ export function createTokenVerifier(config: Config): TokenVerifier {
         clockTolerance: 5,
       });
       if (!payload.sub) throw new Error('missing sub');
-      return { subject: payload.sub };
+      const email = typeof payload.email === 'string' ? payload.email.trim().toLowerCase() : undefined;
+      return { subject: payload.sub, ...(email ? { email } : {}) };
     } catch {
       throw unauthorized('Invalid or expired token');
     }
