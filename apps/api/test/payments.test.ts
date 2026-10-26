@@ -50,7 +50,7 @@ async function readyCard() {
 const webhook = (body: unknown, secret = SECRET, tamper = false) => {
   const raw = JSON.stringify(body);
   const sig = createHmac('sha512', secret).update(raw).digest('hex');
-  return ctx.app.inject({ method: 'POST', url: '/webhooks/paystack', headers: { 'content-type': 'application/json', 'x-paystack-signature': tamper ? sig.replace(/.$/, '0') : sig }, payload: raw });
+  return ctx.app.inject({ method: 'POST', url: '/webhooks/paystack', headers: { 'content-type': 'application/json', 'x-paystack-signature': tamper ? sig.slice(0, -1) + (sig.endsWith('0') ? '1' : '0') : sig }, payload: raw });
 };
 
 describe('starting a card payment', () => {
