@@ -43,8 +43,8 @@ foundations that suit a large company, and does not copy Sakash's code or its we
 - **API:** the rules engine. Fastify (TypeScript). One deployment serves every screen and, later, apps and partners.
 - **Database:** PostgreSQL on Supabase. Tables are locked so Supabase's own public interface cannot read them.
 - **Sign-in:** Supabase Auth. Mudatex stores no passwords.
-- **Quality net:** automated tests (247 on the server, 43 that drive a real browser, including accessibility and phone-width
-  checks) run on every change in GitHub, along with a secret scan, a dependency security audit and container builds.
+- **Quality net:** automated tests (305 on the server, about 70 that drive real browsers across the console and the shop, including
+  accessibility and phone-width checks) run on every change in GitHub, along with a secret scan, a dependency security audit and container builds.
 
 ## 3. What is built
 
@@ -59,6 +59,11 @@ foundations that suit a large company, and does not copy Sakash's code or its we
 | **Manufacturing** | Versioned bills of materials with approval, work centres and routings, work orders with material reservation, issue and return, step-by-step operations, finished-goods output with by-products, quality holds, tolerance-checked closing with a recorded variance reason, lot genealogy. |
 | **Integrations** | A durable event outbox and signed webhooks with retry and dead-letter handling. |
 | **Sakash migration tooling** | Profile, plan, import and reconcile commands; personal data removed by a deny-by-default allow-list; opening stock posted as ledger receipts; safe to re-run. |
+| **Business setup (console)** | Screens to create companies, shops and warehouses, units, tax codes, price lists and prices, and till registers. |
+| **Online store** | A storefront per company (price list, stock locations, departments, publishing, delivery zones, coupons, contact and bank details); a public catalogue API where prices, tax, stock and delivery are all worked out by the server with the same engine as the till. |
+| **Customer shop** | A fast, accessible website (`apps/shop`): home, departments, search, filters, product pages sold by the metre or roll, basket priced by the server, accounts, addresses, wishlist, checkout, order tracking, reviews, coupons. Pay by bank transfer or by card through Paystack (server-verified). |
+| **Orders** | Server-priced orders reserve stock, expire if unpaid, and move through paid, preparing, shipped (stock leaves the shelf) and delivered; cancellation, late-payment protection and refund-owed tracking; an order desk in the console; email to the customer at each step. |
+| **Company website** | Our story, what we do, brands, find us, careers, made-to-order, wholesale and contact pages; enquiries land in a staff inbox. |
 | **Hosting** | Web, API and database deployed and answering; setup guide in `docs/operations/GO_LIVE.md`. |
 
 ## 4. Where we are right now
@@ -77,19 +82,19 @@ backups).
 
 ## 5. What is not built yet
 
-1. **Setup screens.** The console cannot yet create companies, shops, units, tax codes, price lists, registers, users or
-   roles; those exist only as server calls. Until these screens exist, a new system cannot be set up from the browser.
-   **This is the next piece of work.**
-2. **Customer side.** No customer accounts, storefront, cart, online checkout, order tracking or delivery tracking. Sakash has
-   these today; Mudatex has none.
-3. **Online payments.** No Paystack or other provider. The design (server-verified, signed webhooks, amounts decided by the
-   server) is written and tested in `docs/migration/sakash-hardening/`.
-4. **Offline till.** The till needs an internet connection. Selling offline needs its own design (ADR 002) and a decision on
+1. **Trade accounts** for wholesale buyers: approval, price tiers, credit limits, statements, standing orders. Wholesale is an
+   enquiry form today.
+2. **Refund payouts.** Cancelling a paid order records the refund owed; the payout (and a Paystack refund call with
+   two-person approval) is not built.
+3. **Offline till.** The till needs an internet connection. Selling offline needs its own design (ADR 002) and a decision on
    how much a till may do without the server.
-5. **Mobile apps** (Android/iPhone) and **push notifications.**
-6. **Delivery and riders,** order routing to the nearest shop, and **dashboards** for group and country performance.
-7. **Costing and valuation,** and automatic posting of stock and sales to the ledger. Blocked on finance decisions.
-8. **Second-factor sign-in** for staff, **customer-facing documents** (invoices, tax receipts per country), **backups plan.**
+4. **Mobile apps** (Android/iPhone), **push, SMS and WhatsApp notifications** (email is done).
+5. **Delivery and riders,** order routing to the nearest shop, and **dashboards** for group and country performance.
+6. **Costing and valuation,** and automatic posting of stock and online sales to the ledger. Blocked on finance decisions.
+7. **Second-factor sign-in** for staff, **customer-facing documents** (invoices, tax receipts per country), **backups plan.**
+8. **Content the company must supply:** product photos, brand descriptions, shop addresses and hours, delivery and return
+   terms, and review of the facts on the company pages.
+9. **Languages** (Hausa, French) and a blog or lookbooks.
 
 ## 6. Decisions and inputs that gate progress
 
@@ -112,15 +117,14 @@ be reset. Mudatex's own till avoids all of this by design.
 
 ## 8. Recommended order of work
 
-1. **Setup screens** (companies and shops, units, tax, price lists and prices, registers, people and roles), so a fresh system
-   can be configured entirely from the browser, and a pilot with fake data can begin.
-2. **Pilot run** with fake data on the free plans; fix what real use shows.
-3. **Customer storefront** as a phone-friendly website: accounts, catalogue, cart, Paystack checkout verified by the server,
-   order tracking. Reuses the same server.
+1. **Pilot run** with fake data on the free plans: set up a company, publish products, place and fulfil orders (guides:
+   `operations/GO_LIVE.md` and `operations/GO_LIVE_SHOP.md`). Fix what real use shows.
+2. **Content and photos** from the company; connect Paystack (test keys) and an email sender.
+3. **Trade accounts** for wholesale, then refund payouts.
 4. **Offline till,** once the owner decides it is required.
 5. **Sakash migration rehearsal** on a real export, then plan cutover shop by shop.
 6. **Upgrade to paid plans** before any real data enters.
-7. Notifications, delivery, dashboards, mobile apps, then costing and statements once finance has decided.
+7. WhatsApp and push notifications, delivery, dashboards, mobile apps, then costing and statements once finance has decided.
 
 ## 9. Running costs (check current prices)
 

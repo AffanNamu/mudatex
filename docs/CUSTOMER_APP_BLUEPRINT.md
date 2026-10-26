@@ -80,14 +80,14 @@ Weak spots visible in the screenshots:
 
 ## 5. Build order
 
-| # | Piece | Result |
-|---|---|---|
-| M1 | Storefront configuration, departments, publishing, customers, addresses, wishlist, delivery zones, public catalogue API | A storefront can be defined and its catalogue read by anyone |
-| M2 | Console screens: setup (companies, locations, units, tax, price lists, registers, people) and storefront publishing | A fresh system can be configured and published from the browser |
-| M3 | Sales orders, stock reservation, order tracking, order desk in the console | Orders flow into stock and the books |
-| M4 | The storefront web app: home, departments, search, product page with variants and units, cart, checkout, accounts, orders, wishlist | A customer can buy |
-| M5 | Payments: Paystack with server verification, bank transfer with proof, refunds | Real money |
-| M6 | Trade accounts: application, approval, price tiers, credit, statements, reorder | The wholesale side |
-| M7 | Reviews and Q&A (verified), WhatsApp ordering and notifications, tailoring requests | Differentiators |
-| M8 | Corporate pages (about, brands, locations, careers, contact), blog and lookbooks, languages | The company website |
-| M9 | Offline till and mobile apps | Reach |
+| # | Piece | Result | Status |
+|---|---|---|---|
+| M1 | Storefront configuration, departments, publishing, customers, addresses, wishlist, delivery zones, public catalogue API | A storefront can be defined and its catalogue read by anyone | Done |
+| M2 | Console screens: setup (companies, locations, units, tax, price lists, registers, people) and storefront publishing | A fresh system can be configured and published from the browser | Done |
+| M3 | Sales orders, stock reservation, order tracking, order desk in the console | Orders flow into stock and the books | Done |
+| M4 | The storefront web app: home, departments, search, product page with variants and units, cart, checkout, accounts, orders, wishlist | A customer can buy | Done |
+| M5 | Payments: Paystack with server verification, bank transfer with proof, refunds | Real money | Paystack and bank transfer done; refunds payout not yet |
+| M6 | Trade accounts: application, approval, price tiers, credit, statements, reorder | The wholesale side | Not started |
+| M7 | Reviews and Q&A (verified), WhatsApp ordering and notifications, tailoring requests | Differentiators | Reviews, tailoring (made-to-order) and email done; Q&A, WhatsApp and push not yet |
+| M8 | Corporate pages (about, brands, locations, careers, contact), blog and lookbooks, languages | The company website | Done except blog, lookbooks and languages |
+| M9 | Offline till and mobile apps | Reach | Not started |

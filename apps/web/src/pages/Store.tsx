@@ -6,7 +6,7 @@ import type { Product } from './Catalogue';
 
 interface Storefront {
   id: string; legalEntityId: string; slug: string; name: string; priceListId: string; currency: string; stockLocationIds: string[];
-  status: 'draft' | 'live' | 'closed'; tagline: string | null; publishedProducts: number;
+  status: 'draft' | 'live' | 'closed'; tagline: string | null; publishedProducts: number; siteUrl: string | null;
   contact: { whatsapp?: string; phone?: string; email?: string; address?: string; bankName?: string; accountName?: string; accountNumber?: string };
 }
 interface Dept { id: string; slug: string; name: string; imageUrl: string | null; sort: number }
@@ -118,16 +118,18 @@ function Details({ store, onChanged }: { store: Storefront; onChanged(): void })
   const c = store.contact;
   const [tag, setTag] = useState(store.tagline ?? ''); const [wa, setWa] = useState(c.whatsapp ?? ''); const [phone, setPhone] = useState(c.phone ?? ''); const [email, setEmail] = useState(c.email ?? '');
   const [address, setAddress] = useState(c.address ?? ''); const [bank, setBank] = useState(c.bankName ?? ''); const [accName, setAccName] = useState(c.accountName ?? ''); const [accNo, setAccNo] = useState(c.accountNumber ?? '');
+  const [site, setSite] = useState(store.siteUrl ?? '');
   const a = useAction();
   const clean = (v: string) => v.trim() || undefined;
   const submit = (e: FormEvent) => {
     e.preventDefault();
     const contact = Object.fromEntries(Object.entries({ whatsapp: clean(wa.replace(/[\s()-]/g, '')), phone: clean(phone), email: clean(email), address: clean(address), bankName: clean(bank), accountName: clean(accName), accountNumber: clean(accNo) }).filter(([, v]) => v));
-    return a.run(() => api(`/v1/storefronts/${store.id}`, { method: 'PUT', body: { tagline: tag.trim() || null, contact } }), 'Saved.', onChanged);
+    return a.run(() => api(`/v1/storefronts/${store.id}`, { method: 'PUT', body: { tagline: tag.trim() || null, contact, siteUrl: site.trim() || null } }), 'Saved.', onChanged);
   };
   return (
     <details className="panel"><summary>Contact and bank-transfer details</summary>
       <form className="form-grid" onSubmit={submit}>
+        <Field label="Shop website address" hint="Where customers shop, e.g. https://shop.mudatex.com. Needed for card payments."><input type="url" value={site} onChange={(e) => setSite(e.target.value)} placeholder="https://" /></Field>
         <Field label="Tagline" hint="Shown in the banner at the top of the website"><input value={tag} onChange={(e) => setTag(e.target.value)} maxLength={200} /></Field>
         <Field label="WhatsApp number" hint="With country code, e.g. +2348012345678"><input value={wa} onChange={(e) => setWa(e.target.value)} /></Field>
         <Field label="Phone"><input value={phone} onChange={(e) => setPhone(e.target.value)} /></Field>
