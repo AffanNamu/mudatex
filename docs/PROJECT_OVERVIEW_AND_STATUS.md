@@ -66,6 +66,7 @@ foundations that suit a large company, and does not copy Sakash's code or its we
 | **Wholesale** | Trade accounts: apply online, staff approve with a trade price list, credit limit and terms; orders on account with credit checked in the order's own transaction; part payments; a statement. |
 | **Refunds** | Two-person refunds on online orders: asked by one, approved by another; card refunds go back through Paystack, bank refunds are recorded when paid out. |
 | **Offline till** | Cash sales continue with no connection: a saved price list, local pricing identical to the server's, a safe on-device queue, automatic catch-up with official receipt numbers, server re-pricing with variance, shortfalls listed for the stock controller. Guide: `operations/OFFLINE_TILL.md`. |
+| **Dashboards** | The console home shows sales by day, by channel (till, online) and by currency, best sellers, products running low and what needs attention (orders to pay or ship, enquiries, reviews, wholesale applications, offline shortfalls), limited to what each person may see. |
 | **Company website** | Our story, what we do, brands, find us, careers, made-to-order, wholesale and contact pages; enquiries land in a staff inbox. |
 | **Hosting** | Web, API and database deployed and answering; setup guide in `docs/operations/GO_LIVE.md`. |
 
@@ -90,7 +91,7 @@ backups).
 3. **Wider offline work.** The till can now sell cash offline (see ADR 002); offline card payments, rolls and lots, stock
    receiving and counts are not offline-capable.
 4. **Mobile apps** (Android/iPhone), **push, SMS and WhatsApp notifications** (email is done).
-5. **Delivery and riders,** order routing to the nearest shop, and **dashboards** for group and country performance.
+5. **Delivery and riders** and order routing to the nearest shop. (Dashboards: a first version exists; profit and valuation need costing.)
 6. **Costing and valuation,** and automatic posting of stock and online sales to the ledger. Blocked on finance decisions.
 7. **Second-factor sign-in** for staff, **customer-facing documents** (invoices, tax receipts per country), **backups plan.**
 8. **Content the company must supply:** product photos, brand descriptions, shop addresses and hours, delivery and return

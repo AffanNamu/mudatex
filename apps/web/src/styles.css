@@ -97,3 +97,13 @@ tfoot th, tfoot td { border-bottom: 0; }
 section.panel { margin: 0 0 16px; }
 section.panel h2 { font-size: 1.1rem; margin: 0 0 8px; }
 details > summary { cursor: pointer; font-weight: 600; margin: 8px 0; }
+
+/* dashboard */
+.sales-chart { margin: 8px 0 16px; }
+.sales-chart svg { max-width: 760px; color: var(--text); }
+.legend { display: flex; gap: 16px; font-size: .9rem; margin-top: 4px; }
+.legend i { display: inline-block; width: 12px; height: 12px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+.row-between { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.stack > * + * { margin-top: 16px; }
+:root { --chart-1: #2b5fb3; --chart-2: #b36d00; }
+@media (prefers-color-scheme: dark) { :root { --chart-1: #7fa8ee; --chart-2: #f0b24a; } }
