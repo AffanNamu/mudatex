@@ -34,6 +34,17 @@ const basketBody = z.object({
   to: z.object({ countryCode: z.string().regex(/^[A-Za-z]{2}$/), state: z.string().trim().min(1).max(80) }).optional(),
 });
 
+const enquiryBody = z.object({
+  kind: z.enum(['contact', 'wholesale', 'custom_order', 'careers']),
+  name: z.string().trim().min(2).max(120),
+  email: z.string().trim().email().max(200).optional(),
+  phone: z.string().trim().regex(/^\+?[0-9 ()-]{7,20}$/).optional(),
+  company: z.string().trim().max(150).optional(),
+  message: z.string().trim().min(10).max(3000),
+  // A field real visitors never see or fill; bots that fill every field give themselves away.
+  website: z.string().max(200).optional(),
+}).refine((b) => b.email || b.phone, { message: 'Give an email address or a phone number so we can reply', path: ['email'] });
+
 const escapeLike = (s: string) => s.replace(/[\\%_]/g, (c) => `\\${c}`);
 
 /**
@@ -148,6 +159,20 @@ export const shopPublicRoutes: FastifyPluginAsync<{ db: Db; cardPayments?: boole
     const body = basketBody.parse(req.body);
     const sf = await loadLiveStorefront(db, slug);
     return quoteBasket(db, sf, body.lines, body.to);
+  });
+
+  // A message from the public site. Quietly accepted and dropped when the hidden field is filled.
+  app.post('/shop/:slug/enquiries', { config: { rateLimit: { max: 5, timeWindow: '1 minute' } } }, async (req, reply) => {
+    const { slug } = slugParam.parse(req.params);
+    const body = enquiryBody.parse(req.body);
+    const sf = await loadLiveStorefront(db, slug);
+    if (body.website) return reply.status(202).send({ received: true });
+    const { rows } = await db.query<{ id: string }>(
+      `INSERT INTO enquiries (organization_id, storefront_id, kind, name, email, phone, company, message)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+      [sf.organizationId, sf.id, body.kind, body.name, body.email?.toLowerCase() ?? null, body.phone ?? null, body.company ?? null, body.message],
+    );
+    return reply.status(202).send({ received: true, reference: rows[0]!.id.slice(0, 8).toUpperCase() });
   });
 
   // Delivery fee for a place and basket value. The most specific zone wins (a named state beats a whole country).

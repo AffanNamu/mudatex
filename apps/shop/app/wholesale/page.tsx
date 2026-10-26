@@ -1,19 +1,19 @@
 import type { Metadata } from 'next';
-import { getStore } from '@/lib/api';
-import { whatsappLink } from '@/lib/format';
+import { EnquiryForm } from '@/components/EnquiryForm';
 
 export const metadata: Metadata = { title: 'Wholesale' };
 
-export default async function Wholesale() {
-  const store = await getStore();
-  if (!store) return null;
-  const wa = whatsappLink(store.contact.whatsapp, 'Hello, I would like to open a wholesale account.');
+export default function Wholesale() {
   return (
-    <div className="wrap section prose">
-      <h1>Wholesale</h1>
-      <p>Buying by the roll or the bale for your shop or market stall? We offer wholesale pricing, standing orders and delivery to Kano, Kaduna, Katsina, Sokoto, Gombe and beyond.</p>
-      {wa ? <p><a className="btn" href={wa} target="_blank" rel="noopener noreferrer">Talk to our wholesale desk</a></p> : <p className="muted">Wholesale contact details will be added soon.</p>}
-      <p className="small muted">Online trade accounts with credit terms and statements are on the way.</p>
+    <div className="wrap section">
+      <div className="prose">
+        <h1>Wholesale</h1>
+        <p>Buying by the roll or the bale for your shop or market stall? Tell us what you buy and how often. We will send wholesale prices, arrange standing orders and quote delivery.</p>
+      </div>
+      <div style={{ maxWidth: 640 }}>
+        <EnquiryForm kind="wholesale" showCompany messageLabel="What do you buy, and how much?" placeholder="For example: 200 rolls of Atampa a month, delivered to Kaduna." cta="Request wholesale prices" />
+        <p className="small muted">Online trade accounts with credit terms and statements are being added.</p>
+      </div>
     </div>
   );
 }

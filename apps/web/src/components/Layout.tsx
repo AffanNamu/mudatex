@@ -6,6 +6,7 @@ const NAV: { to: string; label: string; needs: string }[] = [
   { to: '/returns', label: 'Returns', needs: 'pos.refund' },
   { to: '/payments', label: 'Confirm payments', needs: 'pos.payment.verify' },
   { to: '/orders', label: 'Online orders', needs: 'orders.read' },
+  { to: '/enquiries', label: 'Enquiries', needs: 'enquiries.manage' },
   { to: '/store', label: 'Online store', needs: 'storefront.manage' },
   { to: '/catalogue', label: 'Catalogue', needs: 'catalog.read' },
   { to: '/inventory', label: 'Inventory', needs: 'inventory.read' },

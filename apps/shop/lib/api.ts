@@ -10,7 +10,11 @@ export class ApiError extends Error {
 async function parse<T>(res: Response): Promise<T> {
   if (res.status === 204) return undefined as T;
   const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new ApiError(res.status, body.error ?? 'error', body.message ?? 'Something went wrong', body.details);
+  if (!res.ok) {
+    // A rejected form field comes back as a list of issues; the first one is what the shopper needs to fix.
+    const issue = body.error === 'bad_request' && Array.isArray(body.issues) ? (body.issues[0]?.message as string | undefined) : undefined;
+    throw new ApiError(res.status, body.error ?? 'error', issue ?? body.message ?? 'Something went wrong', body.details);
+  }
   return body as T;
 }
 

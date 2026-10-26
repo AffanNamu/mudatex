@@ -79,3 +79,22 @@ test('the order desk starts empty and people without the permission do not see i
   await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Online orders' })).toHaveCount(0);
   await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Setup' })).toHaveCount(0);
 });
+
+test('staff work a website enquiry from new to closed', async ({ page, request }) => {
+  const shop = await request.get('http://localhost:3100/shop/console-shop');
+  test.skip(shop.status() !== 200, 'needs the store from the previous test');
+  const sent = await request.post('http://localhost:3100/shop/console-shop/enquiries', { data: { kind: 'custom_order', name: 'Ngozi Eze', phone: '+2348055555555', message: 'I need 40 yards of royal blue lace for a wedding in March.' } });
+  expect(sent.status()).toBe(202);
+  await signIn(page, 'admin@e2e.test');
+  await nav(page, 'Enquiries');
+  const card = page.getByRole('article', { name: 'Enquiry from Ngozi Eze' });
+  await expect(card).toContainText('royal blue lace');
+  await card.getByRole('button', { name: 'I am handling this' }).click();
+  await expect(page.getByText('Nothing here.')).toBeVisible();
+  await page.getByLabel('Show').selectOption({ label: 'Being handled' });
+  await page.getByRole('article', { name: 'Enquiry from Ngozi Eze' }).getByLabel('Note for the team').fill('Quoted 4,500 per yard');
+  await page.getByRole('article', { name: 'Enquiry from Ngozi Eze' }).getByRole('button', { name: 'Close' }).click();
+  await page.getByLabel('Show').selectOption({ label: 'Closed' });
+  await expect(page.getByRole('article', { name: 'Enquiry from Ngozi Eze' })).toBeVisible();
+  await noA11yViolations(page);
+});

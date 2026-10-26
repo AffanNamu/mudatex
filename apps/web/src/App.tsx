@@ -25,6 +25,7 @@ import { Pos } from './pages/Pos';
 import { SetPassword } from './pages/SetPassword';
 import { Procurement } from './pages/Procurement';
 import { Returns } from './pages/Returns';
+import { Enquiries } from './pages/Enquiries';
 import { Orders } from './pages/Orders';
 import { Setup } from './pages/Setup';
 import { Store } from './pages/Store';
@@ -52,6 +53,7 @@ export function App() {
         <Route path="returns" element={<Needs permission="pos.refund"><Returns /></Needs>} />
         <Route path="payments" element={<Needs permission="pos.payment.verify"><Payments /></Needs>} />
         <Route path="orders" element={<Needs permission="orders.read"><Orders /></Needs>} />
+        <Route path="enquiries" element={<Needs permission="enquiries.manage"><Enquiries /></Needs>} />
         <Route path="store" element={<Needs permission="storefront.manage"><Store /></Needs>} />
         <Route path="setup" element={<Needs permission="org.manage"><Setup /></Needs>} />
         <Route path="catalogue" element={<Needs permission="catalog.read"><Catalogue /></Needs>} />

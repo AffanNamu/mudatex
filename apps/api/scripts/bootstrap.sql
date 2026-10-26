@@ -80,7 +80,8 @@ perms AS (
       'orders.read',
       'orders.fulfil',
       'orders.payment.record',
-      'orders.cancel'
+      'orders.cancel',
+      'enquiries.manage'
   ]) AS p
   RETURNING 1
 ),

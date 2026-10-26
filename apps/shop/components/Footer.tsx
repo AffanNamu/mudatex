@@ -28,10 +28,19 @@ export function Footer({ store }: { store: Store }) {
                 <li><Link href="/account/orders">Track an order</Link></li>
                 <li><Link href="/delivery">Delivery &amp; returns</Link></li>
                 <li><Link href="/wholesale">Wholesale</Link></li>
+                <li><Link href="/custom-orders">Made to order</Link></li>
               </ul>
             </div>
             <div>
-              <h3>Reach us</h3>
+              <h3>Company</h3>
+              <ul>
+                <li><Link href="/about">Our story</Link></li>
+                <li><Link href="/divisions">What we do</Link></li>
+                <li><Link href="/brands">Our brands</Link></li>
+                <li><Link href="/locations">Find us</Link></li>
+                <li><Link href="/careers">Careers</Link></li>
+              </ul>
+              <h3 style={{ marginTop: 16 }}>Reach us</h3>
               <ul>
                 {store.contact.phone && <li><a href={`tel:${store.contact.phone.replace(/\s/g, '')}`}>{store.contact.phone}</a></li>}
                 {store.contact.email && <li><a href={`mailto:${store.contact.email}`}>{store.contact.email}</a></li>}

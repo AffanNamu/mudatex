@@ -14,7 +14,7 @@ export default function About() {
         <li><strong>Honest prices.</strong> The price you see is the price you pay, tax included, with delivery shown before you commit.</li>
         <li><strong>Cut to your need.</strong> Buy a metre, a yard or a full roll.</li>
       </ul>
-      <p><Link className="btn" href="/shop">Shop the collection</Link></p>
+      <p><Link className="btn" href="/shop">Shop the collection</Link> <Link className="btn ghost" href="/divisions">What we do</Link> <Link className="btn ghost" href="/brands">Our brands</Link></p>
     </div>
   );
 }

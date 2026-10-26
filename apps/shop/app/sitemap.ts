@@ -6,7 +6,7 @@ export const revalidate = 3600;
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const store = await getStore();
-  const pages = ['', '/shop', '/about', '/contact', '/delivery', '/wholesale'].map((p) => ({ url: `${SITE_URL}${p}` }));
+  const pages = ['', '/shop', '/about', '/brands', '/divisions', '/locations', '/careers', '/contact', '/delivery', '/wholesale', '/custom-orders'].map((p) => ({ url: `${SITE_URL}${p}` }));
   if (!store) return pages;
   const products: MetadataRoute.Sitemap = [];
   for (let page = 1; page <= 20; page++) {
