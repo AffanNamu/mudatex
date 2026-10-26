@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import type { Db } from '../db.js';
 import { invalid } from '../errors.js';
+import { MAX_ORDER_LINES, quoteBasket } from '../shop/orders.js';
 import { cardsFor, loadLiveStorefront, productDetail, quoteDelivery } from '../shop/catalog.js';
 
 const slugParam = z.object({ slug: z.string().regex(/^[a-z0-9-]{1,60}$/) });
@@ -22,6 +23,15 @@ const quoteBody = z.object({
   countryCode: z.string().regex(/^[A-Za-z]{2}$/),
   state: z.string().trim().min(1).max(80),
   subtotalMinor: z.number().int().min(0),
+});
+
+const basketBody = z.object({
+  lines: z.array(z.object({
+    variantId: z.string().uuid(),
+    quantity: z.string().regex(/^\d+(\.\d+)?$/),
+    unitId: z.string().uuid().optional(),
+  })).min(1).max(MAX_ORDER_LINES),
+  to: z.object({ countryCode: z.string().regex(/^[A-Za-z]{2}$/), state: z.string().trim().min(1).max(80) }).optional(),
 });
 
 const escapeLike = (s: string) => s.replace(/[\\%_]/g, (c) => `\\${c}`);
@@ -128,6 +138,14 @@ export const shopPublicRoutes: FastifyPluginAsync<{ db: Db }> = async (app, { db
     const { slug, productSlug } = z.object({ ...slugParam.shape, productSlug: z.string().regex(/^[a-z0-9-]{1,80}$/) }).parse(req.params);
     const sf = await loadLiveStorefront(db, slug);
     return productDetail(db, sf, productSlug);
+  });
+
+  // Prices a basket with the same engine as checkout. Nothing is held and nothing is stored.
+  app.post('/shop/:slug/basket', async (req) => {
+    const { slug } = slugParam.parse(req.params);
+    const body = basketBody.parse(req.body);
+    const sf = await loadLiveStorefront(db, slug);
+    return quoteBasket(db, sf, body.lines, body.to);
   });
 
   // Delivery fee for a place and basket value. The most specific zone wins (a named state beats a whole country).

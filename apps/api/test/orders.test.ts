@@ -215,3 +215,21 @@ describe('who can see and do what', () => {
     expect((await call(ctx.app, 'GET', '/v1/sales-orders?q=zzz', desk.auth)).body.total).toBe(0);
   });
 });
+
+describe('basket quote', () => {
+  it('prices a basket exactly as checkout will, flags stock and adds delivery when a place is given', async () => {
+    const r = await ready();
+    const line = { variantId: r.s.w.fabric.variantId, quantity: '2.5' };
+    const q = await call(ctx.app, 'POST', `/shop/${r.s.slug}/basket`, undefined, { lines: [line], to: { countryCode: 'ng', state: 'Kano' } });
+    expect(q.status).toBe(200);
+    expect(q.body).toMatchObject({ subtotalMinor: 940759, deliveryFeeMinor: 150000, totalMinor: 1090759, allInStock: true });
+    expect(q.body.lines[0]).toMatchObject({ title: 'Ankara Wax', inStock: true });
+    const o = await place(r, [line]);
+    expect(o.body.totalMinor).toBe(q.body.totalMinor);
+    const none = await call(ctx.app, 'POST', `/shop/${r.s.slug}/basket`, undefined, { lines: [line] });
+    expect(none.body).toMatchObject({ subtotalMinor: 940759, deliveryFeeMinor: null, totalMinor: null });
+    const short = await call(ctx.app, 'POST', `/shop/${r.s.slug}/basket`, undefined, { lines: [{ variantId: r.s.w.fabric.variantId, quantity: '500' }] });
+    expect(short.body.allInStock).toBe(false);
+    expect((await call(ctx.app, 'POST', `/shop/${r.s.slug}/basket`, undefined, { lines: [{ variantId: r.s.w.lotted.variantId, quantity: '1' }] })).status).toBe(422);
+  });
+});

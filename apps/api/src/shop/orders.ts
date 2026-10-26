@@ -7,7 +7,7 @@ import { conflict, invalid, notFound, shortage } from '../errors.js';
 import { stable } from '../idempotency.js';
 import { fulfilReferenceReservations, createReservation, releaseReferenceReservations } from '../inventory/service.js';
 import { priceSaleLines, saleTotals } from '../pos/pricing.js';
-import { quoteDelivery, type Storefront } from './catalog.js';
+import { availability, quoteDelivery, type Storefront } from './catalog.js';
 
 export const ORDER_HOLD_MINUTES = { card: 60, bank_transfer: 24 * 60 } as const;
 export const MAX_ORDER_LINES = 50;
@@ -92,6 +92,53 @@ async function allocate(tx: Tx, sf: Storefront, variantId: string, quantity: str
   return { allocs, missing: fromScaled(need > 0n ? need : 0n) };
 }
 
+/** Only published, active products of this storefront can be bought, whatever the client sends. */
+async function sellableTitles(tx: Pick<Db, 'query'>, sf: Storefront, ids: string[]): Promise<Map<string, string>> {
+  const sellable = await tx.query<{ variant_id: string; title: string }>(
+    `SELECT v.id AS variant_id, sp.title || CASE WHEN v.attributes <> '{}'::jsonb THEN ' (' || v.sku || ')' ELSE '' END AS title
+       FROM product_variants v JOIN storefront_products sp ON sp.product_id = v.product_id AND sp.storefront_id = $1 AND sp.published
+       JOIN products p ON p.id = v.product_id AND p.status = 'active'
+      WHERE v.id = ANY($2::uuid[]) AND v.status = 'active' AND v.organization_id = $3`,
+    [sf.id, ids, sf.organizationId],
+  );
+  const titles = new Map(sellable.rows.map((r) => [r.variant_id, r.title]));
+  for (const id of ids) if (!titles.has(id)) throw invalid('An item in your basket is no longer available');
+  return titles;
+}
+
+/**
+ * What the basket would cost right now, without holding anything: the same pricing as checkout, plus whether each line
+ * is in stock and, when a place is given, the delivery fee. The basket page shows this so no total is ever computed by the browser.
+ */
+export async function quoteBasket(db: Db, sf: Storefront, lines: PlaceOrderInput['lines'], to?: { countryCode: string; state: string }) {
+  const ids = lines.map((l) => l.variantId);
+  if (new Set(ids).size !== ids.length) throw invalid('Each product variant can appear once');
+  return withTx(db, async (tx) => {
+    const titles = await sellableTitles(tx, sf, ids);
+    const priced = await priceSaleLines(
+      tx,
+      { organizationId: sf.organizationId, priceListId: sf.priceListId, minorUnit: sf.minorUnit, maxDiscountBps: 0, mayOverride: false, lotsOptional: true, now: new Date() },
+      lines,
+    );
+    const stock = await availability(tx as unknown as Db, sf, ids);
+    const out = priced.map((l) => {
+      const have = toScaled(stock.get(l.variantId) ?? '0');
+      return {
+        variantId: l.variantId, sku: l.sku, title: titles.get(l.variantId)!, quantity: l.quantity, unitPrice: l.unitPrice,
+        totalMinor: Number(l.p.total), inStock: have >= toScaled(l.quantity), available: Number(fromScaled(have > toScaled('100') ? toScaled('100') : have)),
+      };
+    });
+    const totals = saleTotals(priced);
+    const delivery = to ? await quoteDelivery(tx, sf, to.countryCode, to.state, totals.total) : null;
+    const deliveryFee = BigInt(delivery?.feeMinor ?? 0);
+    return {
+      currency: sf.currency, lines: out, subtotalMinor: Number(totals.total), taxMinor: Number(totals.tax),
+      delivery, deliveryFeeMinor: delivery ? Number(deliveryFee) : null, totalMinor: delivery ? Number(totals.total + deliveryFee) : null,
+      allInStock: out.every((l) => l.inStock),
+    };
+  });
+}
+
 export async function placeOrder(db: Db, sf: Storefront, customerId: string, input: PlaceOrderInput, clientKey: string, requestId?: string) {
   const hash = createHash('sha256').update(stable(input)).digest('hex');
   // Holds that have run out are returned first, so a shopper is not told 'sold out' because of abandoned checkouts.
@@ -116,16 +163,7 @@ export async function placeOrder(db: Db, sf: Storefront, customerId: string, inp
     const address = addr.rows[0];
     if (!address) throw invalid('Choose one of your saved delivery addresses');
 
-    // Only published, active products of this storefront can be bought, whatever the client sends.
-    const sellable = await tx.query<{ variant_id: string; title: string }>(
-      `SELECT v.id AS variant_id, sp.title || CASE WHEN v.attributes <> '{}'::jsonb THEN ' (' || v.sku || ')' ELSE '' END AS title
-         FROM product_variants v JOIN storefront_products sp ON sp.product_id = v.product_id AND sp.storefront_id = $1 AND sp.published
-         JOIN products p ON p.id = v.product_id AND p.status = 'active'
-        WHERE v.id = ANY($2::uuid[]) AND v.status = 'active' AND v.organization_id = $3`,
-      [sf.id, ids, sf.organizationId],
-    );
-    const titles = new Map(sellable.rows.map((r) => [r.variant_id, r.title]));
-    for (const id of ids) if (!titles.has(id)) throw invalid('An item in your basket is no longer available');
+    const titles = await sellableTitles(tx, sf, ids);
 
     const now = new Date();
     const priced = await priceSaleLines(
