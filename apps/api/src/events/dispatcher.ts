@@ -105,7 +105,7 @@ export class Dispatcher {
         WHERE id IN (
           SELECT id FROM event_deliveries
            WHERE status IN ('pending', 'sending') AND next_attempt_at <= $1 AND (locked_until IS NULL OR locked_until <= $1)
-           ORDER BY next_attempt_at LIMIT $2 FOR UPDATE SKIP LOCKED)
+           ORDER BY next_attempt_at, event_id LIMIT $2 FOR UPDATE SKIP LOCKED)
         RETURNING id, event_id, organization_id, target_kind, target_key, endpoint_id, attempts`,
       [now, batch, LEASE_SECONDS],
     );

@@ -65,9 +65,34 @@ Then redeploy the API.
 4. In the console, **Online orders**: open the order, enter a bank reference, confirm payment, then prepare, ship (this takes the stock off the shelf) and deliver.
 5. Check the stock in **Inventory** went down only when you shipped.
 
-## 6. What is not live yet
+## 6. Accept card payments (Paystack)
 
-- Card payments (the shop offers bank transfer only until Paystack is connected and verified on the server).
+Bank transfer works without this. Card and online-banking payments need a Paystack account.
+
+1. Create a Paystack account and, for testing, copy the **test secret key** (it starts with `sk_test_`). Keep it secret: it goes only into the API's Vercel settings, never into the shop, the repository or a chat.
+2. API Vercel project, **Settings, Environment Variables**: add `PAYSTACK_SECRET_KEY` with that key. Redeploy the API.
+3. Paystack dashboard, **Settings, API Keys & Webhooks**: set the **Webhook URL** to `https://YOUR-API-ADDRESS/webhooks/paystack`.
+4. Tell the store its own address (so Paystack can send shoppers back). In the console, or with the API: set the store's `siteUrl` to the shop's address, for example `https://mudatex-shop.vercel.app`. The shop only offers card payment once this is set and the key is present.
+5. Test with Paystack's test card numbers. The server asks Paystack to confirm every payment and compares the amount with the order; a payment that does not match is held for a person to look at and the order stays unpaid.
+6. For real money, switch to the **live** key (`sk_live_…`) and the live webhook. The API refuses to start in production with a test key.
+
+If a customer's card payment arrives after their order has already lapsed, the money is kept on the order and recorded as owed back, so nothing is lost; paying it out is a manual step for now.
+
+## 7. Order emails (Resend)
+
+The shop emails customers when an order is placed, paid, shipped, delivered or cancelled.
+
+1. Create a free account at resend.com and verify the domain you will send from (for example `mudatex.com`) by adding the DNS records they show.
+2. Create an API key. In the API's Vercel settings add:
+   - `RESEND_API_KEY`: the key
+   - `MAIL_FROM`: for example `Mudatex <orders@mudatex.com>`
+3. Redeploy the API. Place a test order: the confirmation email should arrive within seconds.
+
+Without these two settings no emails are sent and nothing else is affected. On Vercel's free plan the API sends pending emails right after each order action, so they do not wait for the once-a-day schedule.
+
+## 8. What is not live yet
+
 - Refund payouts: cancelling a paid order records the refund owed; paying it out is manual.
-- Customer emails and WhatsApp messages about order status.
+- WhatsApp and SMS messages about order status (email is done).
+- Trade accounts with credit terms, statements and standing orders for wholesale buyers.
 - The free Vercel and Supabase plans are for testing. Move to the paid plans before taking real orders.

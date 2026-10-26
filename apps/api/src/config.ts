@@ -33,6 +33,9 @@ const schema = z
     PAYSTACK_SECRET_KEY: z.string().regex(/^sk_(test|live)_[A-Za-z0-9]+$/).optional(),
     // Only for tests: where the payment provider's API lives. Never changed in production.
     PAYSTACK_BASE_URL: z.string().url().optional(),
+    // Order emails to customers, through Resend. Without both, no email is sent.
+    RESEND_API_KEY: z.string().min(10).optional(),
+    MAIL_FROM: z.string().min(5).max(200).optional(),
     DB_POOL_MAX: z.coerce.number().int().positive().default(10),
     // A statement running longer than this is cancelled, so one bad query cannot hold locks for long.
     DB_STATEMENT_TIMEOUT_MS: z.coerce.number().int().positive().default(20_000),

@@ -63,9 +63,11 @@ export interface ServerDeps {
   cron?: CronDeps;
   /** Card payments. Defaults to Paystack when PAYSTACK_SECRET_KEY is set; tests pass a stand-in. */
   payments?: PaymentProvider;
+  /** Hosts with no background worker: runs one delivery pass after each successful write, within a short time limit. */
+  kick?: () => Promise<unknown>;
 }
 
-export async function buildServer({ config, db, verifier, migrationsDir, cron, payments: injected }: ServerDeps): Promise<FastifyInstance> {
+export async function buildServer({ config, db, verifier, migrationsDir, cron, payments: injected, kick }: ServerDeps): Promise<FastifyInstance> {
   const verify = verifier ?? createTokenVerifier(config);
   const app = Fastify({
     logger: config.NODE_ENV === 'test' ? false : { redact: ['req.headers.authorization'] },
@@ -95,6 +97,14 @@ export async function buildServer({ config, db, verifier, migrationsDir, cron, p
   app.addHook('onSend', async (req, reply) => {
     reply.header('x-request-id', req.id);
   });
+  if (kick) {
+    app.addHook('onSend', async (req, reply, payload) => {
+      if (req.method !== 'GET' && req.method !== 'HEAD' && req.method !== 'OPTIONS' && reply.statusCode < 400) {
+        await Promise.race([kick().catch(() => undefined), new Promise((r) => setTimeout(r, 2500))]);
+      }
+      return payload;
+    });
+  }
 
   app.setErrorHandler((err, req, reply) => {
     if (err instanceof AppError) {

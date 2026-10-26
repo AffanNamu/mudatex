@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { FastifyInstance } from 'fastify';
 import { allConsumers } from './consumers.js';
+import { mailerFromConfig } from './notify/mailer.js';
 import { loadConfig } from './config.js';
 import { createPool } from './db.js';
 import { Dispatcher } from './events/dispatcher.js';
@@ -31,7 +32,7 @@ export function createHandler(env: NodeJS.ProcessEnv = process.env) {
     const dispatcher = new Dispatcher(db, {
       secretBox: createSecretBox(config.SECRETS_ENCRYPTION_KEY),
       urlPolicy: { allowHttp: config.WEBHOOK_ALLOW_HTTP, allowPrivate: config.WEBHOOK_ALLOW_PRIVATE },
-      consumers: allConsumers(),
+      consumers: allConsumers(mailerFromConfig(config)),
     });
     const cron = env.CRON_SECRET
       ? {
@@ -54,7 +55,8 @@ export function createHandler(env: NodeJS.ProcessEnv = process.env) {
           },
         }
       : undefined;
-    const app = await buildServer({ config, db, cron });
+    // With no always-on worker, a write kicks one delivery pass itself, so emails and webhooks do not wait for the daily cron.
+    const app = await buildServer({ config, db, cron, kick: () => dispatcher.runOnce() });
     await app.ready();
     return app;
   };
