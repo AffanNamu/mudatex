@@ -119,6 +119,7 @@ test('staff approve a wholesale application with a price list and credit', async
   await card.getByLabel(/Credit limit/).fill('250000');
   await card.getByLabel('Payment terms (days)').fill('45');
   await card.getByRole('button', { name: 'Approve' }).click();
+  await expect(page.getByText('Nothing here.')).toBeVisible(); // the pending list is now empty
   await page.getByLabel('Show').selectOption({ label: 'Approved' });
   const approved = page.getByRole('article', { name: 'Trade account for Zainab Fabrics' });
   await expect(approved).toContainText('Credit ₦0.00 used of ₦250,000.00 · 45 day terms');
