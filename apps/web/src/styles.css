@@ -92,3 +92,8 @@ tfoot th, tfoot td { border-bottom: 0; }
 .subnav a { padding: 8px 12px; color: var(--text); text-decoration: none; border-bottom: 3px solid transparent; }
 .subnav a.active { border-bottom-color: var(--primary); font-weight: 600; }
 .inline-form { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+
+/* setup & store pages */
+section.panel { margin: 0 0 16px; }
+section.panel h2 { font-size: 1.1rem; margin: 0 0 8px; }
+details > summary { cursor: pointer; font-weight: 600; margin: 8px 0; }

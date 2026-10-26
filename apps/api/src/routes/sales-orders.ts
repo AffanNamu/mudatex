@@ -51,8 +51,8 @@ export const salesOrderRoutes: FastifyPluginAsync<{ db: Db }> = async (app, { db
     const { rows } = await db.query(
       `SELECT o.id, o.order_no AS "orderNo", o.status, o.currency, o.total_minor AS "totalMinor", o.paid_minor AS "paidMinor",
               o.payment_method AS "paymentMethod", o.contact->>'name' AS "customerName", o.placed_at AS "placedAt",
-              o.legal_entity_id AS "legalEntityId", e.country_code AS "countryCode"
-         FROM sales_orders o JOIN legal_entities e ON e.id = o.legal_entity_id
+              o.legal_entity_id AS "legalEntityId", e.country_code AS "countryCode", cu.minor_unit AS "minorUnit"
+         FROM sales_orders o JOIN legal_entities e ON e.id = o.legal_entity_id JOIN currencies cu ON cu.code = o.currency
         WHERE ${where.join(' AND ')} ORDER BY o.placed_at DESC`,
       params,
     );

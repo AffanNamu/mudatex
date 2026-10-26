@@ -14,6 +14,10 @@ const contactBody = z
     phone: z.string().regex(/^\+?[0-9 ()-]{7,20}$/).optional(),
     email: z.string().email().max(200).optional(),
     address: z.string().max(300).optional(),
+    // where shoppers send bank transfers; shown on the order page
+    bankName: z.string().max(100).optional(),
+    accountName: z.string().max(150).optional(),
+    accountNumber: z.string().regex(/^[0-9]{6,20}$/).optional(),
   })
   .strict();
 

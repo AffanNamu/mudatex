@@ -35,8 +35,8 @@ const asNumbers = <T extends Record<string, any>>(row: T): T => {
 
 export async function readOrder(q: Pick<Db, 'query'>, where: { id?: string; orderNo?: string; customerId?: string; organizationId: string }, withPayments = false) {
   const { rows } = await q.query(
-    `SELECT ${ORDER_COLUMNS}, o.customer_id AS "customerId", o.legal_entity_id AS "legalEntityId", o.storefront_id AS "storefrontId"
-       FROM sales_orders o
+    `SELECT ${ORDER_COLUMNS}, o.customer_id AS "customerId", o.legal_entity_id AS "legalEntityId", o.storefront_id AS "storefrontId", cu.minor_unit AS "minorUnit"
+       FROM sales_orders o JOIN currencies cu ON cu.code = o.currency
       WHERE o.organization_id = $1 AND ($2::uuid IS NULL OR o.id = $2) AND ($3::text IS NULL OR o.order_no = $3) AND ($4::uuid IS NULL OR o.customer_id = $4)`,
     [where.organizationId, where.id ?? null, where.orderNo ?? null, where.customerId ?? null],
   );

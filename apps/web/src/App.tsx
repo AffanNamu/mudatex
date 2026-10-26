@@ -25,6 +25,9 @@ import { Pos } from './pages/Pos';
 import { SetPassword } from './pages/SetPassword';
 import { Procurement } from './pages/Procurement';
 import { Returns } from './pages/Returns';
+import { Orders } from './pages/Orders';
+import { Setup } from './pages/Setup';
+import { Store } from './pages/Store';
 
 /** Hides a page the person cannot use. This is a courtesy: the server refuses the requests regardless. */
 function Needs({ permission, children }: { permission: string; children: ReactNode }) {
@@ -48,6 +51,9 @@ export function App() {
         <Route path="purchasing" element={<Needs permission="procurement.read"><Procurement /></Needs>} />
         <Route path="returns" element={<Needs permission="pos.refund"><Returns /></Needs>} />
         <Route path="payments" element={<Needs permission="pos.payment.verify"><Payments /></Needs>} />
+        <Route path="orders" element={<Needs permission="orders.read"><Orders /></Needs>} />
+        <Route path="store" element={<Needs permission="storefront.manage"><Store /></Needs>} />
+        <Route path="setup" element={<Needs permission="org.manage"><Setup /></Needs>} />
         <Route path="catalogue" element={<Needs permission="catalog.read"><Catalogue /></Needs>} />
         <Route path="inventory" element={<Needs permission="inventory.read"><Inventory /></Needs>} />
         <Route path="accounting" element={<Needs permission="accounting.read"><AccountingLayout /></Needs>}>

@@ -5,11 +5,14 @@ const NAV: { to: string; label: string; needs: string }[] = [
   { to: '/pos', label: 'Point of sale', needs: 'pos.sell' },
   { to: '/returns', label: 'Returns', needs: 'pos.refund' },
   { to: '/payments', label: 'Confirm payments', needs: 'pos.payment.verify' },
+  { to: '/orders', label: 'Online orders', needs: 'orders.read' },
+  { to: '/store', label: 'Online store', needs: 'storefront.manage' },
   { to: '/catalogue', label: 'Catalogue', needs: 'catalog.read' },
   { to: '/inventory', label: 'Inventory', needs: 'inventory.read' },
   { to: '/purchasing', label: 'Purchasing', needs: 'procurement.read' },
   { to: '/manufacturing', label: 'Manufacturing', needs: 'manufacturing.read' },
   { to: '/accounting', label: 'Accounting', needs: 'accounting.read' },
+  { to: '/setup', label: 'Setup', needs: 'org.manage' },
   { to: '/access', label: 'People & access', needs: 'iam.manage' },
 ];
 

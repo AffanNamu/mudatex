@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { SignJWT } from 'jose';
 import { z } from 'zod';
-import { authorize, grantsFor } from '../auth/authorize.js';
+import { authorize, grantsFor, grantsForAny } from '../auth/authorize.js';
 import { PERMISSIONS, type Permission } from '../auth/permissions.js';
 import type { Config } from '../config.js';
 import type { Db } from '../db.js';
@@ -59,7 +59,7 @@ export const clientReadRoutes: FastifyPluginAsync<{ db: Db }> = async (app, { db
   });
 
   app.get('/pricing/price-lists', async (req) => {
-    const grants = await grantsFor(db, req.actor, 'pos.read');
+    const grants = await grantsForAny(db, req.actor, ['pos.read', 'pricing.manage', 'storefront.manage']);
     const { rows } = await db.query<{ legalEntityId: string; countryCode: string }>(
       `SELECT p.id, p.legal_entity_id AS "legalEntityId", e.country_code AS "countryCode", p.name, p.currency
          FROM price_lists p JOIN legal_entities e ON e.id = p.legal_entity_id WHERE p.organization_id = $1 ORDER BY p.name`,
