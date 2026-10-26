@@ -94,6 +94,7 @@ function StoreEditor({ store, onChanged }: { store: Storefront; onChanged(): voi
       <Departments storeId={store.id} depts={depts} />
       <Publishing store={store} depts={depts.data ?? []} onChanged={onChanged} />
       <Delivery storeId={store.id} />
+      <Coupons storeId={store.id} />
     </>
   );
 }
@@ -261,6 +262,53 @@ function Delivery({ storeId }: { storeId: string }) {
         <Field label="Days (from)"><input type="number" min={0} value={min} onChange={(e) => setMin(e.target.value)} /></Field>
         <Field label="Days (to)"><input type="number" min={0} value={max} onChange={(e) => setMax(e.target.value)} /></Field>
         <div className="form-actions"><button className="btn btn-primary" disabled={a.busy || !name}>Add zone</button></div>
+      </form>
+      <ErrorBanner error={a.error} />{a.ok && <Notice tone="ok">{a.ok}</Notice>}
+    </section>
+  );
+}
+
+interface Coupon { id: string; code: string; description: string | null; percentBps: number; minSubtotalMinor: number; maxRedemptions: number | null; perCustomerLimit: number; startsAt: string | null; endsAt: string | null; active: boolean; timesUsed: number }
+
+function Coupons({ storeId }: { storeId: string }) {
+  const coupons = useLoad<Coupon[]>(`/v1/storefronts/${storeId}/coupons`);
+  const [code, setCode] = useState(''); const [pct, setPct] = useState('10'); const [min, setMin] = useState(''); const [max, setMax] = useState(''); const [per, setPer] = useState('1');
+  const [from, setFrom] = useState(''); const [to, setTo] = useState('');
+  const a = useAction();
+  const bps = Math.round(Number(pct) * 100);
+  const valid = /^[A-Za-z0-9]{3,20}$/.test(code) && bps >= 1 && bps <= 9000;
+  const add = (e: FormEvent) => {
+    e.preventDefault();
+    return a.run(() => api(`/v1/storefronts/${storeId}/coupons`, { method: 'POST', body: {
+      code: code.toUpperCase(), percentBps: bps, minSubtotalMinor: minorOf(min || '0'), perCustomerLimit: Number(per),
+      ...(max ? { maxRedemptions: Number(max) } : {}), ...(from ? { startsAt: new Date(from).toISOString() } : {}), ...(to ? { endsAt: new Date(to).toISOString() } : {}),
+    } }), `Created ${code.toUpperCase()}.`, () => { setCode(''); setMin(''); setMax(''); coupons.reload(); });
+  };
+  const toggle = (c: Coupon) => a.run(() => api(`/v1/storefronts/${storeId}/coupons/${c.id}`, { method: 'PUT', body: { active: !c.active } }), `${c.code} is now ${c.active ? 'off' : 'on'}.`, coupons.reload);
+  return (
+    <section className="panel" aria-label="Coupons"><h2>Coupons</h2>
+      <p className="muted">A coupon takes a percentage off the whole basket. The shop checks the code, dates and limits on the server.</p>
+      <ErrorBanner error={coupons.error} />
+      <div className="table-wrap"><table>
+        <thead><tr><th scope="col">Code</th><th scope="col">Off</th><th scope="col">Used</th><th scope="col">Limits</th><th scope="col">Status</th><th scope="col"><span className="sr-only">Switch</span></th></tr></thead>
+        <tbody>
+          {(coupons.data ?? []).map((c) => (
+            <tr key={c.id}><th scope="row">{c.code}{c.description && <div className="muted">{c.description}</div>}</th><td>{c.percentBps / 100}%</td><td>{c.timesUsed}{c.maxRedemptions ? ` of ${c.maxRedemptions}` : ''}</td>
+              <td>{c.perCustomerLimit} per customer{c.minSubtotalMinor ? `, min ${(c.minSubtotalMinor / 100).toLocaleString()}` : ''}{c.endsAt ? `, ends ${new Date(c.endsAt).toLocaleDateString()}` : ''}</td>
+              <td>{c.active ? 'On' : 'Off'}</td><td><button className="btn" onClick={() => toggle(c)} disabled={a.busy}>{c.active ? 'Switch off' : 'Switch on'}</button></td></tr>
+          ))}
+          {coupons.data?.length === 0 && <tr><td colSpan={6} className="muted">No coupons yet.</td></tr>}
+        </tbody>
+      </table></div>
+      <form className="form-grid" onSubmit={add}>
+        <Field label="Code" hint="3–20 letters or digits, e.g. WELCOME10"><input required value={code} onChange={(e) => setCode(e.target.value)} maxLength={20} /></Field>
+        <Field label="Percent off" error={pct && (bps < 1 || bps > 9000) ? 'Between 0.01 and 90' : null}><input required inputMode="decimal" value={pct} onChange={(e) => setPct(e.target.value)} /></Field>
+        <Field label="Minimum basket" hint="Optional"><input inputMode="decimal" value={min} onChange={(e) => setMin(e.target.value)} /></Field>
+        <Field label="Total uses allowed" hint="Optional"><input type="number" min={1} value={max} onChange={(e) => setMax(e.target.value)} /></Field>
+        <Field label="Uses per customer"><input type="number" min={1} value={per} onChange={(e) => setPer(e.target.value)} /></Field>
+        <Field label="Starts" hint="Optional"><input type="datetime-local" value={from} onChange={(e) => setFrom(e.target.value)} /></Field>
+        <Field label="Ends" hint="Optional"><input type="datetime-local" value={to} onChange={(e) => setTo(e.target.value)} /></Field>
+        <div className="form-actions"><button className="btn btn-primary" disabled={a.busy || !valid}>Create coupon</button></div>
       </form>
       <ErrorBanner error={a.error} />{a.ok && <Notice tone="ok">{a.ok}</Notice>}
     </section>

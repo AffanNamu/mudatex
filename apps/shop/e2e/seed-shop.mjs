@@ -50,6 +50,7 @@ export async function seedShop(API) {
   await publish('ATP-001', { slug: 'atampa-blue', title: 'Atampa Blue', brand: 'Empire Atampa', departmentId: ankara });
   await post(`/v1/storefronts/${sf.id}/delivery-zones`, { name: 'Kano', countryCode: 'NG', states: ['Kano'], feeMinor: 150000, freeOverMinor: 10000000, etaDaysMin: 1, etaDaysMax: 2 });
   await post(`/v1/storefronts/${sf.id}/delivery-zones`, { name: 'Nigeria', countryCode: 'NG', feeMinor: 450000, etaDaysMin: 3, etaDaysMax: 6 });
+  await post(`/v1/storefronts/${sf.id}/coupons`, { code: 'WELCOME10', description: 'Welcome offer', percentBps: 1000, perCustomerLimit: 1 });
   await call(a, 'PUT', `/v1/storefronts/${sf.id}`, { status: 'live' });
   return { adminToken: a, storefrontId: sf.id, variants };
 }

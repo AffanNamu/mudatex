@@ -74,6 +74,17 @@ const zoneBody = z.object({
   active: z.boolean().default(true),
 });
 
+const couponBody = z.object({
+  code: z.string().trim().toUpperCase().regex(/^[A-Z0-9]{3,20}$/, 'Use 3 to 20 letters or digits'),
+  description: z.string().trim().max(200).optional(),
+  percentBps: z.number().int().min(1).max(9000),
+  minSubtotalMinor: z.number().int().min(0).max(1_000_000_000_000).default(0),
+  maxRedemptions: z.number().int().positive().nullable().optional(),
+  perCustomerLimit: z.number().int().positive().max(1000).default(1),
+  startsAt: z.string().datetime().nullable().optional(),
+  endsAt: z.string().datetime().nullable().optional(),
+});
+
 const STOREFRONT_COLUMNS = `s.id, s.legal_entity_id AS "legalEntityId", s.slug, s.name, s.price_list_id AS "priceListId", s.currency,
   s.stock_location_ids AS "stockLocationIds", s.status, s.tagline, s.contact, s.site_url AS "siteUrl"`;
 
@@ -346,5 +357,49 @@ export const storefrontAdminRoutes: FastifyPluginAsync<{ db: Db }> = async (app,
       await audit(tx, req, 'storefront.zone.delete', 'storefront', params.id, { zoneId: params.zoneId });
     });
     return reply.status(204).send();
+  });
+
+  // ---- coupons
+  const couponColumns = `c.id, c.code, c.description, c.percent_bps AS "percentBps", c.min_subtotal_minor AS "minSubtotalMinor", c.max_redemptions AS "maxRedemptions",
+    c.per_customer_limit AS "perCustomerLimit", c.starts_at AS "startsAt", c.ends_at AS "endsAt", c.active,
+    (SELECT count(*)::int FROM sales_orders o WHERE o.coupon_id = c.id AND o.status NOT IN ('cancelled', 'expired')) AS "timesUsed"`;
+  const couponOut = (r: any) => ({ ...r, minSubtotalMinor: Number(r.minSubtotalMinor) });
+
+  app.get('/storefronts/:id/coupons', async (req) => {
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    await managed(db, req, id);
+    const { rows } = await db.query(`SELECT ${couponColumns} FROM coupons c WHERE c.storefront_id = $1 ORDER BY c.created_at DESC`, [id]);
+    return rows.map(couponOut);
+  });
+
+  app.post('/storefronts/:id/coupons', async (req, reply) => {
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const body = couponBody.parse(req.body);
+    if (body.startsAt && body.endsAt && body.endsAt <= body.startsAt) throw invalid('The end must be after the start');
+    const created = await withTx(db, async (tx) => {
+      await managed(tx, req, id);
+      const { rows } = await tx.query(
+        `INSERT INTO coupons (organization_id, storefront_id, code, description, percent_bps, min_subtotal_minor, max_redemptions, per_customer_limit, starts_at, ends_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
+        [req.actor.organizationId, id, body.code, body.description ?? null, body.percentBps, body.minSubtotalMinor, body.maxRedemptions ?? null, body.perCustomerLimit, body.startsAt ?? null, body.endsAt ?? null],
+      );
+      await audit(tx, req, 'storefront.coupon.create', 'storefront', id, { code: body.code, percentBps: body.percentBps });
+      const full = await tx.query(`SELECT ${couponColumns} FROM coupons c WHERE c.id = $1`, [rows[0].id]);
+      return couponOut(full.rows[0]);
+    });
+    return reply.status(201).send(created);
+  });
+
+  app.put('/storefronts/:id/coupons/:couponId', async (req) => {
+    const params = z.object({ id: uuid, couponId: uuid }).parse(req.params);
+    const body = z.object({ active: z.boolean() }).parse(req.body);
+    return withTx(db, async (tx) => {
+      await managed(tx, req, params.id);
+      const done = await tx.query('UPDATE coupons SET active = $3 WHERE id = $2 AND storefront_id = $1', [params.id, params.couponId, body.active]);
+      if (!done.rowCount) throw notFound('Coupon');
+      await audit(tx, req, 'storefront.coupon.update', 'storefront', params.id, { couponId: params.couponId, active: body.active });
+      const { rows } = await tx.query(`SELECT ${couponColumns} FROM coupons c WHERE c.id = $1`, [params.couponId]);
+      return couponOut(rows[0]);
+    });
   });
 };

@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
+import type { TokenVerifier } from '../auth/token.js';
 import type { Db } from '../db.js';
 import { invalid } from '../errors.js';
 import { MAX_ORDER_LINES, quoteBasket } from '../shop/orders.js';
@@ -32,6 +33,7 @@ const basketBody = z.object({
     unitId: z.string().uuid().optional(),
   })).min(1).max(MAX_ORDER_LINES),
   to: z.object({ countryCode: z.string().regex(/^[A-Za-z]{2}$/), state: z.string().trim().min(1).max(80) }).optional(),
+  couponCode: z.string().trim().min(3).max(20).optional(),
 });
 
 const enquiryBody = z.object({
@@ -51,7 +53,7 @@ const escapeLike = (s: string) => s.replace(/[\\%_]/g, (c) => `\\${c}`);
  * The public shop window. No sign-in; everything is derived on the server, and storefronts that are not live do not
  * exist as far as these endpoints are concerned.
  */
-export const shopPublicRoutes: FastifyPluginAsync<{ db: Db; cardPayments?: boolean }> = async (app, { db, cardPayments = false }) => {
+export const shopPublicRoutes: FastifyPluginAsync<{ db: Db; verify?: TokenVerifier; cardPayments?: boolean }> = async (app, { db, verify, cardPayments = false }) => {
   app.addHook('onSend', async (req, reply) => {
     if (req.method === 'GET' && reply.statusCode === 200) {
       reply.header('cache-control', 'public, max-age=30, s-maxage=60, stale-while-revalidate=300');
@@ -158,7 +160,17 @@ export const shopPublicRoutes: FastifyPluginAsync<{ db: Db; cardPayments?: boole
     const { slug } = slugParam.parse(req.params);
     const body = basketBody.parse(req.body);
     const sf = await loadLiveStorefront(db, slug);
-    return quoteBasket(db, sf, body.lines, body.to);
+    // A signed-in shopper gets coupon limits checked against their own history; anyone else still gets a price.
+    let customerId: string | null = null;
+    const header = req.headers.authorization;
+    if (verify && header?.startsWith('Bearer ')) {
+      try {
+        const { subject } = await verify(header.slice(7));
+        const c = await db.query<{ id: string }>('SELECT id FROM customers WHERE external_subject = $1 AND organization_id = $2', [subject, sf.organizationId]);
+        customerId = c.rows[0]?.id ?? null;
+      } catch { /* an unreadable token is treated as no token */ }
+    }
+    return quoteBasket(db, sf, body.lines, body.to, body.couponCode, customerId);
   });
 
   // A message from the public site. Quietly accepted and dropped when the hidden field is filled.

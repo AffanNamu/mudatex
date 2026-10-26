@@ -36,12 +36,12 @@ export interface Address {
 export interface BasketQuote {
   currency: string;
   lines: { variantId: string; sku: string; title: string; quantity: string; unitPrice: string; totalMinor: number; inStock: boolean; available: number }[];
-  subtotalMinor: number; taxMinor: number; deliveryFeeMinor: number | null; totalMinor: number | null; allInStock: boolean;
+  subtotalMinor: number; taxMinor: number; discountMinor: number; coupon: { code: string; percentBps: number } | null; deliveryFeeMinor: number | null; totalMinor: number | null; allInStock: boolean;
   delivery: { zone: string; feeMinor: number; freeOverMinor: number | null; etaDays: { min: number; max: number } } | null;
 }
 
 export interface Order {
-  id: string; orderNo: string; status: string; currency: string; subtotalMinor: number; deliveryFeeMinor: number; totalMinor: number; paidMinor: number;
+  id: string; orderNo: string; status: string; currency: string; discountMinor: number; couponCode: string | null; subtotalMinor: number; deliveryFeeMinor: number; totalMinor: number; paidMinor: number;
   paymentMethod: string; carrier: string | null; trackingRef: string | null; expiresAt: string; placedAt: string;
   delivery: { recipient: string; line1: string; line2: string | null; city: string; state: string; zone: string; etaDays: { min: number; max: number } };
   lines: { lineNo: number; title: string; sku: string; quantity: string; unitPrice: string; totalMinor: number }[];

@@ -14,6 +14,7 @@ export const MAX_ORDER_LINES = 50;
 
 export interface PlaceOrderInput {
   lines: { variantId: string; quantity: string; unitId?: string }[];
+  couponCode?: string;
   addressId: string;
   paymentMethod: 'card' | 'bank_transfer';
   note?: string;
@@ -24,9 +25,9 @@ export type Actor = { type: 'customer'; id: string } | { type: 'staff'; id: stri
 const ORDER_COLUMNS = `o.id, o.order_no AS "orderNo", o.status, o.currency, o.subtotal_minor AS "subtotalMinor", o.tax_minor AS "taxMinor",
   o.delivery_fee_minor AS "deliveryFeeMinor", o.total_minor AS "totalMinor", o.paid_minor AS "paidMinor", o.refund_due_minor AS "refundDueMinor",
   o.payment_method AS "paymentMethod", o.contact, o.delivery, o.note, o.carrier, o.tracking_ref AS "trackingRef", o.cancel_reason AS "cancelReason",
-  o.expires_at AS "expiresAt", o.placed_at AS "placedAt", o.paid_at AS "paidAt", o.shipped_at AS "shippedAt", o.delivered_at AS "deliveredAt"`;
+  o.discount_minor AS "discountMinor", (SELECT code FROM coupons WHERE id = o.coupon_id) AS "couponCode", o.expires_at AS "expiresAt", o.placed_at AS "placedAt", o.paid_at AS "paidAt", o.shipped_at AS "shippedAt", o.delivered_at AS "deliveredAt"`;
 
-const MONEY_FIELDS = ['subtotalMinor', 'taxMinor', 'deliveryFeeMinor', 'totalMinor', 'paidMinor', 'refundDueMinor'] as const;
+const MONEY_FIELDS = ['discountMinor', 'subtotalMinor', 'taxMinor', 'deliveryFeeMinor', 'totalMinor', 'paidMinor', 'refundDueMinor'] as const;
 const asNumbers = <T extends Record<string, any>>(row: T): T => {
   const out: Record<string, any> = { ...row };
   for (const f of MONEY_FIELDS) if (f in out) out[f] = Number(out[f]);
@@ -44,14 +45,14 @@ export async function readOrder(q: Pick<Db, 'query'>, where: { id?: string; orde
   const order = asNumbers(rows[0]);
   const lines = await q.query(
     `SELECT line_no AS "lineNo", variant_id AS "variantId", sku, title, quantity, unit_price AS "unitPrice", tax_code AS "taxCode",
-            gross_minor AS "grossMinor", tax_minor AS "taxMinor", total_minor AS "totalMinor"
+            gross_minor AS "grossMinor", discount_minor AS "discountMinor", tax_minor AS "taxMinor", total_minor AS "totalMinor"
        FROM sales_order_lines WHERE order_id = $1 ORDER BY line_no`,
     [order.id],
   );
   const events = await q.query(`SELECT status, actor_type AS "actorType", note, at FROM sales_order_events WHERE order_id = $1 ORDER BY id`, [order.id]);
   const result: Record<string, unknown> = {
     ...order,
-    lines: lines.rows.map((l) => ({ ...l, quantity: normalize(l.quantity), unitPrice: normalize(l.unitPrice), grossMinor: Number(l.grossMinor), taxMinor: Number(l.taxMinor), totalMinor: Number(l.totalMinor) })),
+    lines: lines.rows.map((l) => ({ ...l, quantity: normalize(l.quantity), unitPrice: normalize(l.unitPrice), grossMinor: Number(l.grossMinor), discountMinor: Number(l.discountMinor), taxMinor: Number(l.taxMinor), totalMinor: Number(l.totalMinor) })),
     events: events.rows,
   };
   if (withPayments) {
@@ -92,6 +93,46 @@ async function allocate(tx: Tx, sf: Storefront, variantId: string, quantity: str
   return { allocs, missing: fromScaled(need > 0n ? need : 0n) };
 }
 
+export interface CouponInfo { id: string; code: string; percentBps: number; minSubtotalMinor: bigint }
+
+/**
+ * Finds the coupon a shopper typed and checks every rule: store, switch, dates, minimum basket, total uses and uses
+ * by this customer (orders that were cancelled or lapsed do not count). `lock` serialises concurrent checkouts.
+ */
+export async function resolveCoupon(tx: Tx, sf: Storefront, rawCode: string, basketMinor: bigint, customerId: string | null, lock: boolean): Promise<CouponInfo> {
+  const code = rawCode.trim().toUpperCase();
+  const { rows } = await tx.query<{ id: string; percent_bps: number; min_subtotal_minor: string; max_redemptions: number | null; per_customer_limit: number; starts_at: Date | null; ends_at: Date | null; active: boolean }>(
+    `SELECT id, percent_bps, min_subtotal_minor, max_redemptions, per_customer_limit, starts_at, ends_at, active
+       FROM coupons WHERE storefront_id = $1 AND code = $2 ${lock ? 'FOR UPDATE' : ''}`,
+    [sf.id, code],
+  );
+  const c = rows[0];
+  const now = new Date();
+  if (!c || !c.active) throw invalid('That coupon code is not valid');
+  if (c.starts_at && c.starts_at > now) throw invalid('That coupon is not active yet');
+  if (c.ends_at && c.ends_at <= now) throw invalid('That coupon has expired');
+  if (basketMinor < BigInt(c.min_subtotal_minor)) throw invalid('Your basket is below the minimum for this coupon');
+  const used = await tx.query<{ total: number; mine: number }>(
+    `SELECT count(*)::int AS total, count(*) FILTER (WHERE customer_id = $2)::int AS mine
+       FROM sales_orders WHERE coupon_id = $1 AND status NOT IN ('cancelled', 'expired')`,
+    [c.id, customerId],
+  );
+  if (c.max_redemptions !== null && used.rows[0]!.total >= c.max_redemptions) throw invalid('That coupon has been fully used');
+  if (customerId && used.rows[0]!.mine >= c.per_customer_limit) throw invalid('You have already used that coupon');
+  return { id: c.id, code, percentBps: c.percent_bps, minSubtotalMinor: BigInt(c.min_subtotal_minor) };
+}
+
+/** Prices the lines, applying the coupon (checked against the undiscounted basket) when one is named. */
+async function priceWithCoupon(tx: Tx, sf: Storefront, lines: PlaceOrderInput['lines'], couponCode: string | undefined, customerId: string | null, lock: boolean) {
+  const base = { organizationId: sf.organizationId, priceListId: sf.priceListId, minorUnit: sf.minorUnit, maxDiscountBps: 0, mayOverride: false, lotsOptional: true, now: new Date() };
+  const plain = await priceSaleLines(tx, base, lines);
+  if (!couponCode?.trim()) return { priced: plain, coupon: null as CouponInfo | null };
+  const coupon = await resolveCoupon(tx, sf, couponCode, saleTotals(plain).total, customerId, lock);
+  // Coupons are the shop's own offer, so they are exempt from a till's cashier discount limit.
+  const priced = await priceSaleLines(tx, { ...base, mayOverride: true }, lines.map((l) => ({ ...l, discount: { type: 'percent' as const, basisPoints: coupon.percentBps } })));
+  return { priced, coupon };
+}
+
 /** Only published, active products of this storefront can be bought, whatever the client sends. */
 async function sellableTitles(tx: Pick<Db, 'query'>, sf: Storefront, ids: string[]): Promise<Map<string, string>> {
   const sellable = await tx.query<{ variant_id: string; title: string }>(
@@ -110,16 +151,12 @@ async function sellableTitles(tx: Pick<Db, 'query'>, sf: Storefront, ids: string
  * What the basket would cost right now, without holding anything: the same pricing as checkout, plus whether each line
  * is in stock and, when a place is given, the delivery fee. The basket page shows this so no total is ever computed by the browser.
  */
-export async function quoteBasket(db: Db, sf: Storefront, lines: PlaceOrderInput['lines'], to?: { countryCode: string; state: string }) {
+export async function quoteBasket(db: Db, sf: Storefront, lines: PlaceOrderInput['lines'], to?: { countryCode: string; state: string }, couponCode?: string, customerId: string | null = null) {
   const ids = lines.map((l) => l.variantId);
   if (new Set(ids).size !== ids.length) throw invalid('Each product variant can appear once');
   return withTx(db, async (tx) => {
     const titles = await sellableTitles(tx, sf, ids);
-    const priced = await priceSaleLines(
-      tx,
-      { organizationId: sf.organizationId, priceListId: sf.priceListId, minorUnit: sf.minorUnit, maxDiscountBps: 0, mayOverride: false, lotsOptional: true, now: new Date() },
-      lines,
-    );
+    const { priced, coupon } = await priceWithCoupon(tx, sf, lines, couponCode, customerId, false);
     const stock = await availability(tx as unknown as Db, sf, ids);
     const out = priced.map((l) => {
       const have = toScaled(stock.get(l.variantId) ?? '0');
@@ -133,6 +170,7 @@ export async function quoteBasket(db: Db, sf: Storefront, lines: PlaceOrderInput
     const deliveryFee = BigInt(delivery?.feeMinor ?? 0);
     return {
       currency: sf.currency, lines: out, subtotalMinor: Number(totals.total), taxMinor: Number(totals.tax),
+      discountMinor: Number(totals.discount), coupon: coupon ? { code: coupon.code, percentBps: coupon.percentBps } : null,
       delivery, deliveryFeeMinor: delivery ? Number(deliveryFee) : null, totalMinor: delivery ? Number(totals.total + deliveryFee) : null,
       allInStock: out.every((l) => l.inStock),
     };
@@ -166,11 +204,7 @@ export async function placeOrder(db: Db, sf: Storefront, customerId: string, inp
     const titles = await sellableTitles(tx, sf, ids);
 
     const now = new Date();
-    const priced = await priceSaleLines(
-      tx,
-      { organizationId: sf.organizationId, priceListId: sf.priceListId, minorUnit: sf.minorUnit, maxDiscountBps: 0, mayOverride: false, lotsOptional: true, now },
-      input.lines,
-    );
+    const { priced, coupon } = await priceWithCoupon(tx, sf, input.lines, input.couponCode, customerId, true);
 
     const orderId = crypto.randomUUID();
     const shortages: unknown[] = [];
@@ -199,16 +233,16 @@ export async function placeOrder(db: Db, sf: Storefront, customerId: string, inp
     };
     await tx.query(
       `INSERT INTO sales_orders (id, organization_id, legal_entity_id, storefront_id, customer_id, order_no, status, currency, subtotal_minor, tax_minor,
-                                 delivery_fee_minor, total_minor, payment_method, contact, delivery, note, client_key, request_hash, expires_at)
-       VALUES ($1,$2,$3,$4,$5,$6,'pending_payment',$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
+                                 delivery_fee_minor, total_minor, payment_method, contact, delivery, note, client_key, request_hash, expires_at, discount_minor, coupon_id)
+       VALUES ($1,$2,$3,$4,$5,$6,'pending_payment',$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`,
       [orderId, sf.organizationId, sf.legalEntityId, sf.id, customerId, orderNo, sf.currency, linesTotal, totals.tax, deliveryFee, total, input.paymentMethod,
-       JSON.stringify(contact), JSON.stringify(delivery), input.note ?? null, clientKey, hash, expiresAt],
+       JSON.stringify(contact), JSON.stringify(delivery), input.note ?? null, clientKey, hash, expiresAt, totals.discount, coupon?.id ?? null],
     );
     for (const [i, l] of priced.entries()) {
       await tx.query(
-        `INSERT INTO sales_order_lines (order_id, line_no, variant_id, sku, title, quantity, unit_price, tax_code, tax_rate, tax_inclusive, gross_minor, tax_minor, total_minor)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
-        [orderId, i + 1, l.variantId, l.sku, titles.get(l.variantId), l.quantity, l.unitPrice, l.tax?.code ?? null, l.tax?.rate ?? null, l.tax?.inclusive ?? null, l.p.gross, l.p.tax, l.p.total],
+        `INSERT INTO sales_order_lines (order_id, line_no, variant_id, sku, title, quantity, unit_price, tax_code, tax_rate, tax_inclusive, gross_minor, tax_minor, total_minor, discount_minor)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+        [orderId, i + 1, l.variantId, l.sku, titles.get(l.variantId), l.quantity, l.unitPrice, l.tax?.code ?? null, l.tax?.rate ?? null, l.tax?.inclusive ?? null, l.p.gross, l.p.tax, l.p.total, l.p.discount],
       );
       for (const a of reservations[i]!) {
         await createReservation(tx, { organizationId: sf.organizationId, userId: null, locationId: a.locationId, variantId: l.variantId, lotId: a.lotId, quantity: a.quantity, referenceType: 'sales_order', referenceId: orderId });

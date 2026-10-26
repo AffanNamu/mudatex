@@ -51,7 +51,7 @@ function AddressForm({ onSaved, token, first }: { onSaved: (a: Address) => void;
 
 function Checkout() {
   const { token } = useAuth();
-  const { lines, clear, store } = useCart();
+  const { lines, clear, store, coupon } = useCart();
   const router = useRouter();
   const money = (m: number) => formatMoney(m, store.currency, store.minorUnit);
   const [addresses, setAddresses] = useState<Address[] | null>(null);
@@ -80,24 +80,24 @@ function Checkout() {
   useEffect(() => {
     if (!lines.length) return;
     let cancelled = false;
-    shopRequest<BasketQuote>('/basket', { body: { lines: lines.map((l) => ({ variantId: l.variantId, quantity: l.quantity })), ...(address ? { to: { countryCode: address.countryCode, state: address.state } } : {}) } })
+    shopRequest<BasketQuote>('/basket', { body: { lines: lines.map((l) => ({ variantId: l.variantId, quantity: l.quantity })), ...(coupon ? { couponCode: coupon } : {}), ...(address ? { to: { countryCode: address.countryCode, state: address.state } } : {}) } })
       .then((q) => { if (!cancelled) { setQuote(q); setQuoteError(''); } })
       .catch((err: Error) => { if (!cancelled) { setQuote(null); setQuoteError(err.message); } });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [basket, address?.id]);
+  }, [basket, address?.id, coupon]);
 
   if (!lines.length) return <div className="empty"><h1>Your basket is empty</h1><Link className="btn" href="/shop">Browse the shop</Link></div>;
 
   const place = async () => {
     if (!token || !address || !quote) return;
     // One key per distinct checkout, so a double click or a retry after a bad connection cannot create a second order.
-    const sig = JSON.stringify([basket, address.id, method, note]);
+    const sig = JSON.stringify([basket, address.id, method, note, coupon]);
     if (attempt.current?.sig !== sig) attempt.current = { sig, key: crypto.randomUUID() };
     setPlacing(true); setError('');
     try {
       const order = await shopRequest<Order>('/me/orders', { token, key: attempt.current.key, body: {
-        lines: lines.map((l) => ({ variantId: l.variantId, quantity: l.quantity })), addressId: address.id, paymentMethod: method, ...(note.trim() ? { note: note.trim() } : {}),
+        lines: lines.map((l) => ({ variantId: l.variantId, quantity: l.quantity })), addressId: address.id, paymentMethod: method, ...(coupon ? { couponCode: coupon } : {}), ...(note.trim() ? { note: note.trim() } : {}),
       } });
       clear();
       router.push(`/orders/${order.orderNo}?placed=1${method === 'card' ? '&pay=1' : ''}`);
@@ -150,6 +150,7 @@ function Checkout() {
           {quote?.lines.map((l) => <div className="row spread small" key={l.variantId}><span>{l.title} × {trimQty(l.quantity)}</span><span>{money(l.totalMinor)}</span></div>)}
           <dl>
             <dt>Subtotal</dt><dd>{quote ? money(quote.subtotalMinor) : '—'}</dd>
+            {quote?.coupon && <><dt className="ok">Coupon {quote.coupon.code}</dt><dd className="ok">−{money(quote.discountMinor)}</dd></>}
             <dt>Delivery</dt><dd>{quote?.deliveryFeeMinor != null ? (quote.deliveryFeeMinor === 0 ? 'Free' : money(quote.deliveryFeeMinor)) : 'Choose an address'}</dd>
           </dl>
           <dl className="total"><dt>Total</dt><dd>{quote?.totalMinor != null ? money(quote.totalMinor) : '—'}</dd></dl>

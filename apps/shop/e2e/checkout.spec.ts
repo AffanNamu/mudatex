@@ -154,3 +154,49 @@ test.describe('paying by card', () => {
     await expect(page.getByRole('button', { name: 'Pay now' })).toHaveCount(0);
   });
 });
+
+test.describe('coupons', () => {
+  test('a valid code is priced by the server, a bad one is explained, and a used one cannot be used twice', async ({ page }) => {
+    await signUp(page, uniqueEmail('coupon'), '/account');
+    await completeProfile(page, 'Kemi Ade', '+2348066666666');
+    await page.goto('/product/atampa-blue');
+    await page.getByLabel(/Quantity/).fill('2');
+    await page.getByRole('button', { name: 'Add to basket' }).click();
+    await page.goto('/cart');
+    const summary = page.getByLabel('Order summary');
+    await expect(summary.getByText('₦3,870.00')).toBeVisible(); // 2 x 1,800 + 7.5%
+
+    await summary.getByLabel('Coupon code').fill('nonsense');
+    await summary.getByRole('button', { name: 'Apply' }).click();
+    await expect(page.getByText('That coupon code is not valid')).toBeVisible();
+    await expect(summary.getByText('₦3,870.00')).toBeVisible();
+
+    await summary.getByLabel('Coupon code').fill('welcome10');
+    await summary.getByRole('button', { name: 'Apply' }).click();
+    await expect(summary.getByText(/Coupon WELCOME10 \(10% off\)/)).toBeVisible();
+    await expect(summary.getByText('₦3,483.00')).toBeVisible(); // 3,600 - 10% = 3,240 + 7.5%
+
+    await page.getByRole('link', { name: 'Checkout' }).click();
+    await page.getByLabel('Recipient').fill('Kemi Ade');
+    await page.getByLabel('Phone', { exact: true }).fill('+2348066666666');
+    await page.getByLabel('Address', { exact: true }).fill('9 Ahmadu Bello Way');
+    await page.getByLabel('City').fill('Kano');
+    await page.getByLabel('State').fill('Kano');
+    await page.getByRole('button', { name: 'Save address' }).click();
+    await expect(page.getByLabel('Order summary').getByText('₦4,983.00')).toBeVisible(); // + 1,500 delivery
+    await page.getByRole('button', { name: 'Place order' }).click();
+    await expect(page).toHaveURL(/\/orders\/SO-/);
+    await expect(page.getByText(/Coupon WELCOME10/)).toBeVisible();
+    await expect(page.getByText(/saved/)).toBeVisible();
+
+    // the same shopper cannot use it again
+    await page.goto('/cart');
+    await expect(page.getByRole('heading', { name: 'Your basket is empty' })).toBeVisible();
+    await page.goto('/product/atampa-blue');
+    await page.getByRole('button', { name: 'Add to basket' }).click();
+    await page.goto('/cart');
+    await page.getByLabel('Coupon code').fill('WELCOME10');
+    await page.getByRole('button', { name: 'Apply' }).click();
+    await expect(page.getByText(/already used that coupon/)).toBeVisible();
+  });
+});

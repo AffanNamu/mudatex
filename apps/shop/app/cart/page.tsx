@@ -3,12 +3,15 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { shopRequest } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
 import { useCart } from '@/lib/cart';
 import { formatMoney, trimQty } from '@/lib/format';
 import type { BasketQuote } from '@/lib/types';
 
 export default function CartPage() {
-  const { lines, setQuantity, remove, store } = useCart();
+  const { lines, setQuantity, remove, store, coupon, setCoupon } = useCart();
+  const { token } = useAuth();
+  const [typed, setTyped] = useState('');
   const [quote, setQuote] = useState<BasketQuote | null>(null);
   const [problem, setProblem] = useState('');
   const key = JSON.stringify(lines.map((l) => [l.variantId, l.quantity]));
@@ -18,13 +21,17 @@ export default function CartPage() {
     if (!lines.length) { setQuote(null); setProblem(''); return; }
     let cancelled = false;
     const t = setTimeout(() => {
-      shopRequest<BasketQuote>('/basket', { body: { lines: lines.map((l) => ({ variantId: l.variantId, quantity: l.quantity })) } })
+      shopRequest<BasketQuote>('/basket', { body: { lines: lines.map((l) => ({ variantId: l.variantId, quantity: l.quantity })), ...(coupon ? { couponCode: coupon } : {}) }, ...(token ? { token } : {}) })
         .then((q) => { if (!cancelled) { setQuote(q); setProblem(''); } })
-        .catch((err: Error) => { if (!cancelled) { setQuote(null); setProblem(err.message); } });
+        .catch((err: Error) => {
+          if (cancelled) return;
+          setQuote(null); setProblem(err.message);
+          if (coupon && /coupon/i.test(err.message)) setCoupon(''); // a coupon that no longer works is dropped so the basket can load
+        });
     }, 250);
     return () => { cancelled = true; clearTimeout(t); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key]);
+  }, [key, coupon, token]);
 
   if (!lines.length) {
     return <div className="wrap empty"><h1>Your basket is empty</h1><p className="muted">Fabrics you add will wait for you here.</p><Link className="btn" href="/shop">Start shopping</Link></div>;
@@ -63,8 +70,18 @@ export default function CartPage() {
           {problem && <p className="err" role="alert">{problem}</p>}
           <dl>
             <dt>Subtotal</dt><dd>{quote ? money(quote.subtotalMinor) : '—'}</dd>
+            {quote?.coupon && <><dt className="ok">Coupon {quote.coupon.code} ({quote.coupon.percentBps / 100}% off)</dt><dd className="ok">−{money(quote.discountMinor)}</dd></>}
             <dt className="muted small">Delivery</dt><dd className="muted small">Calculated at checkout</dd>
           </dl>
+          {coupon ? (
+            <p className="small">Coupon <strong>{coupon}</strong> <button type="button" className="link" onClick={() => setCoupon('')}>Remove</button></p>
+          ) : (
+            <form className="row" onSubmit={(e) => { e.preventDefault(); if (typed.trim()) { setCoupon(typed.trim().toUpperCase()); setTyped(''); } }}>
+              <label htmlFor="coupon" className="sr-only" style={{ position: 'absolute', left: -9999 }}>Coupon code</label>
+              <input id="coupon" value={typed} onChange={(e) => setTyped(e.target.value)} placeholder="Coupon code" style={{ flex: 1, minWidth: 0 }} maxLength={20} />
+              <button className="btn ghost small" disabled={!typed.trim()}>Apply</button>
+            </form>
+          )}
           <p className="small muted">Prices include applicable tax. Final totals are confirmed by the shop when you place the order.</p>
           {stuck ? <button className="btn block" disabled>Checkout</button> : <Link className="btn block" href="/checkout">Checkout</Link>}
           <Link className="btn ghost block" href="/shop">Continue shopping</Link>

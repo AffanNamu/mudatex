@@ -108,6 +108,7 @@ function OrderView() {
           <h2 id="items">Items</h2>
           <table className="plain"><tbody>
             {order.lines.map((l) => <tr key={l.lineNo}><td>{l.title}<div className="small muted">{trimQty(l.quantity)} × {money(Math.round(Number(l.unitPrice) * 10 ** store.minorUnit))}</div></td><td style={{ textAlign: 'right' }}>{money(l.totalMinor)}</td></tr>)}
+            {order.discountMinor > 0 && <tr><td className="ok">Coupon {order.couponCode}</td><td style={{ textAlign: 'right' }} className="ok">−{money(order.discountMinor)} saved</td></tr>}
             <tr><td className="muted">Delivery</td><td style={{ textAlign: 'right' }}>{order.deliveryFeeMinor === 0 ? 'Free' : money(order.deliveryFeeMinor)}</td></tr>
             <tr><td><strong>Total</strong></td><td style={{ textAlign: 'right' }}><strong>{money(order.totalMinor)}</strong></td></tr>
           </tbody></table>

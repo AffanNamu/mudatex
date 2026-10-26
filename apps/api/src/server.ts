@@ -141,7 +141,7 @@ export async function buildServer({ config, db, verifier, migrationsDir, cron, p
 
   // The customer-facing shop: public catalogue reads and signed-in shopper endpoints, apart from staff routes.
   const payments = injected ?? (config.PAYSTACK_SECRET_KEY ? createPaystack(config.PAYSTACK_SECRET_KEY, fetch, config.PAYSTACK_BASE_URL) : undefined);
-  await app.register(shopPublicRoutes, { db, cardPayments: !!payments });
+  await app.register(shopPublicRoutes, { db, verify, cardPayments: !!payments });
   await app.register(shopCustomerRoutes, { db, verify, payments });
   if (payments && config.PAYSTACK_SECRET_KEY) await app.register(paystackWebhookRoutes, { db, provider: payments, secretKey: config.PAYSTACK_SECRET_KEY });
 

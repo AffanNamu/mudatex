@@ -40,6 +40,7 @@ const orderBody = z.object({
   })).min(1).max(MAX_ORDER_LINES),
   addressId: z.string().uuid(),
   paymentMethod: z.enum(['card', 'bank_transfer']),
+  couponCode: z.string().trim().min(3).max(20).optional(),
   note: z.string().trim().max(500).optional(),
 });
 
