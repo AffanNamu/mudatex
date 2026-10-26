@@ -28,7 +28,7 @@ test.describe('buying', () => {
     await page.getByRole('button', { name: 'Save address' }).click();
     await expect(page.getByText(/Delivery to Kano:/)).toContainText('₦1,500.00');
     await expect(page.getByLabel('Order summary').getByText('₦4,725.00')).toBeVisible();
-    await expect(page.getByRole('radio', { name: /Card or online banking/ })).toBeDisabled();
+    await expect(page.getByRole('radio', { name: /Card or online banking/ })).toBeEnabled();
 
     await page.getByRole('button', { name: 'Place order' }).click();
     await expect(page).toHaveURL(/\/orders\/SO-\d{6}\?placed=1/);
@@ -116,5 +116,41 @@ test.describe('buying', () => {
     await expect(page.getByRole('button', { name: 'Remove from wishlist' })).toBeVisible();
     await page.goto('/account/wishlist');
     await expect(page.locator('article', { hasText: 'Atampa Blue' })).toBeVisible();
+  });
+});
+
+test.describe('paying by card', () => {
+  test('goes to the payment page, returns, and the server confirms the payment', async ({ page }) => {
+    await signUp(page, uniqueEmail('card'), '/account');
+    await completeProfile(page, 'Chidi Obi', '+2348077777777');
+    await page.goto('/product/atampa-blue');
+    await page.getByLabel(/Quantity/).fill('10');
+    await page.getByRole('button', { name: 'Add to basket' }).click();
+    await page.goto('/checkout');
+    await page.getByLabel('Recipient').fill('Chidi Obi');
+    await page.getByLabel('Phone', { exact: true }).fill('+2348077777777');
+    await page.getByLabel('Address', { exact: true }).fill('3 Market Road');
+    await page.getByLabel('City').fill('Kano');
+    await page.getByLabel('State').fill('Kano');
+    await page.getByRole('button', { name: 'Save address' }).click();
+    await page.getByRole('radio', { name: /Card or online banking/ }).check();
+    // 10 m x 1,800 + 7.5% = 19,350 + 1,500 delivery
+    await expect(page.getByLabel('Order summary').getByText('₦20,850.00')).toBeVisible();
+    await page.getByRole('button', { name: 'Place order' }).click();
+
+    // the order page sends the shopper on to the provider; they abandon first
+    await page.waitForURL(/localhost:3400\/pay\//);
+    await page.getByRole('link', { name: 'Cancel' }).click();
+    await expect(page).toHaveURL(/\/orders\/SO-\d{6}\?paid=1&reference=/);
+    await expect(page.getByText(/did not go through/)).toBeVisible();
+    await expect(page.getByText('Awaiting payment').first()).toBeVisible();
+
+    // try again and complete it
+    await page.getByRole('button', { name: 'Pay now' }).click();
+    await page.waitForURL(/localhost:3400\/pay\//);
+    await page.getByRole('link', { name: 'Pay', exact: true }).click();
+    await expect(page).toHaveURL(/\/orders\/SO-\d{6}\?paid=1&reference=/);
+    await expect(page.getByText('Paid').first()).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Pay now' })).toHaveCount(0);
   });
 });

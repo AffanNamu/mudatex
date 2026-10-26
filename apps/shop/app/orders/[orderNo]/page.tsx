@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useParams, useSearchParams } from 'next/navigation';
-import { Suspense, useCallback, useEffect, useState } from 'react';
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { RequireShopper } from '@/components/RequireShopper';
 import { shopRequest } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -12,12 +12,17 @@ import type { Order } from '@/lib/types';
 
 function OrderView() {
   const { orderNo } = useParams<{ orderNo: string }>();
-  const placed = useSearchParams().get('placed') === '1';
+  const search = useSearchParams();
+  const placed = search.get('placed') === '1';
+  const autoPay = search.get('pay') === '1';
+  const returned = search.get('reference');
   const { token } = useAuth();
   const { store } = useCart();
   const [order, setOrder] = useState<Order | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [payNote, setPayNote] = useState('');
+  const started = useRef(false);
   const money = (m: number) => formatMoney(m, order?.currency ?? store.currency, store.minorUnit);
 
   const load = useCallback(() => {
@@ -25,6 +30,36 @@ function OrderView() {
     shopRequest<Order>(`/me/orders/${orderNo}`, { token }).then(setOrder).catch((e: Error) => setError(e.message));
   }, [token, orderNo]);
   useEffect(load, [load]);
+
+  // Coming back from the payment page: ask the server to confirm with the provider; the browser's word is never taken.
+  const check = useCallback((reference: string) => {
+    if (!token) return;
+    setPayNote('Confirming your payment…');
+    shopRequest<{ outcome: string; order: Order }>(`/me/orders/${orderNo}/payment-check`, { token, body: { reference } })
+      .then((r) => {
+        setOrder(r.order);
+        setPayNote(r.outcome === 'succeeded' ? '' : r.outcome === 'pending' ? 'We have not received confirmation yet. You can check again in a moment.' : 'The payment did not go through, and nothing has been taken for this order. You can try again.');
+      })
+      .catch((e: Error) => setPayNote(e.message));
+  }, [token, orderNo]);
+  useEffect(() => {
+    if (!token || !returned || started.current) return;
+    started.current = true;
+    check(returned);
+  }, [token, returned, check]);
+
+  const payNow = useCallback(async () => {
+    if (!token) return;
+    setBusy(true); setPayNote('');
+    try {
+      const { authorizationUrl } = await shopRequest<{ authorizationUrl: string }>(`/me/orders/${orderNo}/pay`, { method: 'POST', token });
+      window.location.assign(authorizationUrl);
+    } catch (e) { setPayNote((e as Error).message); setBusy(false); }
+  }, [token, orderNo]);
+
+  useEffect(() => {
+    if (order?.status === 'pending_payment' && order.paymentMethod === 'card' && autoPay && !returned && !started.current) { started.current = true; void payNow(); }
+  }, [order, autoPay, returned, payNow]);
 
   if (error) return <div className="empty"><h1>We couldn&apos;t find that order</h1><Link className="btn" href="/account/orders">Your orders</Link></div>;
   if (!order) return <p className="muted" role="status">Loading…</p>;
@@ -43,6 +78,15 @@ function OrderView() {
       {placed && <div className="notice" role="status"><strong>Thank you — your order {order.orderNo} is placed.</strong> {waiting && 'Pay by bank transfer below to confirm it.'}</div>}
       <div className="row spread"><h1 style={{ margin: 0 }}>Order {order.orderNo}</h1><span className={`status ${order.status}`}>{STATUS_LABEL[order.status] ?? order.status}</span></div>
 
+      {payNote && <p className="notice" role="status">{payNote}</p>}
+      {waiting && order.paymentMethod === 'card' && (
+        <section className="card stack" aria-labelledby="cardpay">
+          <h2 id="cardpay">Pay {money(order.totalMinor)} by card</h2>
+          <p className="muted">You will go to Paystack&apos;s secure page and come straight back. We hold your fabric until {new Date(order.expiresAt).toLocaleTimeString()}.</p>
+          <div className="row"><button className="btn" onClick={payNow} disabled={busy}>{busy ? 'Opening payment page…' : 'Pay now'}</button>
+            {returned && <button className="btn ghost" onClick={() => check(returned)}>Check again</button>}</div>
+        </section>
+      )}
       {waiting && order.paymentMethod === 'bank_transfer' && (
         <section className="card stack" aria-labelledby="transfer">
           <h2 id="transfer">Pay by bank transfer</h2>

@@ -209,3 +209,12 @@ describe('the Paystack client', () => {
     await expect(down.verify('REF-1')).rejects.toMatchObject({ status: 502 });
   });
 });
+
+describe('advertising card payments', () => {
+  it('tells the shop card payment is on only when a provider and the store address exist', async () => {
+    const r = await readyCard();
+    expect((await call(ctx.app, 'GET', `/shop/${r.s.slug}`, undefined)).body.cardPayments).toBe(true);
+    await ctx.db.query(`UPDATE storefronts SET site_url = NULL WHERE slug = $1`, [r.s.slug]);
+    expect((await call(ctx.app, 'GET', `/shop/${r.s.slug}`, undefined)).body.cardPayments).toBe(false);
+  });
+});

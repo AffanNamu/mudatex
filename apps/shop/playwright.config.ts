@@ -18,16 +18,17 @@ export default defineConfig({
   ],
   webServer: [
     { command: 'node ../web/e2e/mock-supabase.mjs', url: 'http://localhost:3200/__stats', reuseExistingServer: false, env: { AUTH_DEV_SECRET: SECRET } },
+    { command: 'node e2e/mock-paystack.mjs', url: 'http://localhost:3400/__stats', reuseExistingServer: false },
     {
       // Reset, migrate, start the API and seed the shop. Build the API first (npm run build in apps/api).
       command: 'node e2e/serve-api.mjs',
       url: 'http://localhost:3199',
       reuseExistingServer: false,
       timeout: 90_000,
-      env: { DATABASE_URL, PORT: '3100', NODE_ENV: 'development', DEV_TOKEN_ENDPOINT: 'true', AUTH_DEV_SECRET: SECRET, CORS_ORIGINS: 'http://localhost:3300', RATE_LIMIT_MAX: '100000' },
+      env: { DATABASE_URL, PORT: '3100', NODE_ENV: 'development', DEV_TOKEN_ENDPOINT: 'true', AUTH_DEV_SECRET: SECRET, CORS_ORIGINS: 'http://localhost:3300', RATE_LIMIT_MAX: '100000', PAYSTACK_SECRET_KEY: 'sk_test_e2esecret123456', PAYSTACK_BASE_URL: 'http://localhost:3400' },
     },
     {
-      command: 'npm run build && npm run start -- -p 3300',
+      command: 'rm -rf .next && npm run build && npm run start -- -p 3300',
       url: 'http://localhost:3300',
       reuseExistingServer: false,
       timeout: 240_000,

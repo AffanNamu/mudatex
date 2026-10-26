@@ -24,13 +24,11 @@ export interface PaymentProvider {
   verify(reference: string): Promise<VerifyResult>;
 }
 
-const BASE = 'https://api.paystack.co';
-
-export function createPaystack(secretKey: string, fetchImpl: typeof fetch = fetch): PaymentProvider {
+export function createPaystack(secretKey: string, fetchImpl: typeof fetch = fetch, base = 'https://api.paystack.co'): PaymentProvider {
   const call = async (path: string, init?: RequestInit) => {
     let res: Response;
     try {
-      res = await fetchImpl(`${BASE}${path}`, { ...init, headers: { authorization: `Bearer ${secretKey}`, 'content-type': 'application/json' }, signal: AbortSignal.timeout(15_000) });
+      res = await fetchImpl(`${base}${path}`, { ...init, headers: { authorization: `Bearer ${secretKey}`, 'content-type': 'application/json' }, signal: AbortSignal.timeout(15_000) });
     } catch {
       throw new AppError(502, 'payment_provider_unreachable', 'The payment service could not be reached. Please try again.');
     }

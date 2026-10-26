@@ -100,7 +100,7 @@ function Checkout() {
         lines: lines.map((l) => ({ variantId: l.variantId, quantity: l.quantity })), addressId: address.id, paymentMethod: method, ...(note.trim() ? { note: note.trim() } : {}),
       } });
       clear();
-      router.push(`/orders/${order.orderNo}?placed=1`);
+      router.push(`/orders/${order.orderNo}?placed=1${method === 'card' ? '&pay=1' : ''}`);
     } catch (err) {
       if (err instanceof ApiError && err.code === 'shortage') setError('Some items just sold out or are low. Review your basket and try again.');
       else setError((err as Error).message);
@@ -135,7 +135,8 @@ function Checkout() {
             <h2 id="pay">2. Payment</h2>
             <label className="radio"><input type="radio" name="pay" checked={method === 'bank_transfer'} onChange={() => setMethod('bank_transfer')} />
               <span><strong>Bank transfer</strong><br /><span className="muted small">We show you our account details next. Your order is held for 24 hours while you pay, then shipped as soon as we confirm it.</span></span></label>
-            <label className="radio" aria-disabled="true"><input type="radio" name="pay" disabled /><span><strong>Card or online banking</strong><br /><span className="muted small">Coming soon.</span></span></label>
+            <label className="radio" aria-disabled={!store.cardPayments}><input type="radio" name="pay" checked={method === 'card'} disabled={!store.cardPayments} onChange={() => setMethod('card')} />
+              <span><strong>Card or online banking</strong><br /><span className="muted small">{store.cardPayments ? 'Pay securely on Paystack. Your order is held for 1 hour while you pay.' : 'Coming soon.'}</span></span></label>
           </section>
 
           <section className="card stack"><h2>3. Note (optional)</h2>

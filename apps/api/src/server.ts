@@ -139,8 +139,8 @@ export async function buildServer({ config, db, verifier, migrationsDir, cron, p
   await app.register(devAuthRoutes, { db, config, prefix: '/v1' });
 
   // The customer-facing shop: public catalogue reads and signed-in shopper endpoints, apart from staff routes.
-  await app.register(shopPublicRoutes, { db });
-  const payments = injected ?? (config.PAYSTACK_SECRET_KEY ? createPaystack(config.PAYSTACK_SECRET_KEY) : undefined);
+  const payments = injected ?? (config.PAYSTACK_SECRET_KEY ? createPaystack(config.PAYSTACK_SECRET_KEY, fetch, config.PAYSTACK_BASE_URL) : undefined);
+  await app.register(shopPublicRoutes, { db, cardPayments: !!payments });
   await app.register(shopCustomerRoutes, { db, verify, payments });
   if (payments && config.PAYSTACK_SECRET_KEY) await app.register(paystackWebhookRoutes, { db, provider: payments, secretKey: config.PAYSTACK_SECRET_KEY });
 
