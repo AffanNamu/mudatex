@@ -288,4 +288,40 @@ export const shopCustomerRoutes: FastifyPluginAsync<{ db: Db; verify: TokenVerif
     const result = await settleCardPayment(db, provider, reference, req.id);
     return { outcome: result.outcome, order: await readOrder(db, { id: result.orderId, customerId: id, organizationId: req.storefront.organizationId }) };
   });
+
+  // ---- reviews: only for products this customer has been sent, once each, and held for a person to approve
+  app.post('/shop/:slug/me/reviews', async (req, reply) => {
+    const body = z.object({
+      productSlug: z.string().regex(/^[a-z0-9-]{1,80}$/),
+      rating: z.number().int().min(1).max(5),
+      title: z.string().trim().max(100).optional(),
+      body: z.string().trim().min(10).max(2000),
+    }).parse(req.body);
+    const created = await withTx(db, async (tx) => {
+      const id = await customer(req, tx);
+      const product = await tx.query<{ id: string; product_id: string }>('SELECT id, product_id FROM storefront_products WHERE storefront_id = $1 AND slug = $2 AND published', [req.storefront.id, body.productSlug]);
+      if (!product.rows[0]) throw notFound('Product');
+      const bought = await tx.query<{ order_id: string }>(
+        `SELECT o.id AS order_id FROM sales_orders o JOIN sales_order_lines l ON l.order_id = o.id JOIN product_variants v ON v.id = l.variant_id
+          WHERE o.customer_id = $1 AND o.status IN ('shipped', 'delivered') AND v.product_id = $2 ORDER BY o.placed_at DESC LIMIT 1`,
+        [id, product.rows[0].product_id],
+      );
+      if (!bought.rows[0]) throw forbidden('You can review a product once it has been delivered to you');
+      const who = await tx.query<{ full_name: string }>('SELECT full_name FROM customers WHERE id = $1', [id]);
+      const parts = who.rows[0]!.full_name.trim().split(/\s+/);
+      const display = parts.length > 1 ? `${parts[0]} ${parts[parts.length - 1]![0]!.toUpperCase()}.` : parts[0]!;
+      try {
+        const { rows } = await tx.query(
+          `INSERT INTO product_reviews (organization_id, storefront_product_id, customer_id, order_id, rating, title, body, display_name)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id, rating, title, body, status`,
+          [req.storefront.organizationId, product.rows[0].id, id, bought.rows[0].order_id, body.rating, body.title || null, body.body, display],
+        );
+        return rows[0];
+      } catch (err) {
+        if ((err as { code?: string }).code === '23505') throw conflict('You have already reviewed this product');
+        throw err;
+      }
+    });
+    return reply.status(201).send(created);
+  });
 };

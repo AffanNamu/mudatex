@@ -1,5 +1,5 @@
 import { API_URL, SHOP_SLUG } from './config';
-import type { Page, ProductCard, ProductDetail, Store } from './types';
+import type { Page, ProductCard, ProductDetail, Review, Store } from './types';
 
 export class ApiError extends Error {
   constructor(readonly status: number, readonly code: string, message: string, readonly details?: unknown) {
@@ -34,6 +34,7 @@ async function publicGet<T>(path: string, revalidate = 60): Promise<T | null> {
 
 export const getStore = () => publicGet<Store>('');
 export const getProduct = (slug: string) => publicGet<ProductDetail>(`/products/${encodeURIComponent(slug)}`);
+export const getReviews = (slug: string) => publicGet<Page<Review>>(`/products/${encodeURIComponent(slug)}/reviews`, 60);
 export const getProducts = (qs: URLSearchParams) => publicGet<Page<ProductCard>>(`/products?${qs}`, 30);
 
 /** Browser calls: public (no token) or shopper (bearer token). */

@@ -173,6 +173,20 @@ export const shopPublicRoutes: FastifyPluginAsync<{ db: Db; verify?: TokenVerifi
     return quoteBasket(db, sf, body.lines, body.to, body.couponCode, customerId);
   });
 
+  app.get('/shop/:slug/products/:productSlug/reviews', async (req) => {
+    const { slug, productSlug } = z.object({ ...slugParam.shape, productSlug: z.string().regex(/^[a-z0-9-]{1,80}$/) }).parse(req.params);
+    const q = z.object({ page: z.coerce.number().int().min(1).max(200).default(1) }).parse(req.query);
+    const sf = await loadLiveStorefront(db, slug);
+    const { rows } = await db.query(
+      `SELECT r.rating, r.title, r.body, r.display_name AS "name", r.created_at AS "at", count(*) OVER()::int AS total
+         FROM product_reviews r JOIN storefront_products sp ON sp.id = r.storefront_product_id
+        WHERE sp.storefront_id = $1 AND sp.slug = $2 AND sp.published AND r.status = 'published'
+        ORDER BY r.created_at DESC LIMIT 10 OFFSET $3`,
+      [sf.id, productSlug, (q.page - 1) * 10],
+    );
+    return { page: q.page, total: rows[0]?.total ?? 0, items: rows.map(({ total: _t, ...r }) => r) };
+  });
+
   // A message from the public site. Quietly accepted and dropped when the hidden field is filled.
   app.post('/shop/:slug/enquiries', { config: { rateLimit: { max: 5, timeWindow: '1 minute' } } }, async (req, reply) => {
     const { slug } = slugParam.parse(req.params);

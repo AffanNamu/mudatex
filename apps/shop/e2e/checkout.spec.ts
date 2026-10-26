@@ -200,3 +200,50 @@ test.describe('coupons', () => {
     await expect(page.getByText(/already used that coupon/)).toBeVisible();
   });
 });
+
+test.describe('reviews', () => {
+  test('a shopper whose order shipped reviews it, and it shows after approval', async ({ page }) => {
+    const email = uniqueEmail('review');
+    await signUp(page, email, '/account');
+    await completeProfile(page, 'Ibrahim Danladi Sani', '+2348012121212');
+    // before buying, the form explains itself
+    await page.goto('/product/atampa-blue');
+    await page.getByLabel('Your review').fill('Beautiful fabric, very good quality indeed.');
+    await page.getByRole('button', { name: 'Submit review' }).click();
+    await expect(page.locator('p.err')).toContainText('once it has been delivered');
+
+    await page.getByLabel(/Quantity/).fill('2');
+    await page.getByRole('button', { name: 'Add to basket' }).click();
+    await page.goto('/checkout');
+    await page.getByLabel('Recipient').fill('Ibrahim Sani');
+    await page.getByLabel('Phone', { exact: true }).fill('+2348012121212');
+    await page.getByLabel('Address', { exact: true }).fill('4 Bompai Road');
+    await page.getByLabel('City').fill('Kano');
+    await page.getByLabel('State').fill('Kano');
+    await page.getByRole('button', { name: 'Save address' }).click();
+    await page.getByRole('button', { name: 'Place order' }).click();
+    await expect(page).toHaveURL(/\/orders\/SO-/);
+    const orderNo = /SO-\d{6}/.exec(page.url())![0];
+    const orders = await admin('GET', `/v1/sales-orders?q=${encodeURIComponent(orderNo)}`);
+    const o = orders.items[0];
+    await admin('POST', `/v1/sales-orders/${o.id}/payments`, { method: 'bank_transfer', reference: `REV-${Date.now()}`, amountMinor: o.totalMinor });
+    await admin('POST', `/v1/sales-orders/${o.id}/steps`, { action: 'ship' });
+
+    await page.goto('/product/atampa-blue');
+    await expect(page.getByText('No reviews yet.')).toBeVisible();
+    await page.getByRole('button', { name: '4 stars' }).click();
+    await page.getByLabel('Headline (optional)').fill('Good value');
+    await page.getByLabel('Your review').fill('Beautiful fabric, very good quality indeed.');
+    await page.getByRole('button', { name: 'Submit review' }).click();
+    await expect(page.getByText(/appear once our team has read it/)).toBeVisible();
+
+    const queue = await admin('GET', '/v1/reviews');
+    const mine = queue.find((q: any) => q.name === 'Ibrahim S.');
+    expect(mine).toMatchObject({ rating: 4, title: 'Good value' });
+    await admin('POST', `/v1/reviews/${mine.id}/moderate`, { status: 'published' });
+    await page.waitForTimeout(100);
+    // the product page is cached for up to a minute; the API shows it at once
+    const api = await (await fetch('http://localhost:3100/shop/e2e-shop/products/atampa-blue/reviews')).json();
+    expect(api.items[0]).toMatchObject({ rating: 4, name: 'Ibrahim S.' });
+  });
+});

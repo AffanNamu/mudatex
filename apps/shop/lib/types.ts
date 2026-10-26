@@ -18,6 +18,7 @@ export interface Variant {
 
 export interface ProductDetail {
   id: string; slug: string; title: string; description: string | null; brand: string | null; images: string[]; badges: string[];
+  rating: { average: number | null; count: number };
   department: { slug: string; name: string } | null; category: string | null; attributes: Record<string, unknown>;
   unit: { code: string; name: string; kind: 'discrete' | 'decimal'; precision: number };
   conversions: { fromCode: string; fromName: string; toCode: string; factor: string }[];
@@ -47,3 +48,5 @@ export interface Order {
   lines: { lineNo: number; title: string; sku: string; quantity: string; unitPrice: string; totalMinor: number }[];
   events: { status: string; at: string; note: string | null }[];
 }
+
+export interface Review { rating: number; title: string | null; body: string; name: string; at: string }

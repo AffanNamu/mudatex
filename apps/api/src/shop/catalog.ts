@@ -151,8 +151,13 @@ export async function productDetail(db: Db, sf: Storefront, productSlug: string)
       WHERE c.product_id = $1`,
     [sp.productId],
   );
+  const rating = await db.query<{ average: string | null; count: number }>(
+    `SELECT round(avg(rating)::numeric, 1) AS average, count(*)::int AS count FROM product_reviews WHERE storefront_product_id = $1 AND status = 'published'`,
+    [sp.id],
+  );
   return {
     id: sp.id,
+    rating: { average: rating.rows[0]!.average === null ? null : Number(rating.rows[0]!.average), count: rating.rows[0]!.count },
     slug: sp.slug,
     title: sp.title,
     description: sp.description,

@@ -56,6 +56,7 @@ export const PERMISSIONS = [
   'orders.payment.record',
   'orders.cancel',
   'enquiries.manage',
+  'reviews.moderate',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
