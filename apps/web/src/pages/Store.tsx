@@ -1,7 +1,7 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { ErrorBanner, Field, Loading, Notice, PageHeader } from '../components/ui';
 import { api } from '../lib/api';
-import { useLoad } from '../lib/hooks';
+import { useLoad, type Loaded } from '../lib/hooks';
 import type { Product } from './Catalogue';
 
 interface Storefront {
@@ -85,12 +85,14 @@ function NewStore({ onDone }: { onDone(): void }) {
 }
 
 function StoreEditor({ store, onChanged }: { store: Storefront; onChanged(): void }) {
+  // Departments are shared by the department list and the product listing form, so adding one shows up in both.
+  const depts = useLoad<Dept[]>(`/v1/storefronts/${store.id}/departments`);
   return (
     <>
       <Status store={store} onChanged={onChanged} />
       <Details store={store} onChanged={onChanged} />
-      <Departments storeId={store.id} />
-      <Publishing store={store} onChanged={onChanged} />
+      <Departments storeId={store.id} depts={depts} />
+      <Publishing store={store} depts={depts.data ?? []} onChanged={onChanged} />
       <Delivery storeId={store.id} />
     </>
   );
@@ -140,8 +142,7 @@ function Details({ store, onChanged }: { store: Storefront; onChanged(): void })
   );
 }
 
-function Departments({ storeId }: { storeId: string }) {
-  const depts = useLoad<Dept[]>(`/v1/storefronts/${storeId}/departments`);
+function Departments({ storeId, depts }: { storeId: string; depts: Loaded<Dept[]> }) {
   const [name, setName] = useState(''); const [image, setImage] = useState('');
   const a = useAction();
   const add = (e: FormEvent) => { e.preventDefault(); return a.run(() => api(`/v1/storefronts/${storeId}/departments`, { method: 'POST', body: { slug: slugify(name), name: name.trim(), imageUrl: image.trim() || null, sort: (depts.data?.length ?? 0) * 10 } }), `Added ${name.trim()}.`, () => { setName(''); setImage(''); depts.reload(); }); };
@@ -160,10 +161,9 @@ function Departments({ storeId }: { storeId: string }) {
   );
 }
 
-function Publishing({ store, onChanged }: { store: Storefront; onChanged(): void }) {
+function Publishing({ store, depts, onChanged }: { store: Storefront; depts: Dept[]; onChanged(): void }) {
   const rows = useLoad<Published[]>(`/v1/storefronts/${store.id}/products`);
   const products = useLoad<Product[]>('/v1/products?limit=200');
-  const depts = useLoad<Dept[]>(`/v1/storefronts/${store.id}/departments`);
   const [editing, setEditing] = useState<string | null>(null);
   const a = useAction();
   const byId = useMemo(() => new Map((rows.data ?? []).map((r) => [r.productId, r])), [rows.data]);
@@ -192,7 +192,7 @@ function Publishing({ store, onChanged }: { store: Storefront; onChanged(): void
           })}
         </tbody>
       </table></div>
-      {editing && <ProductForm key={editing} storeId={store.id} product={(products.data ?? []).find((p) => p.id === editing)!} existing={byId.get(editing)} depts={depts.data ?? []} onDone={() => { setEditing(null); refresh(); }} />}
+      {editing && <ProductForm key={editing} storeId={store.id} product={(products.data ?? []).find((p) => p.id === editing)!} existing={byId.get(editing)} depts={depts} onDone={() => { setEditing(null); refresh(); }} />}
     </section>
   );
 }
