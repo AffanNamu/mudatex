@@ -1,0 +1,12 @@
+# Use the standard rules, and allow only the made-up values that the automated tests use to stand in for real keys.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Fake keys used by tests and stand-in services (never real credentials)"
+regexes = [
+  '''e2e-publishable-key''',
+  '''sk_test_e2esecret123456''',
+  '''sk_test_abcdef123456''',
+  '''e2e-dev-secret-e2e-dev-secret-0001''',
+]
