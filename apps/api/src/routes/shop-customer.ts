@@ -6,6 +6,8 @@ import { conflict, forbidden, invalid, notFound, unauthorized } from '../errors.
 import { cardsFor, loadLiveStorefront, type Storefront } from '../shop/catalog.js';
 import { cancelOrder, MAX_ORDER_LINES, placeOrder, readOrder } from '../shop/orders.js';
 import { AppError } from '../errors.js';
+import type { PaymentProvider } from '../payments/paystack.js';
+import { settleCardPayment, startCardPayment } from '../shop/card-payments.js';
 
 const slugParam = z.object({ slug: z.string().regex(/^[a-z0-9-]{1,60}$/) });
 const uuid = z.string().uuid();
@@ -55,7 +57,7 @@ declare module 'fastify' {
  * Signed-in shopper endpoints. A shopper is a customer of one organisation (the storefront's), never staff: the same
  * identity provider signs both in, but customers live in their own table and reach only these endpoints.
  */
-export const shopCustomerRoutes: FastifyPluginAsync<{ db: Db; verify: TokenVerifier }> = async (app, { db, verify }) => {
+export const shopCustomerRoutes: FastifyPluginAsync<{ db: Db; verify: TokenVerifier; payments?: PaymentProvider }> = async (app, { db, verify, payments }) => {
   app.decorateRequest('shopper', undefined as never);
   app.decorateRequest('storefront', undefined as never);
 
@@ -255,5 +257,34 @@ export const shopCustomerRoutes: FastifyPluginAsync<{ db: Db; verify: TokenVerif
     const { orderNo } = z.object({ orderNo: z.string().regex(/^[A-Z]{2,5}-\d{6,}$/) }).parse(req.params);
     const id = await customer(req);
     return cancelOrder(db, req.storefront.organizationId, { orderNo, customerId: id }, { type: 'customer', id }, 'Cancelled by the customer', req.id);
+  });
+
+  // ---- card payment. The amount is the order's; the outcome is whatever the provider confirms to the server.
+  const orderNoParam = z.object({ orderNo: z.string().regex(/^[A-Z]{2,5}-\d{6,}$/) });
+  const needProvider = () => {
+    if (!payments) throw new AppError(503, 'payments_unavailable', 'Card payments are not available right now');
+    return payments;
+  };
+
+  app.post('/shop/:slug/me/orders/:orderNo/pay', async (req) => {
+    const { orderNo } = orderNoParam.parse(req.params);
+    const provider = needProvider();
+    const id = await customer(req);
+    return startCardPayment(db, provider, req.storefront, id, orderNo);
+  });
+
+  app.post('/shop/:slug/me/orders/:orderNo/payment-check', async (req) => {
+    const { orderNo } = orderNoParam.parse(req.params);
+    const { reference } = z.object({ reference: z.string().min(8).max(100) }).parse(req.body);
+    const provider = needProvider();
+    const id = await customer(req);
+    const own = await db.query(
+      `SELECT 1 FROM payment_attempts a JOIN sales_orders o ON o.id = a.order_id
+        WHERE a.reference = $1 AND o.order_no = $2 AND o.customer_id = $3 AND o.organization_id = $4`,
+      [reference, orderNo, id, req.storefront.organizationId],
+    );
+    if (!own.rowCount) throw notFound('Payment');
+    const result = await settleCardPayment(db, provider, reference, req.id);
+    return { outcome: result.outcome, order: await readOrder(db, { id: result.orderId, customerId: id, organizationId: req.storefront.organizationId }) };
   });
 };

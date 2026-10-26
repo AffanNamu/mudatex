@@ -222,7 +222,7 @@ export async function placeOrder(db: Db, sf: Storefront, customerId: string, inp
   return { order: await readOrder(db, { id: outcome.orderId, customerId, organizationId: sf.organizationId }), replayed: outcome.replayed };
 }
 
-async function lockOrder(tx: Tx, organizationId: string, where: { id?: string; orderNo?: string; customerId?: string }) {
+export async function lockOrder(tx: Tx, organizationId: string, where: { id?: string; orderNo?: string; customerId?: string }) {
   const { rows } = await tx.query<{ id: string; status: string; legal_entity_id: string; total_minor: string; paid_minor: string; payment_method: string }>(
     `SELECT id, status, legal_entity_id, total_minor, paid_minor, payment_method FROM sales_orders
       WHERE organization_id = $1 AND ($2::uuid IS NULL OR id = $2) AND ($3::text IS NULL OR order_no = $3) AND ($4::uuid IS NULL OR customer_id = $4) FOR UPDATE`,
@@ -249,27 +249,48 @@ export async function cancelOrder(db: Db, organizationId: string, where: { id?: 
   return readOrder(db, { id, organizationId }, actor.type === 'staff');
 }
 
+/**
+ * Books a payment against a locked order inside the caller's transaction. A payment for an order that is awaiting
+ * payment settles it. A payment that arrives for an order already closed or paid is kept on the order and the same
+ * amount is recorded as owed back, so money is never silently lost or silently kept.
+ */
+export async function applyPayment(
+  tx: Tx, organizationId: string, o: Awaited<ReturnType<typeof lockOrder>>,
+  p: { method: 'card' | 'bank_transfer'; provider?: string | null; reference: string; amountMinor: number }, actor: Actor, requestId?: string,
+): Promise<'settled' | 'refund_due'> {
+  const outstanding = BigInt(o.total_minor) - BigInt(o.paid_minor);
+  const settles = o.status === 'pending_payment';
+  if (settles && BigInt(p.amountMinor) !== outstanding) throw invalid(`The amount must equal the amount outstanding (${outstanding})`);
+  try {
+    await tx.query(
+      'INSERT INTO sales_order_payments (order_id, method, provider, reference, amount_minor, recorded_by) VALUES ($1,$2,$3,$4,$5,$6)',
+      [o.id, p.method, p.provider ?? null, p.reference, p.amountMinor, actor.type === 'staff' ? actor.id : null],
+    );
+  } catch (err) {
+    if ((err as { code?: string }).code === '23505') throw conflict('That payment reference has already been used');
+    throw err;
+  }
+  if (settles) {
+    await tx.query(`UPDATE sales_orders SET paid_minor = paid_minor + $2, status = 'paid', paid_at = now() WHERE id = $1`, [o.id, p.amountMinor]);
+    await addEvent(tx, o.id, 'paid', actor, `${p.method} ${p.reference}`);
+    await audit(tx, organizationId, actor, 'order.payment', o.id, { method: p.method, amountMinor: p.amountMinor }, requestId);
+    return 'settled';
+  }
+  await tx.query(`UPDATE sales_orders SET paid_minor = paid_minor + $2, refund_due_minor = refund_due_minor + $2 WHERE id = $1`, [o.id, p.amountMinor]);
+  await addEvent(tx, o.id, o.status, actor, `Payment of ${p.amountMinor} received after the order was ${o.status.replace('_', ' ')}; refund owed`);
+  await audit(tx, organizationId, actor, 'order.payment_late', o.id, { method: p.method, amountMinor: p.amountMinor }, requestId);
+  return 'refund_due';
+}
+
 export async function recordPayment(
   db: Db, organizationId: string, orderId: string,
   p: { method: 'card' | 'bank_transfer'; provider?: string | null; reference: string; amountMinor: number }, actor: Actor, requestId?: string,
 ) {
   await withTx(db, async (tx) => {
     const o = await lockOrder(tx, organizationId, { id: orderId });
+    // Staff confirm money for orders that are waiting for it; late card money is handled by the provider path only.
     if (o.status !== 'pending_payment') throw conflict(`Payment cannot be recorded on an order that is ${o.status.replace('_', ' ')}`);
-    const outstanding = BigInt(o.total_minor) - BigInt(o.paid_minor);
-    if (BigInt(p.amountMinor) !== outstanding) throw invalid(`The amount must equal the amount outstanding (${outstanding})`);
-    try {
-      await tx.query(
-        'INSERT INTO sales_order_payments (order_id, method, provider, reference, amount_minor, recorded_by) VALUES ($1,$2,$3,$4,$5,$6)',
-        [o.id, p.method, p.provider ?? null, p.reference, p.amountMinor, actor.type === 'staff' ? actor.id : null],
-      );
-    } catch (err) {
-      if ((err as { code?: string }).code === '23505') throw conflict('That payment reference has already been used');
-      throw err;
-    }
-    await tx.query(`UPDATE sales_orders SET paid_minor = paid_minor + $2, status = 'paid', paid_at = now() WHERE id = $1`, [o.id, p.amountMinor]);
-    await addEvent(tx, o.id, 'paid', actor, `${p.method} ${p.reference}`);
-    await audit(tx, organizationId, actor, 'order.payment', o.id, { method: p.method, amountMinor: p.amountMinor }, requestId);
+    await applyPayment(tx, organizationId, o, p, actor, requestId);
   });
   return readOrder(db, { id: orderId, organizationId }, true);
 }

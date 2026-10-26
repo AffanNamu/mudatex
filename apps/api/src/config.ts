@@ -29,6 +29,8 @@ const schema = z
     // Run the delivery worker inside the API process. Prefer a separate `node dist/worker.js` in production.
     RUN_WORKER_IN_API: z.enum(['true', 'false']).default('false').transform((v) => v === 'true'),
     WORKER_POLL_MS: z.coerce.number().int().min(100).default(1000),
+    // Paystack secret key (sk_test_… or sk_live_…). Without it, card payments are switched off.
+    PAYSTACK_SECRET_KEY: z.string().regex(/^sk_(test|live)_[A-Za-z0-9]+$/).optional(),
     DB_POOL_MAX: z.coerce.number().int().positive().default(10),
     // A statement running longer than this is cancelled, so one bad query cannot hold locks for long.
     DB_STATEMENT_TIMEOUT_MS: z.coerce.number().int().positive().default(20_000),
@@ -44,6 +46,9 @@ const schema = z
       }
       if (env.WEBHOOK_ALLOW_HTTP || env.WEBHOOK_ALLOW_PRIVATE) {
         ctx.addIssue({ code: 'custom', message: 'WEBHOOK_ALLOW_HTTP and WEBHOOK_ALLOW_PRIVATE must not be set in production' });
+      }
+      if (env.PAYSTACK_SECRET_KEY?.startsWith('sk_test_')) {
+        ctx.addIssue({ code: 'custom', message: 'PAYSTACK_SECRET_KEY must be a live key in production' });
       }
       if (!env.AUTH_JWKS_URL || !env.AUTH_ISSUER || !env.AUTH_AUDIENCE) {
         ctx.addIssue({

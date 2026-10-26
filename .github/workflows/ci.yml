@@ -118,6 +118,56 @@ jobs:
             apps/web/test-results
           retention-days: 7
 
+  shop:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: mudatex
+          POSTGRES_PASSWORD: mudatex
+          POSTGRES_DB: mudatex_e2e
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U mudatex" --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            apps/api/package-lock.json
+            apps/shop/package-lock.json
+      - name: Build the API the browser tests run against
+        working-directory: apps/api
+        run: npm ci && npm run build
+      - name: Install the customer shop
+        working-directory: apps/shop
+        run: npm ci
+      - name: Typecheck, unit tests, audit
+        working-directory: apps/shop
+        run: |
+          npm run typecheck
+          npm test
+          npm audit --audit-level=high
+      - name: Install the test browser
+        working-directory: apps/shop
+        run: npx playwright install --with-deps chromium
+      - name: Browser tests (browsing, checkout, accessibility, phone layout)
+        working-directory: apps/shop
+        run: npm run e2e
+      - name: Keep the report when something fails
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shop-playwright-report
+          path: |
+            apps/shop/playwright-report
+            apps/shop/test-results
+          retention-days: 7
+
   image:
     runs-on: ubuntu-latest
     timeout-minutes: 15

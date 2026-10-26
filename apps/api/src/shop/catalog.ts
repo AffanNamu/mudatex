@@ -16,6 +16,7 @@ export interface Storefront {
   status: string;
   tagline: string | null;
   contact: Record<string, unknown>;
+  siteUrl: string | null;
 }
 
 /** What the public may see is capped so the site never leaks exact stock levels. */
@@ -25,7 +26,7 @@ export async function loadLiveStorefront(db: Db, slug: string): Promise<Storefro
   const { rows } = await db.query(
     `SELECT s.id, s.organization_id AS "organizationId", s.legal_entity_id AS "legalEntityId", s.slug, s.name,
             s.price_list_id AS "priceListId", s.currency, c.minor_unit AS "minorUnit", s.stock_location_ids AS "stockLocationIds",
-            s.status, s.tagline, s.contact
+            s.status, s.tagline, s.contact, s.site_url AS "siteUrl"
        FROM storefronts s JOIN currencies c ON c.code = s.currency
       WHERE s.slug = $1 AND s.status = 'live'`,
     [slug],

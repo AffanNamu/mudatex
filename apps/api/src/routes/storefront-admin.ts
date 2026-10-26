@@ -21,6 +21,9 @@ const contactBody = z
   })
   .strict();
 
+/** Where the shop lives, so a payment page can send the shopper back to it. */
+const siteUrl = z.string().url().max(200).refine((u) => /^(https:\/\/|http:\/\/localhost)/.test(u), 'Must be an https address').transform((u) => u.replace(/\/$/, ''));
+
 const createBody = z.object({
   legalEntityId: uuid,
   slug,
@@ -29,6 +32,7 @@ const createBody = z.object({
   stockLocationIds: z.array(uuid).min(1).max(50),
   tagline: z.string().max(200).optional(),
   contact: contactBody.optional(),
+  siteUrl: siteUrl.optional(),
 });
 
 const updateBody = z.object({
@@ -37,6 +41,7 @@ const updateBody = z.object({
   contact: contactBody.optional(),
   stockLocationIds: z.array(uuid).min(1).max(50).optional(),
   status: z.enum(['draft', 'live', 'closed']).optional(),
+  siteUrl: siteUrl.nullable().optional(),
 });
 
 const departmentBody = z.object({
@@ -70,7 +75,7 @@ const zoneBody = z.object({
 });
 
 const STOREFRONT_COLUMNS = `s.id, s.legal_entity_id AS "legalEntityId", s.slug, s.name, s.price_list_id AS "priceListId", s.currency,
-  s.stock_location_ids AS "stockLocationIds", s.status, s.tagline, s.contact`;
+  s.stock_location_ids AS "stockLocationIds", s.status, s.tagline, s.contact, s.site_url AS "siteUrl"`;
 
 const slugify = (s: string) =>
   s.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80);
@@ -106,11 +111,11 @@ export const storefrontAdminRoutes: FastifyPluginAsync<{ db: Db }> = async (app,
       if (!list.rows[0]) throw invalid('Price list does not belong to this legal entity');
       await checkLocations(tx, actor.organizationId, body.legalEntityId, body.stockLocationIds);
       const { rows } = await tx.query(
-        `INSERT INTO storefronts (organization_id, legal_entity_id, slug, name, price_list_id, currency, stock_location_ids, tagline, contact)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        `INSERT INTO storefronts (organization_id, legal_entity_id, slug, name, price_list_id, currency, stock_location_ids, tagline, contact, site_url)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          RETURNING id, legal_entity_id AS "legalEntityId", slug, name, price_list_id AS "priceListId", currency,
-                   stock_location_ids AS "stockLocationIds", status, tagline, contact`,
-        [actor.organizationId, body.legalEntityId, body.slug, body.name, body.priceListId, list.rows[0].currency, [...new Set(body.stockLocationIds)], body.tagline ?? null, body.contact ?? {}],
+                   stock_location_ids AS "stockLocationIds", status, tagline, contact, site_url AS "siteUrl"`,
+        [actor.organizationId, body.legalEntityId, body.slug, body.name, body.priceListId, list.rows[0].currency, [...new Set(body.stockLocationIds)], body.tagline ?? null, body.contact ?? {}, body.siteUrl ?? null],
       );
       await audit(tx, req, 'storefront.create', 'storefront', rows[0].id, rows[0]);
       return rows[0];
@@ -145,11 +150,11 @@ export const storefrontAdminRoutes: FastifyPluginAsync<{ db: Db }> = async (app,
       const { rows } = await tx.query(
         `UPDATE storefronts SET name = COALESCE($2, name), tagline = CASE WHEN $3::boolean THEN $4 ELSE tagline END,
                 contact = COALESCE($5, contact), stock_location_ids = COALESCE($6, stock_location_ids),
-                status = COALESCE($7, status), updated_at = now()
+                status = COALESCE($7, status), site_url = CASE WHEN $8::boolean THEN $9 ELSE site_url END, updated_at = now()
           WHERE id = $1
         RETURNING id, legal_entity_id AS "legalEntityId", slug, name, price_list_id AS "priceListId", currency,
-                  stock_location_ids AS "stockLocationIds", status, tagline, contact`,
-        [id, body.name ?? null, body.tagline !== undefined, body.tagline ?? null, body.contact ?? null, body.stockLocationIds ? [...new Set(body.stockLocationIds)] : null, body.status ?? null],
+                  stock_location_ids AS "stockLocationIds", status, tagline, contact, site_url AS "siteUrl"`,
+        [id, body.name ?? null, body.tagline !== undefined, body.tagline ?? null, body.contact ?? null, body.stockLocationIds ? [...new Set(body.stockLocationIds)] : null, body.status ?? null, body.siteUrl !== undefined, body.siteUrl ?? null],
       );
       await audit(tx, req, 'storefront.update', 'storefront', id, body);
       return rows[0];

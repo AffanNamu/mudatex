@@ -5,6 +5,8 @@ import rateLimit from '@fastify/rate-limit';
 import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
 import { ZodError } from 'zod';
 import type { Actor } from './auth/authorize.js';
+import { createPaystack, type PaymentProvider } from './payments/paystack.js';
+import { paystackWebhookRoutes } from './routes/webhooks-paystack.js';
 import { createTokenVerifier, type TokenVerifier } from './auth/token.js';
 import type { Config } from './config.js';
 import type { Db } from './db.js';
@@ -57,9 +59,11 @@ export interface ServerDeps {
   /** Directory of SQL migrations the readiness check compares against the database. */
   migrationsDir?: string;
   cron?: CronDeps;
+  /** Card payments. Defaults to Paystack when PAYSTACK_SECRET_KEY is set; tests pass a stand-in. */
+  payments?: PaymentProvider;
 }
 
-export async function buildServer({ config, db, verifier, migrationsDir, cron }: ServerDeps): Promise<FastifyInstance> {
+export async function buildServer({ config, db, verifier, migrationsDir, cron, payments: injected }: ServerDeps): Promise<FastifyInstance> {
   const verify = verifier ?? createTokenVerifier(config);
   const app = Fastify({
     logger: config.NODE_ENV === 'test' ? false : { redact: ['req.headers.authorization'] },
@@ -136,7 +140,9 @@ export async function buildServer({ config, db, verifier, migrationsDir, cron }:
 
   // The customer-facing shop: public catalogue reads and signed-in shopper endpoints, apart from staff routes.
   await app.register(shopPublicRoutes, { db });
-  await app.register(shopCustomerRoutes, { db, verify });
+  const payments = injected ?? (config.PAYSTACK_SECRET_KEY ? createPaystack(config.PAYSTACK_SECRET_KEY) : undefined);
+  await app.register(shopCustomerRoutes, { db, verify, payments });
+  if (payments && config.PAYSTACK_SECRET_KEY) await app.register(paystackWebhookRoutes, { db, provider: payments, secretKey: config.PAYSTACK_SECRET_KEY });
 
   await app.register(
     async (v1) => {

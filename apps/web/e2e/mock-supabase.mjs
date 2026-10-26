@@ -14,7 +14,7 @@ let counter = 0;
 function token(email, ttl) {
   const now = Math.floor(Date.now() / 1000);
   const head = b64({ alg: 'HS256', typ: 'JWT' });
-  const body = b64({ sub: email, iat: now, exp: now + ttl, aud: 'authenticated' });
+  const body = b64({ sub: email, email, iat: now, exp: now + ttl, aud: 'authenticated' });
   return `${head}.${body}.${createHmac('sha256', SECRET).update(`${head}.${body}`).digest('base64url')}`;
 }
 // One test user gets a very short session so refreshing can be observed.
@@ -50,6 +50,14 @@ createServer(async (req, res) => {
     const m = /^r-(.+)-\d+$/.exec(body.refresh_token ?? '');
     if (!m || [...revoked].some((p) => m[1].startsWith(p))) return send(400, { error_code: 'refresh_token_not_found', msg: 'Invalid Refresh Token' });
     return send(200, session(m[1]));
+  }
+  if (url.pathname === '/auth/v1/signup') {
+    stats.signups = (stats.signups ?? 0) + 1;
+    if (String(body.password ?? '').length < 8) return send(422, { msg: 'Password should be at least 8 characters.' });
+    if (body.email === 'taken@e2e.test') return send(422, { msg: 'User already registered' });
+    // Addresses starting "confirm-" model a project that requires email confirmation: no session yet.
+    if (String(body.email).startsWith('confirm-')) return send(200, { id: 'u-' + body.email, email: body.email });
+    return send(200, session(body.email));
   }
   if (url.pathname === '/auth/v1/logout') { stats.logouts++; return send(204); }
   if (url.pathname === '/auth/v1/recover') return send(200, {});
