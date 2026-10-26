@@ -39,14 +39,21 @@ export interface BasketQuote {
   lines: { variantId: string; sku: string; title: string; quantity: string; unitPrice: string; totalMinor: number; inStock: boolean; available: number }[];
   subtotalMinor: number; taxMinor: number; discountMinor: number; coupon: { code: string; percentBps: number } | null; deliveryFeeMinor: number | null; totalMinor: number | null; allInStock: boolean;
   delivery: { zone: string; feeMinor: number; freeOverMinor: number | null; etaDays: { min: number; max: number } } | null;
+  trade: { creditAvailableMinor: number } | null;
 }
 
 export interface Order {
   id: string; orderNo: string; status: string; currency: string; discountMinor: number; couponCode: string | null; subtotalMinor: number; deliveryFeeMinor: number; totalMinor: number; paidMinor: number;
-  paymentMethod: string; carrier: string | null; trackingRef: string | null; expiresAt: string; placedAt: string;
+  paymentMethod: string; dueOn: string | null; carrier: string | null; trackingRef: string | null; expiresAt: string; placedAt: string;
   delivery: { recipient: string; line1: string; line2: string | null; city: string; state: string; zone: string; etaDays: { min: number; max: number } };
-  lines: { lineNo: number; title: string; sku: string; quantity: string; unitPrice: string; totalMinor: number }[];
+  lines: { lineNo: number; variantId: string; productSlug: string | null; image: string | null; unit: string; title: string; sku: string; quantity: string; unitPrice: string; totalMinor: number }[];
   events: { status: string; at: string; note: string | null }[];
 }
 
 export interface Review { rating: number; title: string | null; body: string; name: string; at: string }
+
+export interface TradeAccount {
+  id: string; businessName: string; taxId: string | null; status: 'pending' | 'approved' | 'rejected' | 'suspended'; creditLimitMinor: number;
+  paymentTermsDays: number; note: string | null; creditUsedMinor?: number; creditAvailableMinor?: number;
+  statement?: { at: string; kind: 'order' | 'payment'; reference: string; amountMinor: number; balanceMinor: number }[];
+}

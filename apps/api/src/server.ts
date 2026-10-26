@@ -36,6 +36,7 @@ import { posReturnRoutes } from './routes/pos-returns.js';
 import { posSaleRoutes } from './routes/pos-sales.js';
 import { pricingRoutes } from './routes/pricing.js';
 import { enquiryRoutes } from './routes/enquiries.js';
+import { tradeAccountRoutes } from './routes/trade-accounts.js';
 import { reviewRoutes } from './routes/reviews.js';
 import { salesOrderRoutes } from './routes/sales-orders.js';
 import { shopCustomerRoutes } from './routes/shop-customer.js';
@@ -186,6 +187,7 @@ export async function buildServer({ config, db, verifier, migrationsDir, cron, p
       await v1.register(salesOrderRoutes, { db });
       await v1.register(enquiryRoutes, { db });
       await v1.register(reviewRoutes, { db });
+      await v1.register(tradeAccountRoutes, { db });
       await v1.register(posRegisterRoutes, { db });
       await v1.register(posSaleRoutes, { db });
       await v1.register(posReturnRoutes, { db });

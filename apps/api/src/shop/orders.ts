@@ -16,7 +16,7 @@ export interface PlaceOrderInput {
   lines: { variantId: string; quantity: string; unitId?: string }[];
   couponCode?: string;
   addressId: string;
-  paymentMethod: 'card' | 'bank_transfer';
+  paymentMethod: 'card' | 'bank_transfer' | 'account';
   note?: string;
 }
 
@@ -25,7 +25,7 @@ export type Actor = { type: 'customer'; id: string } | { type: 'staff'; id: stri
 const ORDER_COLUMNS = `o.id, o.order_no AS "orderNo", o.status, o.currency, o.subtotal_minor AS "subtotalMinor", o.tax_minor AS "taxMinor",
   o.delivery_fee_minor AS "deliveryFeeMinor", o.total_minor AS "totalMinor", o.paid_minor AS "paidMinor", o.refund_due_minor AS "refundDueMinor",
   o.payment_method AS "paymentMethod", o.contact, o.delivery, o.note, o.carrier, o.tracking_ref AS "trackingRef", o.cancel_reason AS "cancelReason",
-  o.discount_minor AS "discountMinor", (SELECT code FROM coupons WHERE id = o.coupon_id) AS "couponCode", o.expires_at AS "expiresAt", o.placed_at AS "placedAt", o.paid_at AS "paidAt", o.shipped_at AS "shippedAt", o.delivered_at AS "deliveredAt"`;
+  o.discount_minor AS "discountMinor", (SELECT code FROM coupons WHERE id = o.coupon_id) AS "couponCode", to_char(o.due_on, 'YYYY-MM-DD') AS "dueOn", o.expires_at AS "expiresAt", o.placed_at AS "placedAt", o.paid_at AS "paidAt", o.shipped_at AS "shippedAt", o.delivered_at AS "deliveredAt"`;
 
 const MONEY_FIELDS = ['discountMinor', 'subtotalMinor', 'taxMinor', 'deliveryFeeMinor', 'totalMinor', 'paidMinor', 'refundDueMinor'] as const;
 const asNumbers = <T extends Record<string, any>>(row: T): T => {
@@ -44,10 +44,13 @@ export async function readOrder(q: Pick<Db, 'query'>, where: { id?: string; orde
   if (!rows[0]) throw notFound('Order');
   const order = asNumbers(rows[0]);
   const lines = await q.query(
-    `SELECT line_no AS "lineNo", variant_id AS "variantId", sku, title, quantity, unit_price AS "unitPrice", tax_code AS "taxCode",
+    `SELECT line_no AS "lineNo", variant_id AS "variantId", sku, title,
+            (SELECT sp.slug FROM storefront_products sp JOIN product_variants pv ON pv.product_id = sp.product_id WHERE pv.id = sales_order_lines.variant_id AND sp.storefront_id = $2) AS "productSlug",
+            (SELECT u.code FROM product_variants pv JOIN products p ON p.id = pv.product_id JOIN units u ON u.id = p.base_unit_id WHERE pv.id = sales_order_lines.variant_id) AS "unit",
+            (SELECT sp.images->>0 FROM storefront_products sp JOIN product_variants pv ON pv.product_id = sp.product_id WHERE pv.id = sales_order_lines.variant_id AND sp.storefront_id = $2) AS "image", quantity, unit_price AS "unitPrice", tax_code AS "taxCode",
             gross_minor AS "grossMinor", discount_minor AS "discountMinor", tax_minor AS "taxMinor", total_minor AS "totalMinor"
        FROM sales_order_lines WHERE order_id = $1 ORDER BY line_no`,
-    [order.id],
+    [order.id, order.storefrontId],
   );
   const events = await q.query(`SELECT status, actor_type AS "actorType", note, at FROM sales_order_events WHERE order_id = $1 ORDER BY id`, [order.id]);
   const result: Record<string, unknown> = {
@@ -133,6 +136,30 @@ async function priceWithCoupon(tx: Tx, sf: Storefront, lines: PlaceOrderInput['l
   return { priced, coupon };
 }
 
+export interface TradeTerms { id: string; priceListId: string; creditLimitMinor: bigint; paymentTermsDays: number }
+
+/** The customer's approved trade account for this store, if any. `lock` serialises concurrent checkouts on the account. */
+export async function approvedTrade(tx: Pick<Db, 'query'>, storefrontId: string, customerId: string | null, lock = false): Promise<TradeTerms | null> {
+  if (!customerId) return null;
+  const { rows } = await tx.query<{ id: string; price_list_id: string; credit_limit_minor: string; payment_terms_days: number }>(
+    `SELECT id, price_list_id, credit_limit_minor, payment_terms_days FROM trade_accounts
+      WHERE storefront_id = $1 AND customer_id = $2 AND status = 'approved' ${lock ? 'FOR UPDATE' : ''}`,
+    [storefrontId, customerId],
+  );
+  const t = rows[0];
+  return t ? { id: t.id, priceListId: t.price_list_id, creditLimitMinor: BigInt(t.credit_limit_minor), paymentTermsDays: t.payment_terms_days } : null;
+}
+
+/** What the customer owes on orders placed on account (not cancelled), in minor units. */
+export async function creditUsed(tx: Pick<Db, 'query'>, customerId: string): Promise<bigint> {
+  const { rows } = await tx.query<{ owed: string }>(
+    `SELECT COALESCE(sum(total_minor - paid_minor), 0) AS owed FROM sales_orders
+      WHERE customer_id = $1 AND payment_method = 'account' AND status NOT IN ('cancelled', 'expired')`,
+    [customerId],
+  );
+  return BigInt(rows[0]!.owed);
+}
+
 /** Only published, active products of this storefront can be bought, whatever the client sends. */
 async function sellableTitles(tx: Pick<Db, 'query'>, sf: Storefront, ids: string[]): Promise<Map<string, string>> {
   const sellable = await tx.query<{ variant_id: string; title: string }>(
@@ -156,7 +183,8 @@ export async function quoteBasket(db: Db, sf: Storefront, lines: PlaceOrderInput
   if (new Set(ids).size !== ids.length) throw invalid('Each product variant can appear once');
   return withTx(db, async (tx) => {
     const titles = await sellableTitles(tx, sf, ids);
-    const { priced, coupon } = await priceWithCoupon(tx, sf, lines, couponCode, customerId, false);
+    const trade = await approvedTrade(tx, sf.id, customerId);
+    const { priced, coupon } = await priceWithCoupon(tx, trade ? { ...sf, priceListId: trade.priceListId } : sf, lines, couponCode, customerId, false);
     const stock = await availability(tx as unknown as Db, sf, ids);
     const out = priced.map((l) => {
       const have = toScaled(stock.get(l.variantId) ?? '0');
@@ -173,6 +201,7 @@ export async function quoteBasket(db: Db, sf: Storefront, lines: PlaceOrderInput
       discountMinor: Number(totals.discount), coupon: coupon ? { code: coupon.code, percentBps: coupon.percentBps } : null,
       delivery, deliveryFeeMinor: delivery ? Number(deliveryFee) : null, totalMinor: delivery ? Number(totals.total + deliveryFee) : null,
       allInStock: out.every((l) => l.inStock),
+      trade: trade ? { creditAvailableMinor: Number(trade.creditLimitMinor - (customerId ? await creditUsed(tx, customerId) : 0n)) } : null,
     };
   });
 }
@@ -204,7 +233,9 @@ export async function placeOrder(db: Db, sf: Storefront, customerId: string, inp
     const titles = await sellableTitles(tx, sf, ids);
 
     const now = new Date();
-    const { priced, coupon } = await priceWithCoupon(tx, sf, input.lines, input.couponCode, customerId, true);
+    const trade = await approvedTrade(tx, sf.id, customerId, true);
+    if (input.paymentMethod === 'account' && !trade) throw invalid('Your business does not have an approved trade account');
+    const { priced, coupon } = await priceWithCoupon(tx, trade ? { ...sf, priceListId: trade.priceListId } : sf, input.lines, input.couponCode, customerId, true);
 
     const orderId = crypto.randomUUID();
     const shortages: unknown[] = [];
@@ -223,7 +254,13 @@ export async function placeOrder(db: Db, sf: Storefront, customerId: string, inp
     const total = linesTotal + deliveryFee;
     if (total <= 0n) throw invalid('This order has no value');
 
-    const expiresAt = new Date(now.getTime() + ORDER_HOLD_MINUTES[input.paymentMethod] * 60_000);
+    const onAccount = input.paymentMethod === 'account';
+    if (onAccount) {
+      const used = await creditUsed(tx, customerId);
+      if (used + total > trade!.creditLimitMinor) throw invalid(`This order would take you over your credit limit (available: ${trade!.creditLimitMinor - used > 0n ? trade!.creditLimitMinor - used : 0n} minor units)`);
+    }
+    const expiresAt = new Date(now.getTime() + (input.paymentMethod === 'account' ? 30 * 24 * 60 : ORDER_HOLD_MINUTES[input.paymentMethod]) * 60_000);
+    const dueOn = onAccount ? new Date(now.getTime() + trade!.paymentTermsDays * 86_400_000).toISOString().slice(0, 10) : null;
     
     const orderNo = await nextDocumentNumber(tx, sf.organizationId, sf.legalEntityId, 'sales_order', 'SO');
     const contact = { name: customer.full_name, email: customer.email, phone: address.phone || customer.phone };
@@ -233,10 +270,10 @@ export async function placeOrder(db: Db, sf: Storefront, customerId: string, inp
     };
     await tx.query(
       `INSERT INTO sales_orders (id, organization_id, legal_entity_id, storefront_id, customer_id, order_no, status, currency, subtotal_minor, tax_minor,
-                                 delivery_fee_minor, total_minor, payment_method, contact, delivery, note, client_key, request_hash, expires_at, discount_minor, coupon_id)
-       VALUES ($1,$2,$3,$4,$5,$6,'pending_payment',$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`,
+                                 delivery_fee_minor, total_minor, payment_method, contact, delivery, note, client_key, request_hash, expires_at, discount_minor, coupon_id, due_on)
+       VALUES ($1,$2,$3,$4,$5,$6,$21,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$22)`,
       [orderId, sf.organizationId, sf.legalEntityId, sf.id, customerId, orderNo, sf.currency, linesTotal, totals.tax, deliveryFee, total, input.paymentMethod,
-       JSON.stringify(contact), JSON.stringify(delivery), input.note ?? null, clientKey, hash, expiresAt, totals.discount, coupon?.id ?? null],
+       JSON.stringify(contact), JSON.stringify(delivery), input.note ?? null, clientKey, hash, expiresAt, totals.discount, coupon?.id ?? null, onAccount ? 'confirmed' : 'pending_payment', dueOn],
     );
     for (const [i, l] of priced.entries()) {
       await tx.query(
@@ -249,7 +286,7 @@ export async function placeOrder(db: Db, sf: Storefront, customerId: string, inp
       }
     }
     const actor: Actor = { type: 'customer', id: customerId };
-    await addEvent(tx, orderId, 'pending_payment', actor);
+    await addEvent(tx, orderId, onAccount ? 'confirmed' : 'pending_payment', actor, onAccount ? `On account, payment due ${dueOn}` : undefined);
     await audit(tx, sf.organizationId, actor, 'order.place', orderId, { orderNo, totalMinor: Number(total), paymentMethod: input.paymentMethod }, requestId);
     return { orderId, replayed: false };
   });
@@ -269,7 +306,7 @@ export async function lockOrder(tx: Tx, organizationId: string, where: { id?: st
 export async function cancelOrder(db: Db, organizationId: string, where: { id?: string; orderNo?: string; customerId?: string }, actor: Actor, reason: string, requestId?: string) {
   const id = await withTx(db, async (tx) => {
     const o = await lockOrder(tx, organizationId, where);
-    const allowed = actor.type === 'customer' ? ['pending_payment'] : ['pending_payment', 'paid', 'processing'];
+    const allowed = actor.type === 'customer' ? ['pending_payment'] : ['pending_payment', 'confirmed', 'paid', 'processing'];
     if (!allowed.includes(o.status)) throw conflict(`An order that is ${o.status.replace('_', ' ')} can no longer be cancelled${actor.type === 'customer' ? ' here; contact the store' : ''}`);
     await releaseReferenceReservations(tx, 'sales_order', o.id);
     await tx.query(
@@ -293,6 +330,22 @@ export async function applyPayment(
   p: { method: 'card' | 'bank_transfer'; provider?: string | null; reference: string; amountMinor: number }, actor: Actor, requestId?: string,
 ): Promise<'settled' | 'refund_due'> {
   const outstanding = BigInt(o.total_minor) - BigInt(o.paid_minor);
+  if (o.payment_method === 'account') {
+    // On-account orders are settled by one or more payments against the balance; the order's status does not change.
+    if (['cancelled', 'expired'].includes(o.status)) throw conflict(`Payment cannot be recorded on an order that is ${o.status}`);
+    if (BigInt(p.amountMinor) > outstanding) throw invalid(`The payment is more than the balance owing (${outstanding})`);
+    try {
+      await tx.query('INSERT INTO sales_order_payments (order_id, method, provider, reference, amount_minor, recorded_by) VALUES ($1,$2,$3,$4,$5,$6)',
+        [o.id, p.method, p.provider ?? null, p.reference, p.amountMinor, actor.type === 'staff' ? actor.id : null]);
+    } catch (err) {
+      if ((err as { code?: string }).code === '23505') throw conflict('That payment reference has already been used');
+      throw err;
+    }
+    await tx.query('UPDATE sales_orders SET paid_minor = paid_minor + $2 WHERE id = $1', [o.id, p.amountMinor]);
+    await addEvent(tx, o.id, o.status, actor, `Payment of ${p.amountMinor} received (${p.method} ${p.reference})`);
+    await audit(tx, organizationId, actor, 'order.account_payment', o.id, { method: p.method, amountMinor: p.amountMinor }, requestId);
+    return 'settled';
+  }
   const settles = o.status === 'pending_payment';
   if (settles && BigInt(p.amountMinor) !== outstanding) throw invalid(`The amount must equal the amount outstanding (${outstanding})`);
   try {
@@ -323,13 +376,13 @@ export async function recordPayment(
   await withTx(db, async (tx) => {
     const o = await lockOrder(tx, organizationId, { id: orderId });
     // Staff confirm money for orders that are waiting for it; late card money is handled by the provider path only.
-    if (o.status !== 'pending_payment') throw conflict(`Payment cannot be recorded on an order that is ${o.status.replace('_', ' ')}`);
+    if (o.status !== 'pending_payment' && o.payment_method !== 'account') throw conflict(`Payment cannot be recorded on an order that is ${o.status.replace('_', ' ')}`);
     await applyPayment(tx, organizationId, o, p, actor, requestId);
   });
   return readOrder(db, { id: orderId, organizationId }, true);
 }
 
-const TRANSITIONS = { process: { from: ['paid'], to: 'processing' }, ship: { from: ['paid', 'processing'], to: 'shipped' }, deliver: { from: ['shipped'], to: 'delivered' } } as const;
+const TRANSITIONS = { process: { from: ['paid', 'confirmed'], to: 'processing' }, ship: { from: ['paid', 'confirmed', 'processing'], to: 'shipped' }, deliver: { from: ['shipped'], to: 'delivered' } } as const;
 
 export async function advanceOrder(
   db: Db, organizationId: string, orderId: string, action: keyof typeof TRANSITIONS,
@@ -373,5 +426,24 @@ export async function expireUnpaidOrders(db: Db, now = new Date(), batch = 100):
       await audit(tx, o.organization_id, actor, 'order.expire', o.id, {});
     }
     return rows.length;
+  });
+}
+
+/** The customer's running account: what was ordered on account and what was paid, oldest first, with the balance after each line. */
+export async function tradeStatement(db: Pick<Db, 'query'>, customerId: string) {
+  const { rows } = await db.query<{ at: Date; kind: string; ref: string; amount: string }>(
+    `SELECT o.placed_at AS at, 'order' AS kind, o.order_no AS ref, o.total_minor AS amount FROM sales_orders o
+      WHERE o.customer_id = $1 AND o.payment_method = 'account' AND o.status NOT IN ('cancelled', 'expired')
+     UNION ALL
+     SELECT p.created_at, 'payment', p.reference, p.amount_minor FROM sales_order_payments p JOIN sales_orders o ON o.id = p.order_id
+      WHERE o.customer_id = $1 AND o.payment_method = 'account' AND o.status NOT IN ('cancelled', 'expired')
+     ORDER BY at, kind DESC`,
+    [customerId],
+  );
+  let balance = 0n;
+  return rows.map((r) => {
+    const amount = BigInt(r.amount);
+    balance += r.kind === 'order' ? amount : -amount;
+    return { at: r.at, kind: r.kind, reference: r.ref, amountMinor: Number(amount), balanceMinor: Number(balance) };
   });
 }

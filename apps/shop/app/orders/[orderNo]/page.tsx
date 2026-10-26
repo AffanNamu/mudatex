@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useParams, useSearchParams } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { RequireShopper } from '@/components/RequireShopper';
 import { shopRequest } from '@/lib/api';
@@ -17,7 +17,8 @@ function OrderView() {
   const autoPay = search.get('pay') === '1';
   const returned = search.get('reference');
   const { token } = useAuth();
-  const { store } = useCart();
+  const { store, add } = useCart();
+  const router = useRouter();
   const [order, setOrder] = useState<Order | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -69,9 +70,14 @@ function OrderView() {
     setBusy(true);
     try { setOrder(await shopRequest<Order>(`/me/orders/${orderNo}/cancel`, { method: 'POST', token })); } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
   };
+  const buyAgain = () => {
+    for (const l of order.lines) add({ variantId: l.variantId, productSlug: l.productSlug ?? '', title: l.title, sku: l.sku, image: l.image, unit: l.unit, quantity: String(Number(l.quantity)), priceMinor: 0 });
+    router.push('/cart');
+  };
   const c = store.contact;
   const wa = whatsappLink(c.whatsapp, `Hello, my order is ${order.orderNo}.`);
   const waiting = order.status === 'pending_payment';
+  const onAccount = order.paymentMethod === 'account';
 
   return (
     <div className="stack">
@@ -79,6 +85,9 @@ function OrderView() {
       <div className="row spread"><h1 style={{ margin: 0 }}>Order {order.orderNo}</h1><span className={`status ${order.status}`}>{STATUS_LABEL[order.status] ?? order.status}</span></div>
 
       {payNote && <p className="notice" role="status">{payNote}</p>}
+      {onAccount && order.status !== 'cancelled' && (
+        <p className="notice">This order is on your trade account. {order.totalMinor - order.paidMinor > 0 ? <>Balance owing: <strong>{money(order.totalMinor - order.paidMinor)}</strong>{order.dueOn ? <>, due by {new Date(order.dueOn).toLocaleDateString()}</> : null}.</> : 'It has been paid in full.'}</p>
+      )}
       {waiting && order.paymentMethod === 'card' && (
         <section className="card stack" aria-labelledby="cardpay">
           <h2 id="cardpay">Pay {money(order.totalMinor)} by card</h2>
@@ -122,6 +131,7 @@ function OrderView() {
             {order.events.map((e, i) => <li key={i}><strong>{STATUS_LABEL[e.status] ?? e.status}</strong><div className="small muted">{new Date(e.at).toLocaleString()}</div></li>)}
           </ol>
           {waiting && <button className="btn ghost small" onClick={cancel} disabled={busy}>Cancel this order</button>}
+          <button className="btn ghost small" onClick={buyAgain} style={{ marginTop: 8 }}>Buy again</button>
         </section>
       </div>
     </div>

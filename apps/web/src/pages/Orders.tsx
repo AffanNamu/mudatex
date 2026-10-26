@@ -5,14 +5,14 @@ import { useAuth } from '../lib/auth';
 import { useDebounced, useLoad } from '../lib/hooks';
 import { formatMoney } from '../lib/money';
 
-const STATUSES = [['', 'All'], ['pending_payment', 'Awaiting payment'], ['paid', 'Paid'], ['processing', 'Preparing'], ['shipped', 'Shipped'], ['delivered', 'Delivered'], ['cancelled', 'Cancelled'], ['expired', 'Expired']] as const;
+const STATUSES = [['', 'All'], ['pending_payment', 'Awaiting payment'], ['confirmed', 'On account'], ['paid', 'Paid'], ['processing', 'Preparing'], ['shipped', 'Shipped'], ['delivered', 'Delivered'], ['cancelled', 'Cancelled'], ['expired', 'Expired']] as const;
 const LABEL = Object.fromEntries(STATUSES.map(([v, l]) => [v, l]));
 
 interface Row { minorUnit: number; id: string; orderNo: string; status: string; currency: string; totalMinor: number; paidMinor: number; paymentMethod: string; customerName: string; placedAt: string }
 interface Detail {
   minorUnit: number;
   id: string; orderNo: string; status: string; currency: string; subtotalMinor: number; deliveryFeeMinor: number; totalMinor: number; paidMinor: number; refundDueMinor: number;
-  paymentMethod: string; contact: { name: string; email: string; phone: string | null }; note: string | null; carrier: string | null; trackingRef: string | null; cancelReason: string | null; expiresAt: string;
+  paymentMethod: string; dueOn: string | null; contact: { name: string; email: string; phone: string | null }; note: string | null; carrier: string | null; trackingRef: string | null; cancelReason: string | null; expiresAt: string;
   delivery: { recipient: string; phone: string; line1: string; line2: string | null; city: string; state: string; countryCode: string; zone: string };
   lines: { lineNo: number; title: string; sku: string; quantity: string; totalMinor: number }[];
   events: { status: string; actorType: string; note: string | null; at: string }[];
@@ -63,7 +63,7 @@ function OrderPanel({ id, onChanged }: { id: string; onChanged(): void }) {
   const d = useLoad<Detail>(`/v1/sales-orders/${id}`);
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
-  const [ref, setRef] = useState(''); const [carrier, setCarrier] = useState(''); const [tracking, setTracking] = useState(''); const [reason, setReason] = useState('');
+  const [ref, setRef] = useState(''); const [amount, setAmount] = useState(''); const [carrier, setCarrier] = useState(''); const [tracking, setTracking] = useState(''); const [reason, setReason] = useState('');
   const o = d.data;
   const money = (m: number) => formatMoney(m, o?.currency ?? 'NGN', o?.minorUnit ?? 2);
   const refSeed = useRef(0);
@@ -75,7 +75,8 @@ function OrderPanel({ id, onChanged }: { id: string; onChanged(): void }) {
   }
   if (!o) return <><ErrorBanner error={d.error} />{d.loading && <Loading what="the order" />}</>;
   const step = (action: 'process' | 'ship' | 'deliver') => post('steps', { action, ...(action === 'ship' ? { ...(carrier.trim() ? { carrier: carrier.trim() } : {}), ...(tracking.trim() ? { trackingRef: tracking.trim() } : {}) } : {}) });
-  const pay = (e: FormEvent) => { e.preventDefault(); return post('payments', { method: o.paymentMethod, reference: ref.trim(), amountMinor: o.totalMinor - o.paidMinor }); };
+  const pay = (e: FormEvent) => { e.preventDefault(); return post('payments', { method: o.paymentMethod === 'account' ? 'bank_transfer' : o.paymentMethod, reference: ref.trim(), amountMinor: o.paymentMethod === 'account' ? Math.round(Number(amount) * 10 ** o.minorUnit) : o.totalMinor - o.paidMinor }); };
+  const owing = o.totalMinor - o.paidMinor;
 
   return (
     <section className="panel" aria-label={`Order ${o.orderNo}`}>
@@ -93,6 +94,16 @@ function OrderPanel({ id, onChanged }: { id: string; onChanged(): void }) {
       </table></div>
       <ErrorBanner error={error} />
 
+      {o.paymentMethod === 'account' && o.status !== 'cancelled' && o.status !== 'expired' && can('orders.payment.record') && (
+        <form className="form-grid" onSubmit={pay}>
+          <p className="muted">On the customer&apos;s trade account. Owing {money(owing)}{o.dueOn ? `, due ${o.dueOn}` : ''}.</p>
+          {owing > 0 && <>
+            <Field label="Amount received"><input required inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} /></Field>
+            <Field label="Bank reference" hint="A reference can be used once."><input required minLength={4} value={ref} onChange={(e) => setRef(e.target.value)} /></Field>
+            <div className="form-actions"><button className="btn btn-primary" disabled={busy || ref.trim().length < 4 || !(Number(amount) > 0)}>Record payment</button></div>
+          </>}
+        </form>
+      )}
       {o.status === 'pending_payment' && can('orders.payment.record') && (
         <form className="form-grid" onSubmit={pay}>
           <Field label={`Bank reference of the ${money(o.totalMinor)} transfer`} hint="Check it against the bank statement first. A reference can be used for one order only."><input required minLength={4} value={ref} onChange={(e) => setRef(e.target.value)} /></Field>
@@ -102,8 +113,8 @@ function OrderPanel({ id, onChanged }: { id: string; onChanged(): void }) {
       )}
       {can('orders.fulfil') && (
         <div className="row">
-          {o.status === 'paid' && <button className="btn" disabled={busy} onClick={() => step('process')}>Start preparing</button>}
-          {(o.status === 'paid' || o.status === 'processing') && (
+          {(o.status === 'paid' || o.status === 'confirmed') && <button className="btn" disabled={busy} onClick={() => step('process')}>Start preparing</button>}
+          {(o.status === 'paid' || o.status === 'confirmed' || o.status === 'processing') && (
             <form className="form-grid" onSubmit={(e) => { e.preventDefault(); step('ship'); }}>
               <Field label="Courier"><input value={carrier} onChange={(e) => setCarrier(e.target.value)} maxLength={80} /></Field>
               <Field label="Tracking number"><input value={tracking} onChange={(e) => setTracking(e.target.value)} maxLength={100} /></Field>
@@ -113,7 +124,7 @@ function OrderPanel({ id, onChanged }: { id: string; onChanged(): void }) {
           {o.status === 'shipped' && <button className="btn btn-primary" disabled={busy} onClick={() => step('deliver')}>Mark delivered</button>}
         </div>
       )}
-      {['pending_payment', 'paid', 'processing'].includes(o.status) && can('orders.cancel') && (
+      {['pending_payment', 'confirmed', 'paid', 'processing'].includes(o.status) && can('orders.cancel') && (
         <details><summary>Cancel this order</summary>
           <form className="form-grid" onSubmit={(e) => { e.preventDefault(); post('cancel', { reason: reason.trim() }); }}>
             <Field label="Reason" hint={o.paidMinor > 0 ? `${money(o.paidMinor)} was paid and will be recorded as owed back to the customer.` : 'The reserved stock is released.'}><input required minLength={5} value={reason} onChange={(e) => setReason(e.target.value)} /></Field>

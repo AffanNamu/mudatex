@@ -6,7 +6,7 @@ import type { ReactNode } from 'react';
 import { RequireShopper } from '@/components/RequireShopper';
 import { useAuth } from '@/lib/auth';
 
-const TABS = [['/account', 'Profile'], ['/account/orders', 'Orders'], ['/account/addresses', 'Addresses'], ['/account/wishlist', 'Wishlist']] as const;
+const TABS = [['/account', 'Profile'], ['/account/orders', 'Orders'], ['/account/addresses', 'Addresses'], ['/account/wishlist', 'Wishlist'], ['/trade', 'Trade account']] as const;
 
 export default function AccountLayout({ children }: { children: ReactNode }) {
   const path = usePathname();

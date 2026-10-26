@@ -29,6 +29,7 @@ import { Enquiries } from './pages/Enquiries';
 import { Orders } from './pages/Orders';
 import { Reviews } from './pages/Reviews';
 import { Setup } from './pages/Setup';
+import { TradeAccounts } from './pages/TradeAccounts';
 import { Store } from './pages/Store';
 
 /** Hides a page the person cannot use. This is a courtesy: the server refuses the requests regardless. */
@@ -56,6 +57,7 @@ export function App() {
         <Route path="orders" element={<Needs permission="orders.read"><Orders /></Needs>} />
         <Route path="enquiries" element={<Needs permission="enquiries.manage"><Enquiries /></Needs>} />
         <Route path="reviews" element={<Needs permission="reviews.moderate"><Reviews /></Needs>} />
+        <Route path="trade" element={<Needs permission="trade.manage"><TradeAccounts /></Needs>} />
         <Route path="store" element={<Needs permission="storefront.manage"><Store /></Needs>} />
         <Route path="setup" element={<Needs permission="org.manage"><Setup /></Needs>} />
         <Route path="catalogue" element={<Needs permission="catalog.read"><Catalogue /></Needs>} />

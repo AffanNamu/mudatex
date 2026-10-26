@@ -98,3 +98,31 @@ test('staff work a website enquiry from new to closed', async ({ page, request }
   await expect(page.getByRole('article', { name: 'Enquiry from Ngozi Eze' })).toBeVisible();
   await noA11yViolations(page);
 });
+
+test('staff approve a wholesale application with a price list and credit', async ({ page, request }) => {
+  const { createHmac } = await import('node:crypto');
+  const b64 = (o: object) => Buffer.from(JSON.stringify(o)).toString('base64url');
+  const shopper = 'trade-shopper@e2e.test';
+  const now = Math.floor(Date.now() / 1000);
+  const head = b64({ alg: 'HS256', typ: 'JWT' });
+  const body = b64({ sub: shopper, email: shopper, iat: now, exp: now + 3600, aud: 'authenticated' });
+  const jwt = `${head}.${body}.${createHmac('sha256', 'e2e-dev-secret-e2e-dev-secret-0001').update(`${head}.${body}`).digest('base64url')}`;
+  const auth = { authorization: `Bearer ${jwt}` };
+  test.skip((await request.get('http://localhost:3100/shop/console-shop')).status() !== 200, 'needs the store from the earlier test');
+  expect((await request.post('http://localhost:3100/shop/console-shop/me', { headers: auth, data: { fullName: 'Hajiya Zainab' } })).status()).toBe(201);
+  expect((await request.post('http://localhost:3100/shop/console-shop/me/trade', { headers: auth, data: { businessName: 'Zainab Fabrics' } })).status()).toBe(201);
+
+  await signIn(page, 'admin@e2e.test');
+  await nav(page, 'Trade accounts');
+  const card = page.getByRole('article', { name: 'Trade account for Zainab Fabrics' });
+  await expect(card).toContainText('Waiting for a decision');
+  await card.getByLabel(/Credit limit/).fill('250000');
+  await card.getByLabel('Payment terms (days)').fill('45');
+  await card.getByRole('button', { name: 'Approve' }).click();
+  await page.getByLabel('Show').selectOption({ label: 'Approved' });
+  const approved = page.getByRole('article', { name: 'Trade account for Zainab Fabrics' });
+  await expect(approved).toContainText('Credit ₦0.00 used of ₦250,000.00 · 45 day terms');
+  const me = await (await request.get('http://localhost:3100/shop/console-shop/me/trade', { headers: auth })).json();
+  expect(me).toMatchObject({ status: 'approved', creditLimitMinor: 25_000_000, paymentTermsDays: 45 });
+  await noA11yViolations(page);
+});

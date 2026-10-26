@@ -21,11 +21,13 @@ export async function seedShop(API) {
   const tax = await post('/v1/pricing/tax-codes', { legalEntityId: le.id, code: 'VAT75', name: 'VAT 7.5%', rate: '0.075', priceInclusive: false });
   const list = await post('/v1/pricing/price-lists', { legalEntityId: le.id, name: 'Online NGN', currency: 'NGN' });
 
+  const wholesale = await post('/v1/pricing/price-lists', { legalEntityId: le.id, name: 'Wholesale NGN', currency: 'NGN' });
   const variants = {};
   const product = async (name, sku, price, stock, conversions = []) => {
     const p = await post('/v1/products', { name, baseUnitId: metre.id, variants: [{ sku }], conversions });
     const variantId = p.variantIds[0];
     await call(a, 'PUT', `/v1/pricing/price-lists/${list.id}/items`, { variantId, unitPrice: price, taxCodeId: tax.id });
+    if (sku === 'ATP-001') await call(a, 'PUT', `/v1/pricing/price-lists/${wholesale.id}/items`, { variantId, unitPrice: '1500', taxCodeId: tax.id });
     if (stock !== '0') await post('/v1/inventory/receipts', { locationId: warehouse.id, lines: [{ variantId, quantity: stock }] });
     variants[sku] = { productId: p.id, variantId };
   };
@@ -52,5 +54,5 @@ export async function seedShop(API) {
   await post(`/v1/storefronts/${sf.id}/delivery-zones`, { name: 'Nigeria', countryCode: 'NG', feeMinor: 450000, etaDaysMin: 3, etaDaysMax: 6 });
   await post(`/v1/storefronts/${sf.id}/coupons`, { code: 'WELCOME10', description: 'Welcome offer', percentBps: 1000, perCustomerLimit: 1 });
   await call(a, 'PUT', `/v1/storefronts/${sf.id}`, { status: 'live' });
-  return { adminToken: a, storefrontId: sf.id, variants };
+  return { wholesaleListId: wholesale.id, adminToken: a, storefrontId: sf.id, variants };
 }

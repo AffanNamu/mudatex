@@ -59,7 +59,7 @@ function Checkout() {
   const [adding, setAdding] = useState(false);
   const [quote, setQuote] = useState<BasketQuote | null>(null);
   const [quoteError, setQuoteError] = useState('');
-  const [method, setMethod] = useState<'bank_transfer' | 'card'>('bank_transfer');
+  const [method, setMethod] = useState<'bank_transfer' | 'card' | 'account'>('bank_transfer');
   const [note, setNote] = useState('');
   const [placing, setPlacing] = useState(false);
   const [error, setError] = useState('');
@@ -80,7 +80,7 @@ function Checkout() {
   useEffect(() => {
     if (!lines.length) return;
     let cancelled = false;
-    shopRequest<BasketQuote>('/basket', { body: { lines: lines.map((l) => ({ variantId: l.variantId, quantity: l.quantity })), ...(coupon ? { couponCode: coupon } : {}), ...(address ? { to: { countryCode: address.countryCode, state: address.state } } : {}) } })
+    shopRequest<BasketQuote>('/basket', { body: { lines: lines.map((l) => ({ variantId: l.variantId, quantity: l.quantity })), ...(coupon ? { couponCode: coupon } : {}), ...(address ? { to: { countryCode: address.countryCode, state: address.state } } : {}) }, ...(token ? { token } : {}) })
       .then((q) => { if (!cancelled) { setQuote(q); setQuoteError(''); } })
       .catch((err: Error) => { if (!cancelled) { setQuote(null); setQuoteError(err.message); } });
     return () => { cancelled = true; };
@@ -135,6 +135,10 @@ function Checkout() {
             <h2 id="pay">2. Payment</h2>
             <label className="radio"><input type="radio" name="pay" checked={method === 'bank_transfer'} onChange={() => setMethod('bank_transfer')} />
               <span><strong>Bank transfer</strong><br /><span className="muted small">We show you our account details next. Your order is held for 24 hours while you pay, then shipped as soon as we confirm it.</span></span></label>
+            {quote?.trade && (
+              <label className="radio"><input type="radio" name="pay" checked={method === 'account'} disabled={quote.totalMinor == null || quote.totalMinor > quote.trade.creditAvailableMinor} onChange={() => setMethod('account')} />
+                <span><strong>On account</strong> <span className="chip">Trade</span><br /><span className="muted small">Order now, pay on your terms. Available credit: {money(quote.trade.creditAvailableMinor)}.{quote.totalMinor != null && quote.totalMinor > quote.trade.creditAvailableMinor ? ' This order is above your available credit.' : ''}</span></span></label>
+            )}
             <label className="radio" aria-disabled={!store.cardPayments}><input type="radio" name="pay" checked={method === 'card'} disabled={!store.cardPayments} onChange={() => setMethod('card')} />
               <span><strong>Card or online banking</strong><br /><span className="muted small">{store.cardPayments ? 'Pay securely on Paystack. Your order is held for 1 hour while you pay.' : 'Coming soon.'}</span></span></label>
           </section>

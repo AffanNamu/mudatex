@@ -57,6 +57,7 @@ export const PERMISSIONS = [
   'orders.cancel',
   'enquiries.manage',
   'reviews.moderate',
+  'trade.manage',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];

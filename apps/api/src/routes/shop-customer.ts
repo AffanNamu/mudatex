@@ -4,7 +4,7 @@ import type { TokenVerifier } from '../auth/token.js';
 import { withTx, type Db } from '../db.js';
 import { conflict, forbidden, invalid, notFound, unauthorized } from '../errors.js';
 import { cardsFor, loadLiveStorefront, type Storefront } from '../shop/catalog.js';
-import { cancelOrder, MAX_ORDER_LINES, placeOrder, readOrder } from '../shop/orders.js';
+import { approvedTrade, cancelOrder, creditUsed, MAX_ORDER_LINES, placeOrder, readOrder, tradeStatement } from '../shop/orders.js';
 import { AppError } from '../errors.js';
 import type { PaymentProvider } from '../payments/paystack.js';
 import { settleCardPayment, startCardPayment } from '../shop/card-payments.js';
@@ -39,7 +39,7 @@ const orderBody = z.object({
     unitId: z.string().uuid().optional(),
   })).min(1).max(MAX_ORDER_LINES),
   addressId: z.string().uuid(),
-  paymentMethod: z.enum(['card', 'bank_transfer']),
+  paymentMethod: z.enum(['card', 'bank_transfer', 'account']),
   couponCode: z.string().trim().min(3).max(20).optional(),
   note: z.string().trim().max(500).optional(),
 });
@@ -323,5 +323,33 @@ export const shopCustomerRoutes: FastifyPluginAsync<{ db: Db; verify: TokenVerif
       }
     });
     return reply.status(201).send(created);
+  });
+
+  // ---- trade (wholesale) account
+  const tradeColumns = `id, business_name AS "businessName", tax_id AS "taxId", status, credit_limit_minor AS "creditLimitMinor", payment_terms_days AS "paymentTermsDays", note, created_at AS "createdAt"`;
+
+  app.post('/shop/:slug/me/trade', async (req, reply) => {
+    const body = z.object({ businessName: z.string().trim().min(2).max(150), taxId: z.string().trim().max(50).optional() }).parse(req.body);
+    const id = await customer(req);
+    const existing = await db.query<{ status: string }>('SELECT status FROM trade_accounts WHERE storefront_id = $1 AND customer_id = $2', [req.storefront.id, id]);
+    if (existing.rows[0] && existing.rows[0].status !== 'rejected') throw conflict('You already have a trade application or account');
+    const { rows } = await db.query(
+      `INSERT INTO trade_accounts (organization_id, storefront_id, customer_id, business_name, tax_id) VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (storefront_id, customer_id) DO UPDATE SET business_name = $4, tax_id = $5, status = 'pending', note = NULL, reviewed_at = NULL
+       RETURNING ${tradeColumns}`,
+      [req.storefront.organizationId, req.storefront.id, id, body.businessName, body.taxId ?? null],
+    );
+    return reply.status(201).send({ ...rows[0], creditLimitMinor: Number(rows[0].creditLimitMinor) });
+  });
+
+  app.get('/shop/:slug/me/trade', async (req) => {
+    const id = await customer(req);
+    const { rows } = await db.query(`SELECT ${tradeColumns} FROM trade_accounts WHERE storefront_id = $1 AND customer_id = $2`, [req.storefront.id, id]);
+    if (!rows[0]) throw notFound('Trade account');
+    const acct = { ...rows[0], creditLimitMinor: Number(rows[0].creditLimitMinor) };
+    if (rows[0].status !== 'approved') return acct;
+    const used = await creditUsed(db, id);
+    const t = await approvedTrade(db, req.storefront.id, id);
+    return { ...acct, creditUsedMinor: Number(used), creditAvailableMinor: Number((t?.creditLimitMinor ?? 0n) - used), statement: await tradeStatement(db, id) };
   });
 };

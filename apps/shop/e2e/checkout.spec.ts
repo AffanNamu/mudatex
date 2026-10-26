@@ -247,3 +247,49 @@ test.describe('reviews', () => {
     expect(api.items[0]).toMatchObject({ rating: 4, name: 'Ibrahim S.' });
   });
 });
+
+test.describe('trade accounts', () => {
+  test('a business applies, is approved with credit, sees trade prices and orders on account', async ({ page }) => {
+    const email = uniqueEmail('trade');
+    await signUp(page, email, '/account');
+    await completeProfile(page, 'Hajiya Zainab', '+2348030000001');
+    await page.goto('/trade');
+    await page.getByLabel('Business name').fill('Zainab Fabrics');
+    await page.getByRole('button', { name: 'Send application' }).click();
+    await expect(page.getByText(/application received/)).toBeVisible();
+
+    // staff approve it with the wholesale list and a credit limit
+    const queue = await admin('GET', '/v1/trade-accounts?status=pending');
+    const mine = queue.find((t: any) => t.email === email);
+    const lists = await admin('GET', '/v1/pricing/price-lists');
+    await admin('POST', `/v1/trade-accounts/${mine.id}/decision`, { status: 'approved', priceListId: lists.find((l: any) => l.name === 'Wholesale NGN').id, creditLimitMinor: 5_000_000, paymentTermsDays: 30 });
+
+    await page.goto('/trade');
+    await expect(page.getByText('approved.', { exact: false })).toBeVisible();
+    await expect(page.getByText('₦50,000.00').first()).toBeVisible();
+
+    await page.goto('/product/atampa-blue');
+    await page.getByLabel(/Quantity/).fill('10');
+    await page.getByRole('button', { name: 'Add to basket' }).click();
+    await page.goto('/cart');
+    await expect(page.getByText('Trade prices applied.')).toBeVisible();
+    await expect(page.getByLabel('Order summary').getByText('₦16,125.00')).toBeVisible(); // 10 x 1,500 + 7.5%
+
+    await page.getByRole('link', { name: 'Checkout' }).click();
+    await page.getByLabel('Recipient').fill('Zainab');
+    await page.getByLabel('Phone', { exact: true }).fill('+2348030000001');
+    await page.getByLabel('Address', { exact: true }).fill('Kwari Market, Shop 12');
+    await page.getByLabel('City').fill('Kano');
+    await page.getByLabel('State').fill('Kano');
+    await page.getByRole('button', { name: 'Save address' }).click();
+    await page.getByRole('radio', { name: /On account/ }).check();
+    await page.getByRole('button', { name: 'Place order' }).click();
+    await expect(page).toHaveURL(/\/orders\/SO-/);
+    await expect(page.getByText(/on your trade account/)).toBeVisible();
+    await expect(page.getByText('Confirmed (on account)').first()).toBeVisible();
+
+    await page.goto('/trade');
+    await expect(page.getByRole('cell', { name: /Order SO-/ })).toBeVisible();
+    await expect(page.getByText('₦17,625.00').first()).toBeVisible();
+  });
+});

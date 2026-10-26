@@ -67,6 +67,7 @@ export default function CartPage() {
         </div>
         <aside className="card summary stack" aria-label="Order summary">
           <h2>Summary</h2>
+          {quote?.trade && <p className="notice small">Trade prices applied.</p>}
           {problem && <p className="err" role="alert">{problem}</p>}
           <dl>
             <dt>Subtotal</dt><dd>{quote ? money(quote.subtotalMinor) : '—'}</dd>

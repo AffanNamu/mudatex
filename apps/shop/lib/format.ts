@@ -11,7 +11,7 @@ export function formatMoney(minor: number, currency: string, minorUnit: number):
 export const trimQty = (q: string) => (q.includes('.') ? q.replace(/0+$/, '').replace(/\.$/, '') : q);
 
 export const STATUS_LABEL: Record<string, string> = {
-  pending_payment: 'Awaiting payment', paid: 'Paid', processing: 'Being prepared', shipped: 'On its way',
+  pending_payment: 'Awaiting payment', confirmed: 'Confirmed (on account)', paid: 'Paid', processing: 'Being prepared', shipped: 'On its way',
   delivered: 'Delivered', cancelled: 'Cancelled', expired: 'Expired',
 };
 
