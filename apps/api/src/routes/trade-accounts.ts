@@ -5,6 +5,7 @@ import { withTx, type Db } from '../db.js';
 import { invalid, notFound } from '../errors.js';
 import type { Mailer } from '../notify/mailer.js';
 import { openInvoices, sendManualReminder } from '../trade/collections.js';
+import { changeStandingOrder, readStandingOrders } from '../trade/standing-orders.js';
 import { audit, uuid } from '../inventory/common.js';
 
 const decisionBody = z.object({
@@ -102,4 +103,28 @@ export const tradeAccountRoutes: FastifyPluginAsync<{ db: Db; mailer?: Mailer }>
     await authorize(db, actor, 'trade.manage', { kind: 'legal_entity', legalEntityId: found.rows[0].legal_entity_id });
     return sendManualReminder(db, mailer, id, actor.organizationId, actor.userId);
   });
+
+  /** Standing orders across the buyers staff look after. Buyers create their own; staff can pause, resume or cancel them. */
+  app.get('/standing-orders', async (req) => {
+    const q = z.object({ status: z.enum(['active', 'paused', 'cancelled']).optional() }).parse(req.query);
+    const grants = await grantsFor(db, req.actor, 'trade.manage');
+    const rows = await readStandingOrders(db, { organizationId: req.actor.organizationId, status: q.status });
+    const countries = await db.query<{ id: string; country_code: string }>('SELECT id, country_code FROM legal_entities WHERE organization_id = $1', [req.actor.organizationId]);
+    const country = new Map(countries.rows.map((c) => [c.id, c.country_code.trim()]));
+    return rows.filter((r) => grants.group || grants.legalEntities.has(r.legalEntityId) || grants.countries.has(country.get(r.legalEntityId) ?? '')).map(({ legalEntityId: _l, ...r }) => r);
+  });
+
+  for (const change of ['pause', 'resume', 'cancel'] as const) {
+    app.post(`/standing-orders/:id/${change}`, async (req) => {
+      const { id } = z.object({ id: uuid }).parse(req.params);
+      const found = await db.query<{ legal_entity_id: string }>(
+        `SELECT s.legal_entity_id FROM standing_orders so JOIN storefronts s ON s.id = so.storefront_id WHERE so.id = $1 AND so.organization_id = $2`, [id, req.actor.organizationId]);
+      if (!found.rows[0]) throw notFound('Standing order');
+      await authorize(db, req.actor, 'trade.manage', { kind: 'legal_entity', legalEntityId: found.rows[0].legal_entity_id });
+      await changeStandingOrder(db, req.actor.organizationId, id, change, { userId: req.actor.userId }, req.id);
+      const [so] = await readStandingOrders(db, { organizationId: req.actor.organizationId, id });
+      const { legalEntityId: _l, ...visible } = so!;
+      return visible;
+    });
+  }
 };

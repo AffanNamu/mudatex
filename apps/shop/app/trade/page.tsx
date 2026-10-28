@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState, type FormEvent } from 'react';
 import { RequireShopper } from '@/components/RequireShopper';
+import { StandingOrdersList } from '@/components/StandingOrders';
 import { ApiError, shopRequest } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useCart } from '@/lib/cart';
@@ -73,6 +74,7 @@ function Trade() {
               ))}</tbody>
             </table>
           ) : <p className="muted">{t('quote.none')}</p>}
+          <StandingOrdersList />
           <h2>{t('trade.statement')}</h2>
           {acct.statement?.length ? (
             <table className="plain">

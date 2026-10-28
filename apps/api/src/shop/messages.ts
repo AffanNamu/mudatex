@@ -5,6 +5,11 @@ import type { ShopLanguage } from './translations.js';
  * itself carries, so staff screens and logs are unchanged; only answers to the public shop and shopper routes are translated.
  */
 const en = {
+  'err.shortage': 'Some items are no longer available in the quantity you asked for',
+  'err.standing.hold': 'Your trade account is on hold, so the standing order was not placed',
+  'err.standing.max': 'You can have up to {n} standing orders',
+  'err.standing.cancelled': 'This standing order is cancelled',
+  'err.notFound.Standing order': 'Standing order not found',
   'err.coupon.invalid': 'That coupon code is not valid',
   'err.coupon.notActive': 'That coupon is not active yet',
   'err.coupon.expired': 'That coupon has expired',
@@ -68,6 +73,11 @@ const en = {
 export type ShopMessageKey = keyof typeof en;
 
 const fr: Record<ShopMessageKey, string> = {
+  'err.shortage': 'Certains articles ne sont plus disponibles dans la quantité demandée',
+  'err.standing.hold': 'Votre compte professionnel est suspendu : la commande permanente n’a pas été passée',
+  'err.standing.max': 'Vous pouvez avoir jusqu’à {n} commandes permanentes',
+  'err.standing.cancelled': 'Cette commande permanente est annulée',
+  'err.notFound.Standing order': 'Commande permanente introuvable',
   'err.coupon.invalid': 'Ce code promo n’est pas valable',
   'err.coupon.notActive': 'Ce code promo n’est pas encore actif',
   'err.coupon.expired': 'Ce code promo a expiré',
@@ -131,6 +141,11 @@ const fr: Record<ShopMessageKey, string> = {
 
 // First draft; a Hausa speaker should read it before launch (see docs/operations/SHOP_LANGUAGES.md).
 const ha: Record<ShopMessageKey, string> = {
+  'err.shortage': 'Wasu kaya ba su nan yanzu a adadin da kuka nema',
+  'err.standing.hold': 'An dakatar da asusun ɗan kasuwanku, don haka ba a yi odar dindindin ba',
+  'err.standing.max': 'Kuna iya samun odar dindindin har {n}',
+  'err.standing.cancelled': 'An soke wannan odar dindindin',
+  'err.notFound.Standing order': 'Ba a sami odar dindindin ba',
   'err.coupon.invalid': 'Wannan lambar kuponi ba ta da inganci',
   'err.coupon.notActive': 'Wannan kuponi bai fara aiki ba tukuna',
   'err.coupon.expired': 'Lokacin wannan kuponi ya ƙure',

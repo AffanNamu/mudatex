@@ -254,7 +254,7 @@ export async function placeOrder(db: Db, sf: Storefront, customerId: string, inp
       if (toScaled(missing) > 0n) shortages.push({ variantId: l.variantId, sku: l.sku, requested: l.quantity, available: fromScaled(toScaled(l.quantity) - toScaled(missing)) });
       reservations.push(allocs);
     }
-    if (shortages.length) throw shortage('Some items are no longer available in the quantity you asked for', shortages);
+    if (shortages.length) throw shortage('Some items are no longer available in the quantity you asked for', shortages, { key: 'err.shortage' });
 
     const totals = saleTotals(priced);
     const linesTotal = totals.total;

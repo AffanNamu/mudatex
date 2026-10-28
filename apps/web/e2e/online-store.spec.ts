@@ -174,6 +174,12 @@ test('staff price a quote for a trade buyer, with the server working out the tot
   await expect(quote.getByRole('button', { name: 'Edit' })).toHaveCount(0);
   await page.getByRole('button', { name: '← All quotes' }).click();
   await expect(page.getByRole('row', { name: /QT-/ })).toContainText('Zainab Fabrics');
+
+  // Repeat orders are made by the buyers; staff have a page to watch and stop them.
+  await nav(page, 'Standing orders');
+  await expect(page.getByRole('heading', { name: 'Standing orders' })).toBeVisible();
+  await expect(page.getByText('None here.')).toBeVisible();
+  await noA11yViolations(page);
 });
 
 test('one person asks for a refund and another approves it', async ({ page, request }) => {

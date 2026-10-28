@@ -7,6 +7,7 @@ import { conflict, forbidden, invalid, notFound, unauthorized } from '../errors.
 import { cardsFor, loadLiveStorefront, type Storefront } from '../shop/catalog.js';
 import { SHOP_LANGUAGES } from '../shop/translations.js';
 import { readQuote } from '../trade/quotes.js';
+import { changeStandingOrder, createBody as standingBody, createStandingOrder, readStandingOrders } from '../trade/standing-orders.js';
 import { approvedTrade, cancelOrder, creditUsed, MAX_ORDER_LINES, placeOrder, readOrder, tradeStatement } from '../shop/orders.js';
 import { AppError } from '../errors.js';
 import type { PaymentProvider } from '../payments/paystack.js';
@@ -301,6 +302,34 @@ export const shopCustomerRoutes: FastifyPluginAsync<{ db: Db; verify: TokenVerif
       return readQuote(tx, { id: q.id, organizationId: req.storefront.organizationId }).then(({ createdBy: _c, tradeAccountId: _t, legalEntityId: _l, customerId: _u, storefrontId: _s, ...visible }) => visible);
     });
   });
+
+  // ---- standing orders: the same goods ordered again on a schedule, at that day's trade prices.
+  const standingId = z.object({ id: uuid });
+
+  app.get('/shop/:slug/me/standing-orders', async (req) => {
+    const id = await customer(req);
+    return (await readStandingOrders(db, { organizationId: req.storefront.organizationId, customerId: id })).map(({ legalEntityId: _l, ...s }) => s);
+  });
+
+  app.post('/shop/:slug/me/standing-orders', async (req, reply) => {
+    const body = standingBody.parse(req.body);
+    const id = await customer(req);
+    const created = await createStandingOrder(db, req.storefront.id, req.storefront.organizationId, id, body, req.id);
+    const [so] = await readStandingOrders(db, { organizationId: req.storefront.organizationId, customerId: id, id: created });
+    const { legalEntityId: _l, ...visible } = so!;
+    return reply.status(201).send(visible);
+  });
+
+  for (const change of ['pause', 'resume', 'cancel'] as const) {
+    app.post(`/shop/:slug/me/standing-orders/:id/${change}`, async (req) => {
+      const { id: soId } = standingId.parse(req.params);
+      const id = await customer(req);
+      await changeStandingOrder(db, req.storefront.organizationId, soId, change, { customerId: id }, req.id);
+      const [so] = await readStandingOrders(db, { organizationId: req.storefront.organizationId, customerId: id, id: soId });
+      const { legalEntityId: _l, ...visible } = so!;
+      return visible;
+    });
+  }
 
   app.get('/shop/:slug/me/orders', async (req) => {
     const id = await customer(req);

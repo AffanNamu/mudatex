@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { RequireShopper } from '@/components/RequireShopper';
+import { RepeatOrder } from '@/components/StandingOrders';
 import { shopRequest } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useCart } from '@/lib/cart';
@@ -113,6 +114,8 @@ function OrderView() {
           {wa && <a className="btn ghost" href={wa} target="_blank" rel="noopener noreferrer">{t('order.sendProof')}</a>}
         </section>
       )}
+
+      {order.status !== 'cancelled' && order.status !== 'expired' && order.paymentMethod !== 'card' && <RepeatOrder orderNo={order.orderNo} paymentMethod={order.paymentMethod} />}
 
       <div className="cartgrid">
         <section className="card" aria-labelledby="items">

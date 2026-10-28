@@ -19,4 +19,4 @@ export const notFound = (what: string) => new AppError(404, 'not_found', `${what
 export const conflict = (msg: string, say?: Localized) => new AppError(409, 'conflict', msg, undefined, say);
 export const invalid = (msg: string, say?: Localized) => new AppError(422, 'invalid', msg, undefined, say);
 
-export const shortage = (msg: string, details: unknown) => new AppError(409, 'shortage', msg, details);
+export const shortage = (msg: string, details: unknown, say?: Localized) => new AppError(409, 'shortage', msg, details, say);

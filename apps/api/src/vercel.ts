@@ -9,6 +9,7 @@ import { Dispatcher } from './events/dispatcher.js';
 import { releaseExpiredReservations } from './inventory/expiry.js';
 import { expireUnpaidOrders } from './shop/orders.js';
 import { runCollections } from './trade/collections.js';
+import { runStandingOrders } from './trade/standing-orders.js';
 import { purgeDelivered, purgeIdempotencyKeys } from './events/maintenance.js';
 import { createSecretBox } from './events/secretbox.js';
 import { buildServer } from './server.js';
@@ -50,6 +51,7 @@ export function createHandler(env: NodeJS.ProcessEnv = process.env) {
               if (!n) break;
             }
             await expireUnpaidOrders(db);
+            await runStandingOrders(db, mailerFromConfig(config)).catch((err: Error) => console.error('standing orders failed', err.message));
             await runCollections(db, mailerFromConfig(config)).catch((err: Error) => console.error('collections failed', err.message));
             await releaseExpiredReservations(db);
             await purgeIdempotencyKeys(db);

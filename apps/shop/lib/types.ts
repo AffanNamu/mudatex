@@ -67,3 +67,10 @@ export interface Quote {
   orderNo: string | null; businessName: string;
   lines: { lineNo: number; sku: string; title: string; quantity: string; unitPrice: string; totalMinor: number }[];
 }
+
+export interface StandingOrder {
+  id: string; status: 'active' | 'paused' | 'cancelled'; frequency: 'weekly' | 'fortnightly' | 'monthly'; paymentMethod: 'account' | 'bank_transfer'; nextRunOn: string;
+  sourceOrderNo: string | null; failuresInRow: number; pausedReason: string | null; addressLabel: string; addressText: string;
+  lastRun: { runOn: string; outcome: 'placed' | 'failed'; reason: string | null; orderNo: string | null } | null;
+  lines: { variantId: string; sku: string; title: string; quantity: string }[];
+}

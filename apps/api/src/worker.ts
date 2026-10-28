@@ -8,6 +8,7 @@ import { pusherFromConfig } from './notify/push.js';
 import { releaseExpiredReservations } from './inventory/expiry.js';
 import { expireUnpaidOrders } from './shop/orders.js';
 import { runCollections } from './trade/collections.js';
+import { runStandingOrders } from './trade/standing-orders.js';
 
 // Standalone delivery worker: `node dist/worker.js`.
 const config = loadConfig();
@@ -24,6 +25,7 @@ const sweep = setInterval(() => {
 }, 60_000);
 // Overdue balances are chased once an hour; each reminder goes out once, so the schedule only decides how soon it starts.
 const collections = setInterval(() => {
+  runStandingOrders(db, mailerFromConfig(config)).catch((err: Error) => console.error('standing orders failed', err.message));
   runCollections(db, mailerFromConfig(config)).catch((err: Error) => console.error('collections failed', err.message));
 }, 3_600_000);
 const close = async () => { clearInterval(sweep); clearInterval(collections); await handle.stop(); await db.end(); };

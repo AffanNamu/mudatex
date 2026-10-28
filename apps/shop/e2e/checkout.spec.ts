@@ -336,6 +336,22 @@ test.describe('trade accounts', () => {
     await expect(page.getByText('₦16,550.00').first()).toBeVisible();   // goods 15,050.00 + 1,500.00 delivery
     await expect(page.getByText(/on your trade account/)).toBeVisible();
 
+    // The same goods again every two weeks: set up from the order, then paused, resumed and cancelled.
+    await page.getByLabel('How often').selectOption('fortnightly');
+    await page.getByRole('button', { name: 'Set up the standing order' }).click();
+    await expect(page.getByText(/Your next order will be placed on/)).toBeVisible();
+    await page.getByRole('link', { name: 'Manage standing orders' }).click();
+    const standing = page.locator('li.card', { hasText: 'every two weeks' });
+    await expect(standing).toContainText('Active');
+    await expect(standing).toContainText('Atampa Blue × 10');
+    await standing.getByRole('button', { name: 'Pause' }).click();
+    await expect(standing).toContainText('Paused');
+    await standing.getByRole('button', { name: 'Resume' }).click();
+    await expect(standing).toContainText('Active');
+    page.once('dialog', (d) => d.accept());
+    await standing.getByRole('button', { name: 'Cancel' }).click();
+    await expect(page.getByText(/No standing orders yet/)).toBeVisible();
+
     await page.goto(`/quotes/${quote.quoteNo}`);
     await expect(page.getByText(/This quote is accepted/)).toBeVisible();
     await expect(page.getByRole('button', { name: 'Accept and place the order' })).toHaveCount(0);
