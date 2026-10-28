@@ -6,7 +6,7 @@ import { formatMoney } from '../lib/money';
 
 interface Account {
   id: string; businessName: string; taxId: string | null; status: 'pending' | 'approved' | 'rejected' | 'suspended'; priceListId: string | null; creditLimitMinor: number; creditUsedMinor: number;
-  paymentTermsDays: number; note: string | null; createdAt: string; storeName: string; currency: string; contactName: string; email: string; phone: string | null;
+  paymentTermsDays: number; holdAfterDays: number; heldAutomatically: boolean; note: string | null; createdAt: string; storeName: string; currency: string; contactName: string; email: string; phone: string | null;
 }
 interface PriceList { id: string; name: string; currency: string }
 
@@ -37,6 +37,7 @@ function Card({ a, lists, onChanged }: { a: Account; lists: PriceList[]; onChang
   const listId = chosen || eligible[0]?.id || '';
   const [limit, setLimit] = useState(String(a.creditLimitMinor / 100 || ''));
   const [terms, setTerms] = useState(String(a.paymentTermsDays));
+  const [holdDays, setHoldDays] = useState(String(a.holdAfterDays));
   const [note, setNote] = useState(a.note ?? '');
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
@@ -47,7 +48,7 @@ function Card({ a, lists, onChanged }: { a: Account; lists: PriceList[]; onChang
     setBusy(true); setError(null);
     try {
       await api(`/v1/trade-accounts/${a.id}/decision`, { method: 'POST', body: {
-        status: to, ...(to === 'approved' ? { priceListId: listId, creditLimitMinor: Math.round(Number(limit || 0) * 100), paymentTermsDays: Number(terms) } : {}), ...(note.trim() ? { note: note.trim() } : {}),
+        status: to, ...(to === 'approved' ? { priceListId: listId, creditLimitMinor: Math.round(Number(limit || 0) * 100), paymentTermsDays: Number(terms), holdAfterDays: Number(holdDays) } : {}), ...(note.trim() ? { note: note.trim() } : {}),
       } });
       onChanged();
     } catch (err) { setError(err); } finally { setBusy(false); }
@@ -58,10 +59,12 @@ function Card({ a, lists, onChanged }: { a: Account; lists: PriceList[]; onChang
       <h2>{a.businessName} <span className="chip">{LABEL[a.status]}</span></h2>
       <p className="muted">{a.contactName} · {a.phone ?? ''} · <a href={`mailto:${a.email}`}>{a.email}</a>{a.taxId ? ` · Tax ID ${a.taxId}` : ''} · applied {new Date(a.createdAt).toLocaleDateString()} · {a.storeName}</p>
       {a.status === 'approved' && <p>Credit {money(a.creditUsedMinor)} used of {money(a.creditLimitMinor)} · {a.paymentTermsDays} day terms.</p>}
+      {a.status === 'suspended' && a.heldAutomatically && <Notice tone="warn">Held automatically for late payment. It lifts by itself when the overdue balance is paid, or you can approve it again below. See Collections.</Notice>}
       <form className="form-grid" onSubmit={(e) => decide('approved', e)}>
         <Field label="Trade price list" hint="The shop charges this business the prices on this list."><select value={listId} onChange={(e) => setChosen(e.target.value)}>{eligible.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</select></Field>
         <Field label={`Credit limit (${a.currency})`}><input inputMode="decimal" value={limit} onChange={(e) => setLimit(e.target.value)} /></Field>
         <Field label="Payment terms (days)"><input type="number" min={0} max={180} value={terms} onChange={(e) => setTerms(e.target.value)} /></Field>
+        <Field label="Hold when overdue (days)" hint="The business is put on hold automatically when an invoice is this many days late. 0 turns it off."><input type="number" min={0} max={365} value={holdDays} onChange={(e) => setHoldDays(e.target.value)} /></Field>
         <Field label="Note"><input value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} /></Field>
         <div className="form-actions">
           <button className="btn btn-primary" disabled={busy || !listId}>{a.status === 'approved' ? 'Update terms' : 'Approve'}</button>{' '}

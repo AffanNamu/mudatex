@@ -7,6 +7,7 @@ import { mailerFromConfig } from './notify/mailer.js';
 import { pusherFromConfig } from './notify/push.js';
 import { releaseExpiredReservations } from './inventory/expiry.js';
 import { expireUnpaidOrders } from './shop/orders.js';
+import { runCollections } from './trade/collections.js';
 
 // Standalone delivery worker: `node dist/worker.js`.
 const config = loadConfig();
@@ -21,7 +22,11 @@ const handle = startWorker(db, {
 const sweep = setInterval(() => {
   expireUnpaidOrders(db).then(() => releaseExpiredReservations(db)).catch((err: Error) => console.error('expiry sweep failed', err.message));
 }, 60_000);
-const close = async () => { clearInterval(sweep); await handle.stop(); await db.end(); };
+// Overdue balances are chased once an hour; each reminder goes out once, so the schedule only decides how soon it starts.
+const collections = setInterval(() => {
+  runCollections(db, mailerFromConfig(config)).catch((err: Error) => console.error('collections failed', err.message));
+}, 3_600_000);
+const close = async () => { clearInterval(sweep); clearInterval(collections); await handle.stop(); await db.end(); };
 process.once('SIGTERM', close);
 process.once('SIGINT', close);
 console.log('Mudatex delivery worker started');

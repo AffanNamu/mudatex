@@ -7,7 +7,7 @@ import { buildServer } from '../src/server.js';
 
 export const SECRET = 'test-secret-test-secret-test-secret-123';
 
-export async function setupApp(env: Record<string, string> = {}, deps: { migrationsDir?: string; payments?: import('../src/payments/paystack.js').PaymentProvider; pusher?: import('../src/notify/push.js').Pusher } = {}) {
+export async function setupApp(env: Record<string, string> = {}, deps: { migrationsDir?: string; payments?: import('../src/payments/paystack.js').PaymentProvider; pusher?: import('../src/notify/push.js').Pusher; mailer?: import('../src/notify/mailer.js').Mailer } = {}) {
   const db = new pg.Pool({ connectionString: process.env.TEST_DATABASE_URL });
   const config = loadConfig({ NODE_ENV: 'test', DATABASE_URL: process.env.TEST_DATABASE_URL, AUTH_DEV_SECRET: SECRET, DEV_TOKEN_ENDPOINT: 'true', ...env });
   const app = await buildServer({ config, db, ...deps });

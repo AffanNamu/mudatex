@@ -139,6 +139,13 @@ test('staff approve a wholesale application with a price list and credit', async
   await expect(approved).toContainText('Credit ₦0.00 used of ₦250,000.00 · 45 day terms');
   const me = await (await request.get('http://localhost:3100/shop/console-shop/me/trade', { headers: auth })).json();
   expect(me).toMatchObject({ status: 'approved', creditLimitMinor: 25_000_000, paymentTermsDays: 45 });
+  await expect(approved.getByLabel('Hold when overdue (days)')).toHaveValue('30');
+  await noA11yViolations(page);
+
+  // Nothing is owed yet, so the collections desk is empty; it is there for people who manage trade accounts only.
+  await nav(page, 'Collections');
+  await expect(page.getByRole('heading', { name: 'Collections' })).toBeVisible();
+  await expect(page.getByText('Nothing is owed on any trade account.')).toBeVisible();
   await noA11yViolations(page);
 });
 

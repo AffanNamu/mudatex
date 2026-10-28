@@ -5,6 +5,7 @@ import rateLimit from '@fastify/rate-limit';
 import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
 import { ZodError } from 'zod';
 import type { Actor } from './auth/authorize.js';
+import { mailerFromConfig, type Mailer } from './notify/mailer.js';
 import { pusherFromConfig, type Pusher } from './notify/push.js';
 import { createPaystack, type PaymentProvider } from './payments/paystack.js';
 import { paystackWebhookRoutes } from './routes/webhooks-paystack.js';
@@ -72,11 +73,12 @@ export interface ServerDeps {
   payments?: PaymentProvider;
   /** Browser push. Defaults to the VAPID keys in the environment; tests pass a stand-in. */
   pusher?: Pusher;
+  mailer?: Mailer;
   /** Hosts with no background worker: runs one delivery pass after each successful write, within a short time limit. */
   kick?: () => Promise<unknown>;
 }
 
-export async function buildServer({ config, db, verifier, migrationsDir, cron, payments: injected, kick, pusher: injectedPusher }: ServerDeps): Promise<FastifyInstance> {
+export async function buildServer({ config, db, verifier, migrationsDir, cron, payments: injected, kick, pusher: injectedPusher, mailer: injectedMailer }: ServerDeps): Promise<FastifyInstance> {
   const verify = verifier ?? createTokenVerifier(config);
   const app = Fastify({
     logger: config.NODE_ENV === 'test' ? false : { redact: ['req.headers.authorization'] },
@@ -201,7 +203,7 @@ export async function buildServer({ config, db, verifier, migrationsDir, cron, p
       await v1.register(salesOrderRoutes, { db, payments });
       await v1.register(enquiryRoutes, { db });
       await v1.register(reviewRoutes, { db });
-      await v1.register(tradeAccountRoutes, { db });
+      await v1.register(tradeAccountRoutes, { db, mailer: injectedMailer ?? mailerFromConfig(config) });
       await v1.register(reportRoutes, { db });
       await v1.register(demoRoutes, { db });
       await v1.register(posRegisterRoutes, { db });
