@@ -29,7 +29,11 @@ export function Translations({ store, depts }: { store: { id: string; tagline: s
   ], [store, depts, published.data]);
 
   const savedFor = useMemo(() => new Map((saved.data ?? []).filter((r) => r.lang === lang).map((r) => [keyOf(r.entityType, r.entityId, r.field), r.value])), [saved.data, lang]);
-  useEffect(() => { setDraft(Object.fromEntries([...savedFor])); setOk(''); }, [savedFor]);
+  // Start the boxes from what is saved, but only when what is saved actually changes: a reload that brings the same
+  // words back must not wipe what the person is typing.
+  const signature = JSON.stringify([...savedFor].sort());
+  useEffect(() => { setDraft(Object.fromEntries(savedFor)); }, [signature]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setOk(''); }, [lang]);
 
   const changed = items.filter((i) => (draft[i.key] ?? '').trim() !== (savedFor.get(i.key) ?? ''));
   const save = async () => {
