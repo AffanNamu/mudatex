@@ -33,7 +33,7 @@ export default async function Shop({ searchParams }: { searchParams: Promise<SP>
 
   return (
     <div className="wrap section">
-      <ListingTitle q={q.get('q') ?? ''} department={current?.name ?? null} />
+      <ListingTitle q={q.get('q') ?? ''} department={current ?? null} />
       <div className="listing">
         <ShopFilters
           departments={store.departments}

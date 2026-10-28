@@ -26,3 +26,18 @@ export const PRODUCTS: SampleProduct[] = [
   { name: 'Cotton Voile, Sky', sku: 'VOI-SKY', brand: 'Ismile', department: 'plain', price: '2100', wholesale: '1800', stock: '350', description: 'Light cotton voile in sky blue.' },
   { name: 'Java Print, Garden', sku: 'JAV-GAR', brand: 'Mudatex Java', department: 'ankara', price: '3200', wholesale: '2750', stock: '0', description: 'Floral Java print. Currently sold out, to show how the shop handles it.' },
 ];
+
+/** French and Hausa wording for the sample store, so the language picker has something to show. */
+export const TAGLINE_WORDS = { fr: 'Livraison gratuite dès 100 000 ₦ — boutique d’exemple', ha: 'Isarwa kyauta idan ya wuce ₦100,000 — shagon misali' };
+export const DEPARTMENT_WORDS: Record<string, { fr: string; ha: string }> = {
+  ankara: { fr: 'Ankara et wax', ha: 'Ankara da wax' },
+  lace: { fr: 'Dentelle', ha: 'Leshi' },
+  brocade: { fr: 'Brocart et damassé', ha: 'Brocade da damask' },
+  atampa: { fr: 'Atampa', ha: 'Atampa' },
+  plain: { fr: 'Uni, voile et kamfala', ha: 'Yadi mai sauƙi, voile da kamfala' },
+};
+export const PRODUCT_TITLES_FR: Record<string, string> = {
+  'ANK-ROY': 'Wax Ankara Royal', 'ANK-SUN': 'Wax Ankara Soleil', 'LCE-IVO': 'Dentelle suisse voile, ivoire', 'LCE-GLD': 'Dentelle cordonnet, or',
+  'LCE-WIN': 'Dentelle tulle français, bordeaux', 'BRC-EME': 'Brocart jacquard, émeraude', 'BRC-SLV': 'Brocart damassé, argent', 'ATP-MID': 'Atampa, bleu nuit',
+  'ATP-CRI': 'Atampa, cramoisi', 'KAM-WHT': 'Kamfala égyptien, blanc', 'VOI-SKY': 'Voile de coton, ciel', 'JAV-GAR': 'Imprimé Java, jardin',
+};

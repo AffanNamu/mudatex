@@ -42,13 +42,16 @@ export function orderPushConsumer(pusher: Pusher): InternalConsumer {
     name: 'order-push',
     patterns: ORDER_EVENTS,
     async handle(db: Db, event: DomainEvent) {
-      const found = await db.query<{ customer_id: string; storefront_id: string }>('SELECT customer_id, storefront_id FROM sales_orders WHERE id = $1', [event.aggregateId]);
+      const found = await db.query<{ customer_id: string; storefront_id: string; language: string }>(
+        'SELECT o.customer_id, o.storefront_id, c.language FROM sales_orders o JOIN customers c ON c.id = o.customer_id WHERE o.id = $1',
+        [event.aggregateId],
+      );
       if (!found.rows[0]) return;
       const subs = await db.query<PushTarget & { id: string }>('SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE customer_id = $1', [found.rows[0].customer_id]);
       if (!subs.rowCount) return;
       const order = await readOrder(db, { id: event.aggregateId, organizationId: event.organizationId });
       const sf = await db.query<{ name: string; site_url: string | null; contact: Record<string, string> }>('SELECT name, site_url, contact FROM storefronts WHERE id = $1', [found.rows[0].storefront_id]);
-      const msg = orderMessage(event.type, order, { name: sf.rows[0]!.name, siteUrl: sf.rows[0]!.site_url, contact: sf.rows[0]!.contact });
+      const msg = orderMessage(event.type, order, { name: sf.rows[0]!.name, siteUrl: sf.rows[0]!.site_url, contact: sf.rows[0]!.contact }, found.rows[0].language);
       if (!msg) return;
       await withTx(db, async (tx) => {
         const first = await tx.query('INSERT INTO notification_log (event_id, channel, recipient, subject) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING', [event.id, 'push', String(found.rows[0]!.customer_id), msg.subject]);

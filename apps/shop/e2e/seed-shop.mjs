@@ -50,6 +50,18 @@ export async function seedShop(API) {
   await publish('LCE-001', { slug: 'swiss-lace', title: 'Swiss Lace', brand: 'Florance', departmentId: lace });
   await publish('BRC-001', { slug: 'brocade-gold', title: 'Brocade Gold', departmentId: lace });
   await publish('ATP-001', { slug: 'atampa-blue', title: 'Atampa Blue', brand: 'Empire Atampa', departmentId: ankara });
+  // A few words in French and Hausa, so the tests can see translated content next to untranslated content.
+  const published = await call(a, 'GET', `/v1/storefronts/${sf.id}/products`);
+  const spId = (slug) => published.find((p) => p.slug === slug).id;
+  await call(a, 'PUT', `/v1/storefronts/${sf.id}/translations`, { lang: 'fr', entries: [
+    { entityType: 'store', entityId: sf.id, field: 'tagline', value: 'Livraison gratuite dès 100 000 ₦' },
+    { entityType: 'department', entityId: lace, field: 'name', value: 'Dentelle' },
+    { entityType: 'product', entityId: spId('ankara-wax-print'), field: 'title', value: 'Wax Ankara imprimé' },
+    { entityType: 'product', entityId: spId('ankara-wax-print'), field: 'description', value: 'Un wax audacieux, aux couleurs solides.' },
+  ] });
+  await call(a, 'PUT', `/v1/storefronts/${sf.id}/translations`, { lang: 'ha', entries: [
+    { entityType: 'department', entityId: lace, field: 'name', value: 'Leshi' },
+  ] });
   await post(`/v1/storefronts/${sf.id}/delivery-zones`, { name: 'Kano', countryCode: 'NG', states: ['Kano'], feeMinor: 150000, freeOverMinor: 10000000, etaDaysMin: 1, etaDaysMax: 2 });
   await post(`/v1/storefronts/${sf.id}/delivery-zones`, { name: 'Nigeria', countryCode: 'NG', feeMinor: 450000, etaDaysMin: 3, etaDaysMax: 6 });
   await post(`/v1/storefronts/${sf.id}/coupons`, { code: 'WELCOME10', description: 'Welcome offer', percentBps: 1000, perCustomerLimit: 1 });

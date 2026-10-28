@@ -12,7 +12,9 @@ const attrLabel = (k: string) => k.replace(/[_-]/g, ' ').replace(/^./, (c) => c.
 
 export function ProductView({ p }: { p: ProductDetail }) {
   const { add, store } = useCart();
-  const { t } = useI18n();
+  const { t, c } = useI18n();
+  const title = c(p, 'title', p.title);
+  const description = p.description ? c(p, 'description', p.description) : null;
   const firstAvailable = p.variants.find((v) => v.inStock) ?? p.variants[0]!;
   const [variantId, setVariantId] = useState(firstAvailable.variantId);
   const [image, setImage] = useState(0);
@@ -29,11 +31,11 @@ export function ProductView({ p }: { p: ProductDetail }) {
     const keys = new Set(p.variants.flatMap((v) => Object.keys(v.attributes)));
     return [...keys].filter((k) => new Set(p.variants.map((v) => v.attributes[k])).size > 1);
   }, [p.variants]);
-  const wa = whatsappLink(store.contact.whatsapp, t('product.waAsk', { title: p.title }));
+  const wa = whatsappLink(store.contact.whatsapp, t('product.waAsk', { title }));
   const toBase = p.conversions.filter((c) => c.toCode === p.unit.code);
 
   const addToBasket = (quantity: string) => {
-    add({ variantId: variant.variantId, productSlug: p.slug, title: p.title, sku: variant.sku, image: p.images[0] ?? null, unit: p.unit.code, quantity, priceMinor: variant.priceMinor });
+    add({ variantId: variant.variantId, productSlug: p.slug, title: p.title, i18n: p.i18n, sku: variant.sku, image: p.images[0] ?? null, unit: p.unit.code, quantity, priceMinor: variant.priceMinor });
     setAdded(true);
     setTimeout(() => setAdded(false), 2500);
   };
@@ -42,7 +44,7 @@ export function ProductView({ p }: { p: ProductDetail }) {
     <div className="pdp">
       <div className="gallery">
         <div className="main">
-          {p.images[image] ? <img src={p.images[image]} alt={t('product.imageAlt', { title: p.title, n: image + 1 })} /> : <div className="placeholder" aria-hidden="true">{p.title.slice(0, 1)}</div>}
+          {p.images[image] ? <img src={p.images[image]} alt={t('product.imageAlt', { title, n: image + 1 })} /> : <div className="placeholder" aria-hidden="true">{title.slice(0, 1)}</div>}
         </div>
         {p.images.length > 1 && (
           <div className="thumbs">
@@ -55,9 +57,9 @@ export function ProductView({ p }: { p: ProductDetail }) {
 
       <div className="stack">
         <div>
-          <nav className="small muted" aria-label={t('product.breadcrumb')}><Link href="/shop">{t('product.shop')}</Link>{p.department && <> / <Link href={`/shop?department=${p.department.slug}`}>{p.department.name}</Link></>}</nav>
+          <nav className="small muted" aria-label={t('product.breadcrumb')}><Link href="/shop">{t('product.shop')}</Link>{p.department && <> / <Link href={`/shop?department=${p.department.slug}`}>{c(p.department, 'name', p.department.name)}</Link></>}</nav>
           {p.brand && <div className="muted">{p.brand}</div>}
-          <div className="row spread"><h1 style={{ margin: 0 }}>{p.title}</h1><WishlistButton slug={p.slug} /></div>
+          <div className="row spread"><h1 style={{ margin: 0 }}>{title}</h1><WishlistButton slug={p.slug} /></div>
           <div className="price" style={{ fontSize: '1.5rem' }} aria-live="polite">
             {formatMoney(variant.priceMinor, p.currency, store.minorUnit)} <span className="small muted">{t('product.per', { unit: p.unit.name.toLowerCase() })}{variant.taxInclusive ? t('product.taxIncluded') : t('product.taxAtCheckout')}</span>
           </div>
@@ -120,7 +122,7 @@ export function ProductView({ p }: { p: ProductDetail }) {
         )}
         {wa && <a className="btn ghost" href={wa} target="_blank" rel="noopener noreferrer">{t('product.askWhatsapp')}</a>}
 
-        {p.description && <div><h2>{t('product.about')}</h2><p style={{ whiteSpace: 'pre-line' }}>{p.description}</p></div>}
+        {description && <div><h2>{t('product.about')}</h2><p style={{ whiteSpace: 'pre-line' }}>{description}</p></div>}
         <table className="facts"><tbody>
           {p.category && <tr><th scope="row">{t('product.category')}</th><td>{p.category}</td></tr>}
           {Object.entries(p.attributes).map(([k, v]) => <tr key={k}><th scope="row">{attrLabel(k)}</th><td>{String(v)}</td></tr>)}

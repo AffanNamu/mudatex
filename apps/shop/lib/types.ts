@@ -1,12 +1,15 @@
-export interface Department { slug: string; name: string; imageUrl: string | null; productCount: number }
+/** Wording the company has written in other languages: { fr: { title: '…' } }. Missing means "show the English". */
+export type I18n = Partial<Record<'fr' | 'ha', Record<string, string>>>;
+
+export interface Department { slug: string; name: string; imageUrl: string | null; productCount: number; i18n?: I18n }
 
 export interface ProductCard {
   id: string; slug: string; title: string; brand: string | null; images: string[]; badges: string[];
-  department: { slug: string; name: string } | null; priceMinor: number; currency: string; inStock: boolean;
+  department: { slug: string; name: string; i18n?: I18n } | null; priceMinor: number; currency: string; inStock: boolean; i18n?: I18n;
 }
 
 export interface Store {
-  slug: string; name: string; tagline: string | null; currency: string; minorUnit: number; cardPayments: boolean; pushKey: string | null;
+  slug: string; name: string; tagline: string | null; i18n?: I18n; currency: string; minorUnit: number; cardPayments: boolean; pushKey: string | null;
   contact: { whatsapp?: string; phone?: string; email?: string; address?: string; bankName?: string; accountName?: string; accountNumber?: string };
   departments: Department[]; featured: ProductCard[];
 }
@@ -17,9 +20,9 @@ export interface Variant {
 }
 
 export interface ProductDetail {
-  id: string; slug: string; title: string; description: string | null; brand: string | null; images: string[]; badges: string[];
+  id: string; slug: string; title: string; description: string | null; brand: string | null; images: string[]; badges: string[]; i18n?: I18n;
   rating: { average: number | null; count: number };
-  department: { slug: string; name: string } | null; category: string | null; attributes: Record<string, unknown>;
+  department: { slug: string; name: string; i18n?: I18n } | null; category: string | null; attributes: Record<string, unknown>;
   unit: { code: string; name: string; kind: 'discrete' | 'decimal'; precision: number };
   conversions: { fromCode: string; fromName: string; toCode: string; factor: string }[];
   currency: string; variants: Variant[];
@@ -27,7 +30,7 @@ export interface ProductDetail {
 
 export interface Page<T> { page: number; limit: number; total: number; items: T[] }
 
-export interface Customer { id: string; email: string; fullName: string; phone: string | null; marketingOptIn: boolean }
+export interface Customer { id: string; email: string; fullName: string; phone: string | null; marketingOptIn: boolean; language?: 'en' | 'fr' | 'ha' }
 
 export interface Address {
   id: string; label: string; recipient: string; phone: string; line1: string; line2: string | null; city: string; state: string;

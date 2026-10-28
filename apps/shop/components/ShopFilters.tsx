@@ -2,8 +2,9 @@
 
 import Link from 'next/link';
 import { plural, useI18n } from '@/lib/i18n';
+import type { I18n } from '@/lib/types';
 
-interface Dept { slug: string; name: string; productCount: number }
+interface Dept { slug: string; name: string; productCount: number; i18n?: I18n }
 
 const SORTS = ['featured', 'newest', 'price_asc', 'price_desc'] as const;
 
@@ -14,7 +15,7 @@ export function ShopFilters({ departments, currency, query, hrefs }: {
   /** Pre-built links, because the server owns the address rules. */
   hrefs: { department: Record<string, string>; allDepartments: string; sort: Record<string, string> };
 }) {
-  const { t } = useI18n();
+  const { t, c } = useI18n();
   return (
     <>
       <aside className="filters" aria-label={t('shop.filters')}>
@@ -23,7 +24,7 @@ export function ShopFilters({ departments, currency, query, hrefs }: {
           <ul>
             <li><Link href={hrefs.allDepartments} aria-current={!query.department}>{t('shop.all')}</Link></li>
             {departments.map((d) => (
-              <li key={d.slug}><Link href={hrefs.department[d.slug]!} aria-current={query.department === d.slug}>{d.name} ({d.productCount})</Link></li>
+              <li key={d.slug}><Link href={hrefs.department[d.slug]!} aria-current={query.department === d.slug}>{c(d, 'name', d.name)} ({d.productCount})</Link></li>
             ))}
           </ul>
         </fieldset>
@@ -80,7 +81,7 @@ export function Pager({ page, pages, prev, next }: { page: number; pages: number
   );
 }
 
-export function ListingTitle({ q, department }: { q: string; department: string | null }) {
-  const { t } = useI18n();
-  return <h1>{q ? t('shop.resultsFor', { q }) : department ?? t('shop.allFabrics')}</h1>;
+export function ListingTitle({ q, department }: { q: string; department: Dept | null }) {
+  const { t, c } = useI18n();
+  return <h1>{q ? t('shop.resultsFor', { q }) : department ? c(department, 'name', department.name) : t('shop.allFabrics')}</h1>;
 }

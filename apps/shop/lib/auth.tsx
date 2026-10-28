@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ApiError, shopRequest } from './api';
 import { SUPABASE_KEY, SUPABASE_URL } from './config';
-import { tr } from './i18n';
+import { hasChosenLang, tr, useI18n } from './i18n';
 import type { Customer } from './types';
 
 interface Session { accessToken: string; refreshToken: string; expiresAt: number }
@@ -22,8 +22,8 @@ interface AuthValue {
   signUp(email: string, password: string): Promise<'signed-in' | 'confirm-email'>;
   recover(email: string): Promise<void>;
   signOut(): void;
-  createProfile(input: { fullName: string; phone?: string; marketingOptIn?: boolean }): Promise<void>;
-  updateProfile(input: { fullName: string; phone?: string | null; marketingOptIn?: boolean }): Promise<void>;
+  createProfile(input: { fullName: string; phone?: string; marketingOptIn?: boolean; language?: string }): Promise<void>;
+  updateProfile(input: { fullName: string; phone?: string | null; marketingOptIn?: boolean; language?: string }): Promise<void>;
 }
 
 const STORAGE_KEY = 'mudatex.shopper';
@@ -58,6 +58,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [profile, setProfile] = useState<ProfileState>('loading');
   const refreshing = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const { lang, setLang } = useI18n();
+  const pushedLang = useRef<string | null>(null);
 
   const store = useCallback((s: Session | null) => {
     setSession(s);
@@ -107,6 +109,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     return () => { cancelled = true; };
   }, [token, store]);
+
+  // Emails and notifications follow the shopper's language. A device with no choice of its own adopts the account's;
+  // a device with a choice tells the account.
+  useEffect(() => {
+    if (!customer || !token) return;
+    const saved = customer.language ?? 'en';
+    if (!hasChosenLang()) { if (saved !== lang) setLang(saved); return; }
+    if (saved !== lang && pushedLang.current !== lang) {
+      pushedLang.current = lang;
+      shopRequest('/me/language', { method: 'PUT', token, body: { language: lang } }).catch(() => { pushedLang.current = null; });
+    }
+  }, [customer, token, lang, setLang]);
 
   const value = useMemo<AuthValue>(() => ({
     ready,

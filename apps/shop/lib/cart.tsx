@@ -12,6 +12,7 @@ export interface CartLine {
   unit: string;       // base unit code, for display
   quantity: string;   // decimal string in the base unit
   priceMinor: number; // last price shown to the shopper; the server re-prices every time
+  i18n?: import('./types').I18n; // the title in other languages, so the basket reads in the shopper's language
 }
 
 interface CartValue {

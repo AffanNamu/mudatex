@@ -10,7 +10,7 @@ import { useI18n } from '@/lib/i18n';
 export function RequireShopper({ children }: { children: ReactNode }) {
   const { ready, signedIn, profile, createProfile, email } = useAuth();
   const path = usePathname();
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -31,7 +31,7 @@ export function RequireShopper({ children }: { children: ReactNode }) {
       const f = new FormData(e.currentTarget);
       setBusy(true); setError('');
       try {
-        await createProfile({ fullName: String(f.get('fullName')).trim(), phone: String(f.get('phone') ?? '').trim() || undefined, marketingOptIn: f.get('marketing') === 'on' });
+        await createProfile({ fullName: String(f.get('fullName')).trim(), phone: String(f.get('phone') ?? '').trim() || undefined, marketingOptIn: f.get('marketing') === 'on', language: lang });
       } catch (err) { setError((err as Error).message); } finally { setBusy(false); }
     };
     return (

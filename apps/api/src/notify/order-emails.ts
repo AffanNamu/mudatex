@@ -3,6 +3,7 @@ import { withTx } from '../db.js';
 import type { DomainEvent, InternalConsumer } from '../events/dispatcher.js';
 import type { Mail, Mailer } from './mailer.js';
 import { readOrder } from '../shop/orders.js';
+import { orderCopy, ORDER_EVENT_TYPES } from './order-copy.js';
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
@@ -11,45 +12,35 @@ const money = (minor: number, currency: string, minorUnit: number) =>
 
 interface Store { name: string; siteUrl: string | null; contact: Record<string, string | undefined> }
 
-/** Which order events a customer is told about, and the sentence that tells them. */
-const MESSAGES: Record<string, (o: any, s: Store) => { subject: string; lead: string } | null> = {
-  'order.place': (o) => ({ subject: `We have your order ${o.orderNo}`, lead: o.paymentMethod === 'bank_transfer' ? 'Thank you for your order. Please pay by bank transfer to confirm it.' : 'Thank you for your order. Please complete your card payment to confirm it.' }),
-  'order.payment': (o) => ({ subject: `Payment received for ${o.orderNo}`, lead: 'We have received your payment. We will prepare your order now.' }),
-  'order.ship': (o) => ({ subject: `Your order ${o.orderNo} is on its way`, lead: o.trackingRef ? `Your order has been sent with ${o.carrier ?? 'our courier'}. Tracking number: ${o.trackingRef}.` : 'Your order has been sent.' }),
-  'order.deliver': (o) => ({ subject: `Your order ${o.orderNo} was delivered`, lead: 'Your order has been delivered. We hope you love it — a review helps other shoppers.' }),
-  'order.cancel': (o) => ({ subject: `Your order ${o.orderNo} was cancelled`, lead: o.refundDueMinor > 0 ? 'Your order was cancelled. We owe you a refund and will be in touch about it.' : 'Your order was cancelled and nothing has been charged.' }),
-  'order.refund_paid': (o) => ({ subject: `Refund sent for ${o.orderNo}`, lead: 'We have sent your refund. Card refunds can take a few working days to show on your statement; bank refunds are usually quicker.' }),
-  'order.expire': (o) => ({ subject: `Your order ${o.orderNo} has lapsed`, lead: 'We did not receive payment in time, so the fabric was released. You are welcome to order again.' }),
-};
-
 /** The sentence a customer is told for an order event, or null when they are not told about it. */
-export const orderMessage = (eventType: string, order: any, store: Store) => MESSAGES[eventType]?.(order, store) ?? null;
-export const ORDER_EVENTS = Object.keys(MESSAGES);
+export const orderMessage = (eventType: string, order: any, _store: Store, lang?: string | null) => orderCopy(lang).events[eventType]?.(order) ?? null;
+export const ORDER_EVENTS = ORDER_EVENT_TYPES;
 
-export function renderOrderEmail(eventType: string, order: any, store: Store): Mail | null {
-  const m = MESSAGES[eventType]?.(order, store);
+export function renderOrderEmail(eventType: string, order: any, store: Store, lang?: string | null): Mail | null {
+  const c = orderCopy(lang);
+  const m = c.events[eventType]?.(order);
   if (!m) return null;
   const fmt = (n: number) => money(n, order.currency, order.minorUnit);
   const link = store.siteUrl ? `${store.siteUrl}/orders/${order.orderNo}` : null;
   const lines = (order.lines as any[]).map((l) => ({ title: l.title as string, qty: String(l.quantity).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, ''), total: fmt(l.totalMinor) }));
   const bank = eventType === 'order.place' && order.paymentMethod === 'bank_transfer' && store.contact.accountNumber
-    ? [`Pay ${fmt(order.totalMinor)} to ${store.contact.bankName ?? 'our bank'}, account name ${store.contact.accountName ?? store.name}, account number ${store.contact.accountNumber}.`, `Use ${order.orderNo} as the payment reference. We hold your order until ${new Date(order.expiresAt).toUTCString()}.`]
+    ? [c.bankPay(fmt(order.totalMinor), store.contact.bankName ?? c.ourBank, store.contact.accountName ?? store.name, store.contact.accountNumber), c.bankRef(order.orderNo, new Date(order.expiresAt).toUTCString())]
     : [];
   const text = [
-    `Hello ${order.contact.name},`, '', m.lead, '', ...bank, ...(bank.length ? [''] : []),
-    `Order ${order.orderNo}`, ...lines.map((l) => `- ${l.title} x ${l.qty}: ${l.total}`),
-    `Delivery: ${order.deliveryFeeMinor === 0 ? 'Free' : fmt(order.deliveryFeeMinor)}`, `Total: ${fmt(order.totalMinor)}`, '',
-    ...(link ? [`View your order: ${link}`, ''] : []), `${store.name}`,
+    c.hello(order.contact.name), '', m.lead, '', ...bank, ...(bank.length ? [''] : []),
+    c.order(order.orderNo), ...lines.map((l) => `- ${l.title} x ${l.qty}: ${l.total}`),
+    `${c.delivery}: ${order.deliveryFeeMinor === 0 ? c.free : fmt(order.deliveryFeeMinor)}`, `${c.total}: ${fmt(order.totalMinor)}`, '',
+    ...(link ? [`${c.view}: ${link}`, ''] : []), `${store.name}`,
   ].join('\n');
   const html = `<div style="font-family:system-ui,sans-serif;max-width:560px;margin:auto;color:#1d1b19">
 <h2 style="font-family:Georgia,serif">${esc(store.name)}</h2>
-<p>Hello ${esc(order.contact.name)},</p><p>${esc(m.lead)}</p>
+<p>${esc(c.hello(order.contact.name))}</p><p>${esc(m.lead)}</p>
 ${bank.map((b) => `<p style="background:#f3e6c8;padding:12px;border-radius:8px">${esc(b)}</p>`).join('')}
-<table style="width:100%;border-collapse:collapse"><caption style="text-align:left;font-weight:600;padding-bottom:6px">Order ${esc(order.orderNo)}</caption>
+<table style="width:100%;border-collapse:collapse"><caption style="text-align:left;font-weight:600;padding-bottom:6px">${esc(c.order(order.orderNo))}</caption>
 ${lines.map((l) => `<tr><td style="padding:6px 0;border-bottom:1px solid #e4ddcf">${esc(l.title)} × ${esc(l.qty)}</td><td style="text-align:right;border-bottom:1px solid #e4ddcf">${esc(l.total)}</td></tr>`).join('')}
-<tr><td style="padding:6px 0">Delivery</td><td style="text-align:right">${order.deliveryFeeMinor === 0 ? 'Free' : esc(fmt(order.deliveryFeeMinor))}</td></tr>
-<tr><td style="padding:6px 0"><strong>Total</strong></td><td style="text-align:right"><strong>${esc(fmt(order.totalMinor))}</strong></td></tr></table>
-${link ? `<p><a href="${esc(link)}">View your order</a></p>` : ''}</div>`;
+<tr><td style="padding:6px 0">${esc(c.delivery)}</td><td style="text-align:right">${order.deliveryFeeMinor === 0 ? esc(c.free) : esc(fmt(order.deliveryFeeMinor))}</td></tr>
+<tr><td style="padding:6px 0"><strong>${esc(c.total)}</strong></td><td style="text-align:right"><strong>${esc(fmt(order.totalMinor))}</strong></td></tr></table>
+${link ? `<p><a href="${esc(link)}">${esc(c.view)}</a></p>` : ''}</div>`;
   return { to: order.contact.email, subject: m.subject, text, html };
 }
 
@@ -57,13 +48,16 @@ ${link ? `<p><a href="${esc(link)}">View your order</a></p>` : ''}</div>`;
 export function orderEmailConsumer(mailer: Mailer): InternalConsumer {
   return {
     name: 'order-emails',
-    patterns: Object.keys(MESSAGES),
+    patterns: ORDER_EVENT_TYPES,
     async handle(db: Db, event: DomainEvent) {
-      const found = await db.query<{ storefront_id: string }>('SELECT storefront_id FROM sales_orders WHERE id = $1', [event.aggregateId]);
+      const found = await db.query<{ storefront_id: string; language: string }>(
+        'SELECT o.storefront_id, c.language FROM sales_orders o JOIN customers c ON c.id = o.customer_id WHERE o.id = $1',
+        [event.aggregateId],
+      );
       if (!found.rows[0]) return;
       const order = await readOrder(db, { id: event.aggregateId, organizationId: event.organizationId });
       const sf = await db.query<{ name: string; site_url: string | null; contact: Record<string, string> }>('SELECT name, site_url, contact FROM storefronts WHERE id = $1', [found.rows[0].storefront_id]);
-      const mail = renderOrderEmail(event.type, order, { name: sf.rows[0]!.name, siteUrl: sf.rows[0]!.site_url, contact: sf.rows[0]!.contact });
+      const mail = renderOrderEmail(event.type, order, { name: sf.rows[0]!.name, siteUrl: sf.rows[0]!.site_url, contact: sf.rows[0]!.contact }, found.rows[0].language);
       if (!mail?.to) return;
       await withTx(db, async (tx) => {
         const first = await tx.query('INSERT INTO notification_log (event_id, channel, recipient, subject) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING', [event.id, 'email', mail.to, mail.subject]);

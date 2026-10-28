@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { DepartmentTiles } from '@/components/DepartmentTiles';
 import { ProductCard } from '@/components/ProductCard';
 import { getStore } from '@/lib/api';
 import { T } from '@/lib/i18n';
@@ -34,14 +35,7 @@ export default async function Home() {
       {store.departments.length > 0 && (
         <section className="section wrap" aria-labelledby="depts">
           <h2 id="depts"><T k="home.byDepartment" /></h2>
-          <div className="tiles">
-            {store.departments.map((d) => (
-              <Link className="tile" key={d.slug} href={`/shop?department=${d.slug}`}>
-                {d.imageUrl && <img src={d.imageUrl} alt="" loading="lazy" />}
-                <span>{d.name}</span>
-              </Link>
-            ))}
-          </div>
+          <DepartmentTiles departments={store.departments} />
         </section>
       )}
 

@@ -23,6 +23,8 @@ describe('sample data', () => {
     expect(royal).toMatchObject({ priceMinor: 451500, inStock: true, badges: ['Best seller'] }); // 4,200 + 7.5% = 4,515.00
     expect(list.body.items.find((i: any) => i.title === 'Java Print, Garden')).toMatchObject({ inStock: false });
     const detail = await call(ctx.app, 'GET', `/shop/${slug}/products/royal-ankara-wax-print`, undefined);
+    expect(detail.body.i18n.fr.title).toBe('Wax Ankara Royal');
+    expect(home.body.departments[1].i18n).toEqual({ fr: { name: 'Dentelle' }, ha: { name: 'Leshi' } });
     expect(detail.body.conversions).toEqual([expect.objectContaining({ fromCode: 'roll', toCode: 'm', factor: '50' })]);
     expect((await call(ctx.app, 'POST', `/shop/${slug}/delivery-quote`, undefined, { countryCode: 'NG', state: 'Kano', subtotalMinor: 100 })).body).toMatchObject({ feeMinor: 150000 });
 

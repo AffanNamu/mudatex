@@ -63,6 +63,19 @@ const publishBody = z.object({
   sort: z.number().int().min(0).max(100000).optional(),
 });
 
+const translationBody = z.object({
+  lang: z.enum(['fr', 'ha']),
+  entries: z.array(z.object({
+    entityType: z.enum(['store', 'department', 'product']),
+    entityId: uuid,
+    field: z.enum(['tagline', 'name', 'title', 'description']),
+    /** Empty or null removes the translation, so the English shows again. */
+    value: z.string().max(5000).nullable(),
+  })).min(1).max(300),
+});
+const FIELD_LIMITS: Record<string, number> = { tagline: 200, name: 80, title: 160, description: 5000 };
+const FIELDS_OF: Record<string, string[]> = { store: ['tagline'], department: ['name'], product: ['title', 'description'] };
+
 const zoneBody = z.object({
   name: z.string().trim().min(1).max(100),
   countryCode: z.string().regex(/^[A-Za-z]{2}$/).transform((c) => c.toUpperCase()),
@@ -223,9 +236,63 @@ export const storefrontAdminRoutes: FastifyPluginAsync<{ db: Db }> = async (app,
       if (used.rowCount) throw conflict('Move or unpublish this department\'s products first');
       const gone = await tx.query('DELETE FROM storefront_departments WHERE id = $1 AND storefront_id = $2', [params.departmentId, params.id]);
       if (!gone.rowCount) throw notFound('Department');
+      await tx.query("DELETE FROM content_translations WHERE entity_type = 'department' AND entity_id = $1", [params.departmentId]);
       await audit(tx, req, 'storefront.department.delete', 'storefront', params.id, { departmentId: params.departmentId });
     });
     return reply.status(204).send();
+  });
+
+  // ---- translations
+  app.get('/storefronts/:id/translations', async (req) => {
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    await managed(db, req, id);
+    const { rows } = await db.query(
+      `SELECT entity_type AS "entityType", entity_id AS "entityId", lang, field, value FROM content_translations WHERE storefront_id = $1
+        ORDER BY entity_type, entity_id, lang, field`,
+      [id],
+    );
+    return rows;
+  });
+
+  app.put('/storefronts/:id/translations', async (req) => {
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const body = translationBody.parse(req.body);
+    return withTx(db, async (tx) => {
+      await managed(tx, req, id);
+      const seen = new Set<string>();
+      let saved = 0;
+      let removed = 0;
+      for (const e of body.entries) {
+        if (!FIELDS_OF[e.entityType]!.includes(e.field)) throw invalid(`A ${e.entityType} has no "${e.field}" to translate`);
+        const dup = `${e.entityType}/${e.entityId}/${e.field}`;
+        if (seen.has(dup)) throw invalid('Each field can appear once per request');
+        seen.add(dup);
+        const owned = e.entityType === 'store'
+          ? e.entityId === id
+          : (await tx.query(
+              e.entityType === 'department'
+                ? 'SELECT 1 FROM storefront_departments WHERE id = $1 AND storefront_id = $2'
+                : 'SELECT 1 FROM storefront_products WHERE id = $1 AND storefront_id = $2',
+              [e.entityId, id],
+            )).rowCount === 1;
+        if (!owned) throw notFound(`${e.entityType[0]!.toUpperCase()}${e.entityType.slice(1)}`);
+        const value = e.value?.trim() ?? '';
+        if (!value) {
+          const gone = await tx.query('DELETE FROM content_translations WHERE entity_type = $1 AND entity_id = $2 AND lang = $3 AND field = $4', [e.entityType, e.entityId, body.lang, e.field]);
+          removed += gone.rowCount ?? 0;
+          continue;
+        }
+        if (value.length > FIELD_LIMITS[e.field]!) throw invalid(`The ${e.field} is longer than ${FIELD_LIMITS[e.field]} characters`);
+        await tx.query(
+          `INSERT INTO content_translations (storefront_id, entity_type, entity_id, lang, field, value, updated_by) VALUES ($1,$2,$3,$4,$5,$6,$7)
+           ON CONFLICT (entity_type, entity_id, lang, field) DO UPDATE SET value = EXCLUDED.value, updated_by = EXCLUDED.updated_by, updated_at = now()`,
+          [id, e.entityType, e.entityId, body.lang, e.field, value, req.actor.userId],
+        );
+        saved++;
+      }
+      await audit(tx, req, 'storefront.translations', 'storefront', id, { lang: body.lang, saved, removed });
+      return { saved, removed };
+    });
   });
 
   // ---- publishing
@@ -233,7 +300,7 @@ export const storefrontAdminRoutes: FastifyPluginAsync<{ db: Db }> = async (app,
     const { id } = z.object({ id: uuid }).parse(req.params);
     await managed(db, req, id);
     const { rows } = await db.query(
-      `SELECT sp.product_id AS "productId", p.name AS "productName", sp.slug, sp.title, sp.brand, sp.department_id AS "departmentId",
+      `SELECT sp.id, sp.product_id AS "productId", p.name AS "productName", sp.slug, sp.title, sp.description, sp.brand, sp.department_id AS "departmentId",
               sp.images, sp.badges, sp.published, sp.sort,
               EXISTS (SELECT 1 FROM product_variants v JOIN price_list_items i ON i.variant_id = v.id AND i.price_list_id = s.price_list_id
                        AND i.effective_from <= now() AND (i.effective_to IS NULL OR i.effective_to > now())
@@ -271,7 +338,7 @@ export const storefrontAdminRoutes: FastifyPluginAsync<{ db: Db }> = async (app,
       }
       const existing = await tx.query<{ id: string }>('SELECT id FROM storefront_products WHERE storefront_id = $1 AND product_id = $2 FOR UPDATE', [params.id, params.productId]);
       const title = body.title ?? product.rows[0].name;
-      const columns = `product_id AS "productId", slug, title, description, brand, department_id AS "departmentId", images, badges, published, sort`;
+      const columns = `id, product_id AS "productId", slug, title, description, brand, department_id AS "departmentId", images, badges, published, sort`;
       if (!existing.rows[0]) {
         const { rows } = await tx.query(
           `INSERT INTO storefront_products (storefront_id, product_id, slug, title, description, department_id, brand, images, badges, published, sort)

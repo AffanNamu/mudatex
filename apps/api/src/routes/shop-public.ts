@@ -4,6 +4,7 @@ import type { TokenVerifier } from '../auth/token.js';
 import type { Db } from '../db.js';
 import { invalid } from '../errors.js';
 import { MAX_ORDER_LINES, quoteBasket } from '../shop/orders.js';
+import { loadI18n, orNothing } from '../shop/translations.js';
 import { cardsFor, loadLiveStorefront, productDetail, quoteDelivery } from '../shop/catalog.js';
 
 const slugParam = z.object({ slug: z.string().regex(/^[a-z0-9-]{1,60}$/) });
@@ -64,7 +65,7 @@ export const shopPublicRoutes: FastifyPluginAsync<{ db: Db; verify?: TokenVerifi
     const { slug } = slugParam.parse(req.params);
     const sf = await loadLiveStorefront(db, slug);
     const departments = await db.query(
-      `SELECT d.slug, d.name, d.image_url AS "imageUrl",
+      `SELECT d.id, d.slug, d.name, d.image_url AS "imageUrl",
               (SELECT count(*)::int FROM storefront_products sp WHERE sp.department_id = d.id AND sp.published) AS "productCount"
          FROM storefront_departments d WHERE d.storefront_id = $1 ORDER BY d.sort, d.name`,
       [sf.id],
@@ -78,17 +79,20 @@ export const shopPublicRoutes: FastifyPluginAsync<{ db: Db; verify?: TokenVerifi
         ORDER BY sp.sort, sp.created_at DESC LIMIT 12`,
       [sf.id],
     );
+    const deptWords = await loadI18n(db, sf.id, 'department', departments.rows.map((d) => d.id));
+    const storeWords = (await loadI18n(db, sf.id, 'store', [sf.id])).get(sf.id);
     return {
       slug: sf.slug,
       name: sf.name,
       tagline: sf.tagline,
+      i18n: orNothing(storeWords),
       currency: sf.currency,
       minorUnit: sf.minorUnit,
       contact: sf.contact,
       // Card payments need both a payment provider on the server and the store's own web address for the return trip.
       cardPayments: cardPayments && !!sf.siteUrl,
       pushKey: pushKey ?? null,
-      departments: departments.rows,
+      departments: departments.rows.map(({ id, ...d }) => ({ ...d, i18n: orNothing(deptWords.get(id)) })),
       featured: await cardsFor(db, sf, featured.rows),
     };
   });

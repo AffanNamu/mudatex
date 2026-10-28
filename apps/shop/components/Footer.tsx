@@ -7,7 +7,7 @@ import { PwaSupport } from './PwaSupport';
 import type { Store } from '@/lib/types';
 
 export function Footer({ store }: { store: Store }) {
-  const { t } = useI18n();
+  const { t, c } = useI18n();
   const wa = whatsappLink(store.contact.whatsapp, t('footer.waHello', { name: store.name }));
   return (
     <>
@@ -16,14 +16,14 @@ export function Footer({ store }: { store: Store }) {
           <div className="cols">
             <div>
               <h3>{store.name}</h3>
-              <p>{store.tagline ?? t('footer.tagline')}</p>
+              <p>{store.tagline ? c(store, 'tagline', store.tagline) : t('footer.tagline')}</p>
               {store.contact.address && <p className="small">{store.contact.address}</p>}
             </div>
             <div>
               <h3>{t('footer.shop')}</h3>
               <ul>
                 <li><Link href="/shop">{t('footer.allProducts')}</Link></li>
-                {store.departments.map((d) => <li key={d.slug}><Link href={`/shop?department=${d.slug}`}>{d.name}</Link></li>)}
+                {store.departments.map((d) => <li key={d.slug}><Link href={`/shop?department=${d.slug}`}>{c(d, 'name', d.name)}</Link></li>)}
               </ul>
             </div>
             <div>

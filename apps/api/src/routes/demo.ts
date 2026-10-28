@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { AppError } from '../errors.js';
 import type { Db } from '../db.js';
-import { DEPARTMENTS, PRODUCTS } from '../demo/sample.js';
+import { DEPARTMENTS, DEPARTMENT_WORDS, PRODUCT_TITLES_FR, PRODUCTS, TAGLINE_WORDS } from '../demo/sample.js';
 
 /**
  * Fills an empty system with a sample company, catalogue, prices, stock, a till and a live online store, so the whole
@@ -70,10 +70,22 @@ export const demoRoutes: FastifyPluginAsync<{ db: Db }> = async (app, { db }) =>
     }, 'create the online store');
     const depts: Record<string, string> = {};
     for (const [i, d] of DEPARTMENTS.entries()) depts[d.slug] = (await call('POST', `/storefronts/${store.id}/departments`, { slug: d.slug, name: d.name, sort: i * 10 }, `add the department ${d.name}`)).id;
+    const listings: Record<string, string> = {};
     for (const { productId, p } of published) {
-      await call('PUT', `/storefronts/${store.id}/products/${productId}`, {
+      const listing = await call<{ id: string }>('PUT', `/storefronts/${store.id}/products/${productId}`, {
         title: p.name, brand: p.brand, departmentId: depts[p.department], description: p.description, badges: p.badge ? [p.badge] : [], published: true,
       }, `publish ${p.name}`);
+      listings[p.sku] = listing.id;
+    }
+    for (const lang of ['fr', 'ha'] as const) {
+      await call('PUT', `/storefronts/${store.id}/translations`, {
+        lang,
+        entries: [
+          { entityType: 'store', entityId: store.id, field: 'tagline', value: TAGLINE_WORDS[lang] },
+          ...DEPARTMENTS.map((d) => ({ entityType: 'department', entityId: depts[d.slug], field: 'name', value: DEPARTMENT_WORDS[d.slug]![lang] })),
+          ...(lang === 'fr' ? PRODUCTS.map((p) => ({ entityType: 'product', entityId: listings[p.sku], field: 'title', value: PRODUCT_TITLES_FR[p.sku] })) : []),
+        ],
+      }, `add ${lang === 'fr' ? 'French' : 'Hausa'} wording`);
     }
     await call('POST', `/storefronts/${store.id}/delivery-zones`, { name: 'Kano', countryCode: 'NG', states: ['Kano'], feeMinor: 150000, freeOverMinor: 10_000_000, etaDaysMin: 1, etaDaysMax: 2 }, 'add delivery for Kano');
     await call('POST', `/storefronts/${store.id}/delivery-zones`, { name: 'Rest of Nigeria', countryCode: 'NG', feeMinor: 450000, freeOverMinor: 10_000_000, etaDaysMin: 3, etaDaysMax: 6 }, 'add delivery for Nigeria');

@@ -65,6 +65,20 @@ test('an administrator opens an online store, publishes a product and sets deliv
   expect(list.items).toEqual([expect.objectContaining({ slug: 'ankara-wax-print', priceMinor: 107500, inStock: true, images: ['https://img.example.test/ankara.jpg'] })]);
   const quote = await (await request.post('http://localhost:3100/shop/console-shop/delivery-quote', { data: { countryCode: 'NG', state: 'Lagos', subtotalMinor: 100 } })).json();
   expect(quote).toMatchObject({ zone: 'Lagos', feeMinor: 150000 });
+
+  // French wording for a department and a product; blank boxes mean "show the English".
+  await page.getByText('Translations (French and Hausa)').click();
+  await page.getByLabel('Department: Lace in French').fill('Dentelle');
+  await page.getByLabel('Product: Ankara Wax Print in French').fill('Wax Ankara imprimé');
+  await page.getByRole('button', { name: 'Save (2)' }).click();
+  await expect(page.getByText('Saved 2.')).toBeVisible();
+  const french = await (await request.get('http://localhost:3100/shop/console-shop/products/ankara-wax-print')).json();
+  expect(french).toMatchObject({ title: 'Ankara Wax Print', i18n: { fr: { title: 'Wax Ankara imprimé' } }, department: { name: 'Lace', i18n: { fr: { name: 'Dentelle' } } } });
+  await page.getByLabel('Department: Lace in French').fill('');
+  await page.getByRole('button', { name: 'Save (1)' }).click();
+  await expect(page.getByText('Saved 0, cleared 1.')).toBeVisible();
+  await page.getByLabel('Language').selectOption('ha');
+  await expect(page.getByLabel('Product: Ankara Wax Print in Hausa')).toHaveValue('');
   await noA11yViolations(page);
 });
 

@@ -28,18 +28,21 @@ test.describe('shop languages', () => {
     await page.getByLabel('Language').selectOption('fr');
     await expect(page.getByText('4 produits')).toBeVisible();
     await expect(page.getByRole('link', { name: 'Prix croissant' })).toBeVisible();
-    await expect(page.locator('article', { hasText: 'Ankara Wax Print' }).getByText('₦1,075.00')).toBeVisible();
+    await expect(page.locator('article', { hasText: 'Wax Ankara imprimé' }).getByText('₦1,075.00')).toBeVisible();
 
     await page.goto('/shop?q=zzzz');
     await expect(page.getByRole('heading', { name: 'Aucun résultat pour le moment' })).toBeVisible();
 
     await page.goto('/shop');
-    await page.locator('article', { hasText: 'Ankara Wax Print' }).getByRole('link', { name: 'Ankara Wax Print' }).click();
+    await page.locator('article', { hasText: 'Wax Ankara imprimé' }).getByRole('link', { name: 'Wax Ankara imprimé' }).click();
+    await expect(page.getByRole('heading', { level: 1, name: 'Wax Ankara imprimé' })).toBeVisible();
+    await expect(page.getByText('Un wax audacieux, aux couleurs solides.')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Ajouter au panier' })).toBeVisible();
     await page.getByRole('button', { name: 'Ajouter au panier' }).click();
     await expect(page.getByText('Ajouté à votre panier ✓')).toBeVisible();
     await page.getByRole('link', { name: 'Voir le panier' }).click();
     await expect(page.getByRole('heading', { name: 'Votre panier' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Wax Ankara imprimé' })).toBeVisible();
     await expect(page.getByText('Récapitulatif')).toBeVisible();
     await expect(page.getByRole('link', { name: 'Passer la commande' })).toBeVisible();
   });
@@ -63,5 +66,24 @@ test.describe('first visit from a French-language browser', () => {
     await page.getByLabel('Langue').selectOption('en');
     await page.reload();
     await expect(page.getByRole('heading', { name: 'Shop by department' })).toBeVisible();
+  });
+});
+
+test.describe('company-written content', () => {
+  test('is shown in the shopper\'s language where it has been translated, and in English where it has not', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('.topbar')).toHaveText('Free delivery over ₦100,000');
+    await page.getByLabel('Language').selectOption('fr');
+    await expect(page.locator('.topbar')).toHaveText('Livraison gratuite dès 100 000 ₦');
+    await expect(page.getByRole('link', { name: 'Dentelle' }).first()).toBeVisible();   // translated department
+    await expect(page.getByRole('link', { name: 'Ankara' }).first()).toBeVisible();      // department with no translation
+    await expect(page.locator('article', { hasText: 'Brocade Gold' })).toBeVisible();   // product with no translation
+
+    await page.goto('/shop?department=lace');
+    await expect(page.getByRole('heading', { level: 1, name: 'Dentelle' })).toBeVisible();
+
+    await page.getByLabel('Langue').selectOption('ha');
+    await expect(page.getByRole('heading', { level: 1, name: 'Leshi' })).toBeVisible();
+    await expect(page.locator('.topbar')).toHaveText('Free delivery over ₦100,000');     // no Hausa tagline: the English shows
   });
 });

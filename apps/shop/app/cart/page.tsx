@@ -12,7 +12,7 @@ import type { BasketQuote } from '@/lib/types';
 export default function CartPage() {
   const { lines, setQuantity, remove, store, coupon, setCoupon } = useCart();
   const { token } = useAuth();
-  const { t } = useI18n();
+  const { t, c } = useI18n();
   const [typed, setTyped] = useState('');
   const [quote, setQuote] = useState<BasketQuote | null>(null);
   const [problem, setProblem] = useState('');
@@ -50,9 +50,9 @@ export default function CartPage() {
             const q = byId.get(l.variantId);
             return (
               <div className="line" key={l.variantId}>
-                <div className="thumb">{l.image ? <img src={l.image} alt="" /> : <div className="placeholder" aria-hidden="true">{l.title.slice(0, 1)}</div>}</div>
+                <div className="thumb">{l.image ? <img src={l.image} alt="" /> : <div className="placeholder" aria-hidden="true">{c(l, 'title', l.title).slice(0, 1)}</div>}</div>
                 <div>
-                  <Link href={`/product/${l.productSlug}`}><strong>{l.title}</strong></Link>
+                  <Link href={`/product/${l.productSlug}`}><strong>{c(l, 'title', l.title)}</strong></Link>
                   <div className="small muted">{l.sku}</div>
                   <div className="row" style={{ marginTop: 8 }}>
                     <label className="small" htmlFor={`q-${l.variantId}`} style={{ margin: 0 }}>{t('cart.qty', { unit: l.unit })}</label>

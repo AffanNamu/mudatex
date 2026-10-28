@@ -7,7 +7,8 @@ import type { ProductCard as Card, Store } from '@/lib/types';
 import { WishlistButton } from './WishlistButton';
 
 export function ProductCard({ p, store }: { p: Card; store: Store }) {
-  const { t } = useI18n();
+  const { t, c } = useI18n();
+  const title = c(p, 'title', p.title);
   return (
     <article className="pcard">
       <div className="chips">
@@ -16,11 +17,11 @@ export function ProductCard({ p, store }: { p: Card; store: Store }) {
       </div>
       <WishlistButton slug={p.slug} className="iconbtn wish" />
       <div className="img">
-        {p.images[0] ? <img src={p.images[0]} alt="" loading="lazy" /> : <div className="placeholder" aria-hidden="true">{p.title.slice(0, 1)}</div>}
+        {p.images[0] ? <img src={p.images[0]} alt="" loading="lazy" /> : <div className="placeholder" aria-hidden="true">{title.slice(0, 1)}</div>}
       </div>
       <div className="body">
         {p.brand && <div className="small muted">{p.brand}</div>}
-        <Link className="title" href={`/product/${p.slug}`}>{p.title}</Link>
+        <Link className="title" href={`/product/${p.slug}`}>{title}</Link>
         <div className="price">{formatMoney(p.priceMinor, p.currency, store.minorUnit)}</div>
       </div>
     </article>

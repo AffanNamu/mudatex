@@ -11,7 +11,7 @@ export function Header() {
   const { store, count } = useCart();
   const { signedIn, ready } = useAuth();
   const router = useRouter();
-  const { t, lang, setLang } = useI18n();
+  const { t, c, lang, setLang } = useI18n();
   const [open, setOpen] = useState(false);
 
   const search = (e: FormEvent<HTMLFormElement>) => {
@@ -24,7 +24,7 @@ export function Header() {
   return (
     <>
       <a className="skip" href="#main">{t('skip')}</a>
-      {store.tagline && <div className="topbar">{store.tagline}</div>}
+      {store.tagline && <div className="topbar">{c(store, 'tagline', store.tagline)}</div>}
       <header className="header">
         <div className="wrap">
           <button className="iconbtn menu-toggle" aria-label={t('menu')} aria-expanded={open} aria-controls="nav" onClick={() => setOpen(!open)}>☰</button>
@@ -32,7 +32,7 @@ export function Header() {
           <nav id="nav" className={`nav${open ? ' open' : ''}`} aria-label="Main">
             <Link href="/shop" onClick={() => setOpen(false)}>{t('nav.shopAll')}</Link>
             {store.departments.slice(0, 4).map((d) => (
-              <Link key={d.slug} href={`/shop?department=${d.slug}`} onClick={() => setOpen(false)}>{d.name}</Link>
+              <Link key={d.slug} href={`/shop?department=${d.slug}`} onClick={() => setOpen(false)}>{c(d, 'name', d.name)}</Link>
             ))}
             <Link href="/about" onClick={() => setOpen(false)}>{t('nav.story')}</Link>
             <Link href="/contact" onClick={() => setOpen(false)}>{t('nav.contact')}</Link>

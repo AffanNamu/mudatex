@@ -29,6 +29,11 @@ export const plural = (key: string, n: number) => `${key}.${n === 1 ? 'one' : 'o
 
 export const isLang = (v: unknown): v is Lang => v === 'en' || v === 'fr' || v === 'ha';
 
+/** Whether this device has a language the shopper chose themselves (as opposed to one guessed from the browser). */
+export function hasChosenLang(): boolean {
+  try { return isLang(localStorage.getItem(KEY)); } catch { return false; }
+}
+
 /** The first supported language in the browser's preference list, else English. */
 export function detectLang(preferred: readonly string[] | undefined): Lang {
   for (const p of preferred ?? []) {
@@ -42,8 +47,19 @@ export function detectLang(preferred: readonly string[] | undefined): Lang {
 let current: Lang = 'en';
 export const tr = (key: MessageKey | (string & {}), vars?: Vars) => translate(current, key, vars);
 
-interface I18nValue { lang: Lang; setLang(l: Lang): void; t(key: MessageKey | (string & {}), vars?: Vars): string }
-const Ctx = createContext<I18nValue>({ lang: 'en', setLang: () => undefined, t: (k, v) => translate('en', k, v) });
+/** The company's own wording for `field` in the language, else the English `fallback`. */
+export function localized(entity: { i18n?: Partial<Record<string, Record<string, string>>> } | null | undefined, field: string, lang: Lang, fallback: string): string {
+  return (lang !== 'en' && entity?.i18n?.[lang]?.[field]) || fallback;
+}
+
+interface I18nValue {
+  lang: Lang;
+  setLang(l: Lang): void;
+  t(key: MessageKey | (string & {}), vars?: Vars): string;
+  /** Company-written content (product titles, department names…) in the shopper's language. */
+  c(entity: { i18n?: Partial<Record<string, Record<string, string>>> } | null | undefined, field: string, fallback: string): string;
+}
+const Ctx = createContext<I18nValue>({ lang: 'en', setLang: () => undefined, t: (k, v) => translate('en', k, v), c: (_e, _f, fb) => fb });
 
 /**
  * The server always renders English, so every visitor gets the same cached page; the shopper's language is applied as
@@ -60,7 +76,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   useEffect(() => { current = lang; document.documentElement.lang = lang; }, [lang]);
 
   const setLang = useCallback((l: Lang) => { setLangState(l); try { localStorage.setItem(KEY, l); } catch { /* optional */ } }, []);
-  const value = useMemo<I18nValue>(() => ({ lang, setLang, t: (k, v) => translate(lang, k, v) }), [lang, setLang]);
+  const value = useMemo<I18nValue>(() => ({ lang, setLang, t: (k, v) => translate(lang, k, v), c: (e, f, fb) => localized(e, f, lang, fb) }), [lang, setLang]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 

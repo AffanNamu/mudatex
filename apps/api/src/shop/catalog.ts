@@ -2,6 +2,7 @@ import type { Db } from '../db.js';
 import { normalize } from '../domain/decimal.js';
 import { priceLine } from '../domain/money.js';
 import { invalid, notFound } from '../errors.js';
+import { loadI18n, orNothing, type I18n } from './translations.js';
 
 export interface Storefront {
   id: string;
@@ -98,16 +99,28 @@ export interface ProductCard {
   brand: string | null;
   images: string[];
   badges: string[];
-  department: { slug: string; name: string } | null;
+  department: { slug: string; name: string; i18n?: I18n } | null;
+  i18n?: I18n;
   priceMinor: number;
   currency: string;
   inStock: boolean;
+}
+
+/** Department translations of a storefront by department slug (there are only a handful of departments). */
+export async function departmentI18nBySlug(db: Db, sf: Storefront): Promise<Map<string, I18n>> {
+  const { rows } = await db.query<{ id: string; slug: string }>('SELECT id, slug FROM storefront_departments WHERE storefront_id = $1', [sf.id]);
+  const byId = await loadI18n(db, sf.id, 'department', rows.map((r) => r.id));
+  const out = new Map<string, I18n>();
+  for (const r of rows) { const i = orNothing(byId.get(r.id)); if (i) out.set(r.slug, i); }
+  return out;
 }
 
 /** Cards for already-selected storefront products, in the order given. */
 export async function cardsFor(db: Db, sf: Storefront, rows: { id: string; productId: string; slug: string; title: string; brand: string | null; images: unknown; badges: string[]; departmentSlug: string | null; departmentName: string | null }[]): Promise<ProductCard[]> {
   const variants = await pricedVariants(db, sf, [...new Set(rows.map((r) => r.productId))]);
   const stock = await availability(db, sf, variants.map((v) => v.variantId));
+  const words = await loadI18n(db, sf.id, 'product', rows.map((r) => r.id));
+  const deptWords = await departmentI18nBySlug(db, sf);
   return rows.map((r) => {
     const mine = variants.filter((v) => v.productId === r.productId);
     const prices = mine.map((v) => displayPrice(sf, v));
@@ -118,7 +131,8 @@ export async function cardsFor(db: Db, sf: Storefront, rows: { id: string; produ
       brand: r.brand,
       images: (r.images as string[]) ?? [],
       badges: r.badges,
-      department: r.departmentSlug ? { slug: r.departmentSlug, name: r.departmentName! } : null,
+      department: r.departmentSlug ? { slug: r.departmentSlug, name: r.departmentName!, i18n: deptWords.get(r.departmentSlug) } : null,
+      i18n: orNothing(words.get(r.id)),
       priceMinor: Number(prices.reduce((a, b) => (b < a ? b : a), prices[0] ?? 0n)),
       currency: sf.currency,
       inStock: mine.some((v) => Number(stock.get(v.variantId) ?? '0') > 0),
@@ -155,8 +169,11 @@ export async function productDetail(db: Db, sf: Storefront, productSlug: string)
     `SELECT round(avg(rating)::numeric, 1) AS average, count(*)::int AS count FROM product_reviews WHERE storefront_product_id = $1 AND status = 'published'`,
     [sp.id],
   );
+  const words = (await loadI18n(db, sf.id, 'product', [sp.id])).get(sp.id);
+  const deptWords = sp.departmentSlug ? (await departmentI18nBySlug(db, sf)).get(sp.departmentSlug) : undefined;
   return {
     id: sp.id,
+    i18n: orNothing(words),
     rating: { average: rating.rows[0]!.average === null ? null : Number(rating.rows[0]!.average), count: rating.rows[0]!.count },
     slug: sp.slug,
     title: sp.title,
@@ -164,7 +181,7 @@ export async function productDetail(db: Db, sf: Storefront, productSlug: string)
     brand: sp.brand,
     images: sp.images as string[],
     badges: sp.badges as string[],
-    department: sp.departmentSlug ? { slug: sp.departmentSlug, name: sp.departmentName } : null,
+    department: sp.departmentSlug ? { slug: sp.departmentSlug, name: sp.departmentName, i18n: deptWords } : null,
     category: sp.category,
     attributes: sp.attributes,
     unit: units.rows[0],

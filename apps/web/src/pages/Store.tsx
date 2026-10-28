@@ -3,6 +3,7 @@ import { ErrorBanner, Field, Loading, Notice, PageHeader } from '../components/u
 import { api } from '../lib/api';
 import { useLoad, type Loaded } from '../lib/hooks';
 import type { Product } from './Catalogue';
+import { Translations } from './StoreTranslations';
 
 interface Storefront {
   id: string; legalEntityId: string; slug: string; name: string; priceListId: string; currency: string; stockLocationIds: string[];
@@ -10,7 +11,7 @@ interface Storefront {
   contact: { whatsapp?: string; phone?: string; email?: string; address?: string; bankName?: string; accountName?: string; accountNumber?: string };
 }
 interface Dept { id: string; slug: string; name: string; imageUrl: string | null; sort: number }
-interface Published { productId: string; productName: string; slug: string; title: string; brand: string | null; departmentId: string | null; images: string[]; badges: string[]; published: boolean; priced: boolean }
+interface Published { id: string; productId: string; productName: string; slug: string; title: string; brand: string | null; departmentId: string | null; images: string[]; badges: string[]; published: boolean; priced: boolean }
 interface Zone { id: string; name: string; countryCode: string; states: string[]; feeMinor: number; freeOverMinor: number | null; etaDaysMin: number; etaDaysMax: number; active: boolean }
 interface Entity { id: string; name: string; functionalCurrency: string }
 interface Place { id: string; legalEntityId: string; type: string; name: string }
@@ -93,6 +94,7 @@ function StoreEditor({ store, onChanged }: { store: Storefront; onChanged(): voi
       <Details store={store} onChanged={onChanged} />
       <Departments storeId={store.id} depts={depts} />
       <Publishing store={store} depts={depts.data ?? []} onChanged={onChanged} />
+      <Translations store={store} depts={depts.data ?? []} />
       <Delivery storeId={store.id} />
       <Coupons storeId={store.id} />
     </>
