@@ -206,6 +206,9 @@ test('one person asks for a refund and another approves it', async ({ page, requ
   await nav(page, 'Online orders');
   await page.getByRole('button', { name: order.orderNo }).first().click();
   const panel = page.getByRole('region', { name: `Order ${order.orderNo}` });
+  await panel.getByRole('button', { name: 'Invoice / receipt' }).click();
+  await expect(panel.getByRole('article', { name: `Invoice ${order.orderNo}` }).getByRole('heading', { name: new RegExp(`Receipt ${order.orderNo}`) })).toBeVisible();
+  await panel.getByRole('button', { name: 'Hide invoice' }).click();
   await panel.getByText(/^Refunds/).click();
   await panel.getByLabel(/Amount to refund/).fill('500');
   await panel.getByLabel('Reason').fill('Customer returned part of the roll');

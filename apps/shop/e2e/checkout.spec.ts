@@ -1,3 +1,4 @@
+import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 import { admin, completeProfile, signUp, uniqueEmail } from './helpers';
 
@@ -39,6 +40,18 @@ test.describe('buying', () => {
     await expect(page.getByText('Test Bank')).toBeVisible();
     await expect(page.getByText(/exactly/)).toContainText('₦4,725.00');
 
+    // the unpaid invoice shows what is owed and where to pay it
+    await page.getByRole('link', { name: 'Invoice / receipt' }).click();
+    const invoice = page.getByRole('article', { name: new RegExp(`Invoice ${orderNo}`) });
+    await expect(invoice.getByRole('heading', { name: 'Invoice' })).toBeVisible();
+    await expect(invoice.getByText('Balance to pay: ₦4,725.00')).toBeVisible();
+    await expect(invoice.getByText(/Test Bank/)).toBeVisible();
+    await expect(invoice.getByText('Amina Yusuf').first()).toBeVisible();
+    await expect(invoice.getByText('VAT75 (7.5%)')).toBeVisible();
+    await expect(invoice.getByText('Tax number: TIN-445566')).toBeVisible();
+    await expect(invoice.getByText('Goods once sold are exchanged within 7 days.')).toBeVisible();
+    expect((await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze()).violations).toEqual([]);
+
     // the basket is empty after ordering
     await page.goto('/cart');
     await expect(page.getByRole('heading', { name: 'Your basket is empty' })).toBeVisible();
@@ -47,6 +60,15 @@ test.describe('buying', () => {
     const orders = await admin('GET', `/v1/sales-orders?q=${encodeURIComponent(email)}`);
     const id = orders.items.find((o: any) => o.orderNo === orderNo).id;
     await admin('POST', `/v1/sales-orders/${id}/payments`, { method: 'bank_transfer', reference: `E2E-${Date.now()}`, amountMinor: 472500 });
+    await page.goto(`/orders/${orderNo}/invoice`);
+    await expect(page.getByRole('heading', { name: 'Receipt' })).toBeVisible();
+    await expect(page.getByText('Paid in full. Thank you.')).toBeVisible();
+    await expect(page.getByText('Balance to pay')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Print or save as PDF' })).toBeVisible();
+    await page.emulateMedia({ media: 'print' });
+    await expect(page.getByRole('button', { name: 'Print or save as PDF' })).toBeHidden();
+    await expect(page.getByRole('heading', { name: 'Receipt' })).toBeVisible();
+    await page.emulateMedia({ media: 'screen' });
     await page.goto(`/orders/${orderNo}`);
     await expect(page.getByText('Paid').first()).toBeVisible();
     await expect(page.getByText('Pay by bank transfer')).toHaveCount(0);

@@ -18,6 +18,9 @@ const contactBody = z
     bankName: z.string().max(100).optional(),
     accountName: z.string().max(150).optional(),
     accountNumber: z.string().regex(/^[0-9]{6,20}$/).optional(),
+    // printed on invoices and receipts
+    taxId: z.string().trim().max(50).optional(),
+    invoiceFooter: z.string().trim().max(300).optional(),
   })
   .strict();
 

@@ -115,6 +115,7 @@ function OrderView() {
         </section>
       )}
 
+      <p><Link className="btn ghost small" href={`/orders/${order.orderNo}/invoice`}>{t('doc.link')}</Link></p>
       {order.status !== 'cancelled' && order.status !== 'expired' && order.paymentMethod !== 'card' && <RepeatOrder orderNo={order.orderNo} paymentMethod={order.paymentMethod} />}
 
       <div className="cartgrid">

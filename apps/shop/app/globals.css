@@ -218,3 +218,25 @@ table.plain th, table.plain td { text-align: left; padding: 10px 8px; border-bot
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 
 .icons select.lang { width: auto; min-height: 36px; padding: 4px 8px; font-size: .85rem; }
+
+/* Invoices and receipts: readable on screen, clean on paper. */
+.doc { max-width: 820px; margin: 0 auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 28px; }
+.doc-actions { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 16px; }
+.doc-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; border-bottom: 2px solid var(--line); padding-bottom: 16px; }
+.doc-head h1 { margin: 0 0 4px; }
+.doc-from { text-align: right; }
+.doc-parties { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin: 16px 0; }
+.doc-parties h2, .doc h2 { font-size: .95rem; text-transform: uppercase; letter-spacing: .04em; margin: 0 0 4px; }
+.doc table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+.doc th, .doc td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+.doc .num { text-align: right; white-space: nowrap; }
+.doc-lines tfoot th { text-align: right; }
+.doc-total th, .doc-total td { font-size: 1.1rem; border-top: 2px solid var(--ink); }
+.doc-tax caption { text-align: left; font-weight: 600; padding: 4px 0; }
+.doc-balance { margin-top: 12px; }
+@media print {
+  .header, .footer, .topbar, .skip, .wa, .no-print { display: none !important; }
+  body { background: #fff; color: #000; }
+  .wrap.section { padding: 0; max-width: none; }
+  .doc { border: 0; padding: 0; background: #fff; }
+}

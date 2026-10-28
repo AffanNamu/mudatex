@@ -40,7 +40,7 @@ export async function seedShop(API) {
     legalEntityId: le.id, slug: SLUG, name: 'E2E Textiles', priceListId: list.id, stockLocationIds: [warehouse.id],
     tagline: 'Free delivery over ₦100,000',
     siteUrl: 'http://localhost:3300',
-    contact: { whatsapp: '+2348012345678', phone: '+234 801 234 5678', email: 'hello@e2e.test', bankName: 'Test Bank', accountName: 'E2E Textiles Ltd', accountNumber: '0123456789' },
+    contact: { whatsapp: '+2348012345678', phone: '+234 801 234 5678', email: 'hello@e2e.test', bankName: 'Test Bank', accountName: 'E2E Textiles Ltd', accountNumber: '0123456789', taxId: 'TIN-445566', invoiceFooter: 'Goods once sold are exchanged within 7 days.' },
   });
   const dept = async (name, slug) => (await post(`/v1/storefronts/${sf.id}/departments`, { slug, name })).id;
   const ankara = await dept('Ankara', 'ankara');

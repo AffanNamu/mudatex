@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
+import { orderDocument } from '../shop/documents.js';
 import { authorize, grantsFor } from '../auth/authorize.js';
 import type { Db } from '../db.js';
 import { notFound } from '../errors.js';
@@ -73,6 +74,14 @@ export const salesOrderRoutes: FastifyPluginAsync<{ db: Db; payments?: PaymentPr
     await authorize(db, req.actor, 'orders.read', { kind: 'legal_entity', legalEntityId: await entityOf(id, req.actor.organizationId) });
     const order = await readOrder(db, { id, organizationId: req.actor.organizationId }, true);
     return { ...order, refunds: await listRefunds(db, id) };
+  });
+
+  /** The same invoice or receipt the buyer can print, for staff to hand over or send. */
+  app.get('/sales-orders/:id/document', async (req) => {
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    await authorize(db, req.actor, 'orders.read', { kind: 'legal_entity', legalEntityId: await entityOf(id, req.actor.organizationId) });
+    const { legalEntityId: _l, ...doc } = await orderDocument(db, { id, organizationId: req.actor.organizationId });
+    return doc;
   });
 
   app.post('/sales-orders/:id/payments', async (req) => {

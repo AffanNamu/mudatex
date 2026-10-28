@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { ErrorBanner, Field, Loading, Notice, PageHeader } from '../components/ui';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
@@ -133,6 +133,7 @@ function OrderPanel({ id, onChanged }: { id: string; onChanged(): void }) {
           </form>
         </details>
       )}
+      <PrintInvoice id={o.id} />
       <Refunds o={o} money={money} me={session?.user.id ?? ''} onChanged={() => { d.reload(); onChanged(); }} />
       {o.refundDueMinor > 0 && <Notice tone="warn">Refund owed to the customer: {money(o.refundDueMinor)}. Refunds are paid out manually for now.</Notice>}
       {o.trackingRef && <p>Courier: {o.carrier ?? '—'} · {o.trackingRef}</p>}
@@ -185,5 +186,60 @@ function Refunds({ o, money, me, onChanged }: { o: Detail; money(m: number): str
       )}
       <ErrorBanner error={error} />
     </details>
+  );
+}
+
+interface Doc {
+  orderNo: string; status: string; issuedOn: string; dueOn: string | null; currency: string; minorUnit: number;
+  seller: { name: string; legalName: string; address: string | null; phone: string | null; email: string | null; taxId: string | null; footer: string | null };
+  buyer: { name: string; email: string; phone: string | null; businessName: string | null; taxId: string | null };
+  lines: { title: string; sku: string; quantity: string; unitPrice: string; taxRatePct: string | null; totalMinor: number }[];
+  taxSummary: { taxCode: string; ratePct: string; taxableMinor: number; taxMinor: number }[];
+  goodsMinor: number; discountMinor: number; deliveryFeeMinor: number; totalMinor: number;
+  payments: { at: string; method: string; reference: string; amountMinor: number }[];
+  paidMinor: number; refundedMinor: number; balanceMinor: number;
+  bank: { bankName: string | null; accountName: string | null; accountNumber: string | null } | null;
+}
+
+/** The customer's invoice or receipt, as it is printed or sent: the same figures the customer sees in the shop. */
+function PrintInvoice({ id }: { id: string }) {
+  const [show, setShow] = useState(false);
+  const d = useLoad<Doc>(show ? `/v1/sales-orders/${id}/document` : null);
+  useEffect(() => {
+    if (!show) return;
+    document.body.classList.add('printing-doc');
+    return () => document.body.classList.remove('printing-doc');
+  }, [show]);
+  const doc = d.data;
+  const m = (n: number) => formatMoney(n, doc?.currency ?? 'NGN', doc?.minorUnit ?? 2);
+  return (
+    <div className="no-print-wrap">
+      <div className="row">
+        <button className="btn" aria-expanded={show} onClick={() => setShow(!show)}>{show ? 'Hide invoice' : 'Invoice / receipt'}</button>
+        {show && doc && <button className="btn btn-primary" onClick={() => window.print()}>Print</button>}
+      </div>
+      {show && <ErrorBanner error={d.error} />}
+      {show && doc && (
+        <article className="print-doc" aria-label={`Invoice ${doc.orderNo}`}>
+          <h2>{doc.balanceMinor === 0 && doc.paidMinor > 0 ? 'Receipt' : 'Invoice'} {doc.orderNo}</h2>
+          <p>{doc.seller.name}{doc.seller.legalName !== doc.seller.name ? ` (${doc.seller.legalName})` : ''}{doc.seller.address ? ` · ${doc.seller.address}` : ''}{doc.seller.phone ? ` · ${doc.seller.phone}` : ''}{doc.seller.taxId ? ` · Tax ID ${doc.seller.taxId}` : ''}<br />
+            Date {doc.issuedOn}{doc.dueOn && doc.balanceMinor > 0 ? ` · Due ${doc.dueOn}` : ''}</p>
+          <p>Billed to: {doc.buyer.businessName ?? doc.buyer.name}{doc.buyer.taxId ? ` · Tax ID ${doc.buyer.taxId}` : ''} · {doc.buyer.email}</p>
+          <table>
+            <thead><tr><th scope="col">Item</th><th scope="col">Qty</th><th scope="col">Price</th><th scope="col">Tax</th><th scope="col">Total</th></tr></thead>
+            <tbody>
+              {doc.lines.map((l, i) => <tr key={i}><th scope="row">{l.title}<div className="muted">{l.sku}</div></th><td>{l.quantity}</td><td>{l.unitPrice}</td><td>{l.taxRatePct ? `${l.taxRatePct}%` : '—'}</td><td>{m(l.totalMinor)}</td></tr>)}
+              {doc.discountMinor > 0 && <tr><th scope="row">Discount</th><td /><td /><td /><td>−{m(doc.discountMinor)}</td></tr>}
+              <tr><th scope="row">Delivery</th><td /><td /><td /><td>{m(doc.deliveryFeeMinor)}</td></tr>
+              <tr><th scope="row">Total</th><td /><td /><td /><td><strong>{m(doc.totalMinor)}</strong></td></tr>
+            </tbody>
+          </table>
+          {doc.taxSummary.length > 0 && <p>Tax included: {doc.taxSummary.map((s) => `${s.taxCode} ${s.ratePct}% on ${m(s.taxableMinor)} = ${m(s.taxMinor)}`).join('; ')}</p>}
+          <p>Paid {m(doc.paidMinor)}{doc.refundedMinor ? ` · refunded ${m(doc.refundedMinor)}` : ''}{doc.balanceMinor > 0 ? ` · balance ${m(doc.balanceMinor)}` : ''}</p>
+          {doc.balanceMinor > 0 && doc.bank && <p>Pay to {[doc.bank.bankName, doc.bank.accountName, doc.bank.accountNumber].filter(Boolean).join(' · ')}, reference {doc.orderNo}</p>}
+          {doc.seller.footer && <p className="muted">{doc.seller.footer}</p>}
+        </article>
+      )}
+    </div>
   );
 }

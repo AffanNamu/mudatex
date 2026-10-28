@@ -7,6 +7,7 @@ import { conflict, forbidden, invalid, notFound, unauthorized } from '../errors.
 import { cardsFor, loadLiveStorefront, type Storefront } from '../shop/catalog.js';
 import { SHOP_LANGUAGES } from '../shop/translations.js';
 import { readQuote } from '../trade/quotes.js';
+import { orderDocument } from '../shop/documents.js';
 import { changeStandingOrder, createBody as standingBody, createStandingOrder, readStandingOrders } from '../trade/standing-orders.js';
 import { approvedTrade, cancelOrder, creditUsed, MAX_ORDER_LINES, placeOrder, readOrder, tradeStatement } from '../shop/orders.js';
 import { AppError } from '../errors.js';
@@ -346,6 +347,14 @@ export const shopCustomerRoutes: FastifyPluginAsync<{ db: Db; verify: TokenVerif
     const { orderNo } = z.object({ orderNo: z.string().regex(/^[A-Z]{2,5}-\d{6,}$/) }).parse(req.params);
     const id = await customer(req);
     return readOrder(db, { orderNo, customerId: id, organizationId: req.storefront.organizationId });
+  });
+
+  /** What is printed on the buyer's invoice or receipt for this order. */
+  app.get('/shop/:slug/me/orders/:orderNo/document', async (req) => {
+    const { orderNo } = z.object({ orderNo: z.string().regex(/^[A-Z]{2,5}-\d{6,}$/) }).parse(req.params);
+    const id = await customer(req);
+    const { legalEntityId: _l, ...doc } = await orderDocument(db, { orderNo, customerId: id, organizationId: req.storefront.organizationId });
+    return doc;
   });
 
   app.post('/shop/:slug/me/orders/:orderNo/cancel', async (req) => {

@@ -82,6 +82,11 @@ th[scope='row'] { font-weight: 500; }
 .change { font-size: 1.2rem; }
 .receipt { max-width: 480px; margin-inline: auto; }
 @media print { .topbar, .row-end, .skip { display: none; } body { background: #fff; color: #000; } }
+@media print {
+  body.printing-doc #root * { visibility: hidden; }
+  body.printing-doc .print-doc, body.printing-doc .print-doc * { visibility: visible; }
+  body.printing-doc .print-doc { position: absolute; inset: 0 auto auto 0; width: 100%; }
+}
 .plain { list-style: none; padding: 0; margin: 0; }
 .row-between { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 0; }
 .section { margin-top: 24px; }
