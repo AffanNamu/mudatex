@@ -9,6 +9,8 @@ import { fulfilReferenceReservations, createReservation, releaseReferenceReserva
 import { priceSaleLines, saleTotals } from '../pos/pricing.js';
 import { availability, quoteDelivery, type Storefront } from './catalog.js';
 
+const statusWord = (status: string) => `@err.status.${status}`;
+
 export const ORDER_HOLD_MINUTES = { card: 60, bank_transfer: 24 * 60 } as const;
 export const MAX_ORDER_LINES = 50;
 
@@ -111,17 +113,17 @@ export async function resolveCoupon(tx: Tx, sf: Storefront, rawCode: string, bas
   );
   const c = rows[0];
   const now = new Date();
-  if (!c || !c.active) throw invalid('That coupon code is not valid');
-  if (c.starts_at && c.starts_at > now) throw invalid('That coupon is not active yet');
-  if (c.ends_at && c.ends_at <= now) throw invalid('That coupon has expired');
-  if (basketMinor < BigInt(c.min_subtotal_minor)) throw invalid('Your basket is below the minimum for this coupon');
+  if (!c || !c.active) throw invalid('That coupon code is not valid', { key: 'err.coupon.invalid' });
+  if (c.starts_at && c.starts_at > now) throw invalid('That coupon is not active yet', { key: 'err.coupon.notActive' });
+  if (c.ends_at && c.ends_at <= now) throw invalid('That coupon has expired', { key: 'err.coupon.expired' });
+  if (basketMinor < BigInt(c.min_subtotal_minor)) throw invalid('Your basket is below the minimum for this coupon', { key: 'err.coupon.minimum' });
   const used = await tx.query<{ total: number; mine: number }>(
     `SELECT count(*)::int AS total, count(*) FILTER (WHERE customer_id = $2)::int AS mine
        FROM sales_orders WHERE coupon_id = $1 AND status NOT IN ('cancelled', 'expired')`,
     [c.id, customerId],
   );
-  if (c.max_redemptions !== null && used.rows[0]!.total >= c.max_redemptions) throw invalid('That coupon has been fully used');
-  if (customerId && used.rows[0]!.mine >= c.per_customer_limit) throw invalid('You have already used that coupon');
+  if (c.max_redemptions !== null && used.rows[0]!.total >= c.max_redemptions) throw invalid('That coupon has been fully used', { key: 'err.coupon.used' });
+  if (customerId && used.rows[0]!.mine >= c.per_customer_limit) throw invalid('You have already used that coupon', { key: 'err.coupon.mine' });
   return { id: c.id, code, percentBps: c.percent_bps, minSubtotalMinor: BigInt(c.min_subtotal_minor) };
 }
 
@@ -170,7 +172,7 @@ async function sellableTitles(tx: Pick<Db, 'query'>, sf: Storefront, ids: string
     [sf.id, ids, sf.organizationId],
   );
   const titles = new Map(sellable.rows.map((r) => [r.variant_id, r.title]));
-  for (const id of ids) if (!titles.has(id)) throw invalid('An item in your basket is no longer available');
+  for (const id of ids) if (!titles.has(id)) throw invalid('An item in your basket is no longer available', { key: 'err.basket.gone' });
   return titles;
 }
 
@@ -180,7 +182,7 @@ async function sellableTitles(tx: Pick<Db, 'query'>, sf: Storefront, ids: string
  */
 export async function quoteBasket(db: Db, sf: Storefront, lines: PlaceOrderInput['lines'], to?: { countryCode: string; state: string }, couponCode?: string, customerId: string | null = null) {
   const ids = lines.map((l) => l.variantId);
-  if (new Set(ids).size !== ids.length) throw invalid('Each product variant can appear once');
+  if (new Set(ids).size !== ids.length) throw invalid('Each product variant can appear once', { key: 'err.basket.duplicate' });
   return withTx(db, async (tx) => {
     const titles = await sellableTitles(tx, sf, ids);
     const trade = await approvedTrade(tx, sf.id, customerId);
@@ -221,20 +223,20 @@ export async function placeOrder(db: Db, sf: Storefront, customerId: string, inp
     }
 
     const ids = input.lines.map((l) => l.variantId);
-    if (new Set(ids).size !== ids.length) throw invalid('Each product variant can appear on an order once; adjust its quantity instead');
+    if (new Set(ids).size !== ids.length) throw invalid('Each product variant can appear on an order once; adjust its quantity instead', { key: 'err.order.duplicate' });
 
     const addr = await tx.query<{ recipient: string; phone: string; line1: string; line2: string | null; city: string; state: string; country_code: string }>(
       'SELECT recipient, phone, line1, line2, city, state, country_code FROM customer_addresses WHERE id = $1 AND customer_id = $2',
       [input.addressId, customerId],
     );
     const address = addr.rows[0];
-    if (!address) throw invalid('Choose one of your saved delivery addresses');
+    if (!address) throw invalid('Choose one of your saved delivery addresses', { key: 'err.address.choose' });
 
     const titles = await sellableTitles(tx, sf, ids);
 
     const now = new Date();
     const trade = await approvedTrade(tx, sf.id, customerId, true);
-    if (input.paymentMethod === 'account' && !trade) throw invalid('Your business does not have an approved trade account');
+    if (input.paymentMethod === 'account' && !trade) throw invalid('Your business does not have an approved trade account', { key: 'err.trade.none' });
     const { priced, coupon } = await priceWithCoupon(tx, trade ? { ...sf, priceListId: trade.priceListId } : sf, input.lines, input.couponCode, customerId, true);
 
     const orderId = crypto.randomUUID();
@@ -252,12 +254,12 @@ export async function placeOrder(db: Db, sf: Storefront, customerId: string, inp
     const quote = await quoteDelivery(tx, sf, address.country_code, address.state, linesTotal);
     const deliveryFee = BigInt(quote.feeMinor);
     const total = linesTotal + deliveryFee;
-    if (total <= 0n) throw invalid('This order has no value');
+    if (total <= 0n) throw invalid('This order has no value', { key: 'err.order.noValue' });
 
     const onAccount = input.paymentMethod === 'account';
     if (onAccount) {
       const used = await creditUsed(tx, customerId);
-      if (used + total > trade!.creditLimitMinor) throw invalid(`This order would take you over your credit limit (available: ${trade!.creditLimitMinor - used > 0n ? trade!.creditLimitMinor - used : 0n} minor units)`);
+      if (used + total > trade!.creditLimitMinor) { const available = trade!.creditLimitMinor - used > 0n ? trade!.creditLimitMinor - used : 0n; throw invalid(`This order would take you over your credit limit (available: ${available} minor units)`, { key: 'err.credit', vars: { available } }); };
     }
     const expiresAt = new Date(now.getTime() + (input.paymentMethod === 'account' ? 30 * 24 * 60 : ORDER_HOLD_MINUTES[input.paymentMethod]) * 60_000);
     const dueOn = onAccount ? new Date(now.getTime() + trade!.paymentTermsDays * 86_400_000).toISOString().slice(0, 10) : null;
@@ -307,7 +309,7 @@ export async function cancelOrder(db: Db, organizationId: string, where: { id?: 
   const id = await withTx(db, async (tx) => {
     const o = await lockOrder(tx, organizationId, where);
     const allowed = actor.type === 'customer' ? ['pending_payment'] : ['pending_payment', 'confirmed', 'paid', 'processing'];
-    if (!allowed.includes(o.status)) throw conflict(`An order that is ${o.status.replace('_', ' ')} can no longer be cancelled${actor.type === 'customer' ? ' here; contact the store' : ''}`);
+    if (!allowed.includes(o.status)) throw conflict(`An order that is ${o.status.replace('_', ' ')} can no longer be cancelled${actor.type === 'customer' ? ' here; contact the store' : ''}`, { key: actor.type === 'customer' ? 'err.order.cancelContact' : 'err.order.cancel', vars: { status: statusWord(o.status) } });
     await releaseReferenceReservations(tx, 'sales_order', o.id);
     await tx.query(
       `UPDATE sales_orders SET status = 'cancelled', cancel_reason = $2, refund_due_minor = paid_minor, closed_at = now() WHERE id = $1`,

@@ -28,7 +28,7 @@ export default function CartPage() {
         .catch((err: Error) => {
           if (cancelled) return;
           setQuote(null); setProblem(err.message);
-          if (coupon && /coupon/i.test(err.message)) setCoupon(''); // a coupon that no longer works is dropped so the basket can load
+          if (coupon && /coupon|code promo|kuponi/i.test(err.message)) setCoupon(''); // a coupon that no longer works is dropped so the basket can load
         });
     }, 250);
     return () => { cancelled = true; clearTimeout(t); };

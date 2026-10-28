@@ -19,7 +19,7 @@ class Outbox implements Mailer {
 }
 
 async function drain(d: Dispatcher) {
-  for (let i = 0; i < 40; i++) if ((await d.runOnce(new Date(Date.now() + 3_600_000))) === 0) return;
+  for (let i = 0; i < 2000; i++) if ((await d.runOnce(new Date(Date.now() + 3_600_000))) === 0) return;
 }
 
 async function ready(mailer: Mailer) {

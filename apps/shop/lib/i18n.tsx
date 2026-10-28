@@ -46,6 +46,7 @@ export function detectLang(preferred: readonly string[] | undefined): Lang {
 // Code outside React (error messages thrown from the sign-in helper) reads the current language from here.
 let current: Lang = 'en';
 export const tr = (key: MessageKey | (string & {}), vars?: Vars) => translate(current, key, vars);
+export const currentLang = (): Lang => current;
 
 /** The company's own wording for `field` in the language, else the English `fallback`. */
 export function localized(entity: { i18n?: Partial<Record<string, Record<string, string>>> } | null | undefined, field: string, lang: Lang, fallback: string): string {

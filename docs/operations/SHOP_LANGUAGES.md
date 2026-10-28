@@ -11,9 +11,12 @@ In the console, **Online store → Translations (French and Hausa)** lists the s
 ## Emails and phone notifications
 Each shopper has a language on their account. It follows the picker (a device with no choice of its own adopts the account's), and order emails and phone notifications are written in it, with the same amounts and order numbers as the English.
 
+## Messages from the shop
+When the shop refuses something (an expired coupon, an address it cannot deliver to, an order that can no longer be cancelled), the reply is worded in the shopper's language; the shop tells the server which language with the standard `Accept-Language` header. Staff screens always get English. The wording is in `apps/api/src/shop/messages.ts`; a test checks French and Hausa have every message. Validation of typed fields (for example an email in the wrong shape) is still in English except where noted in that file.
+
 ## What is not (yet)
-- **Messages that come back from the server** (for example "this coupon has expired") are English.
 - **Page titles in the browser tab and search-engine snippets** are English.
+- **Search** matches the English product names only.
 
 ## Review needed before launch
 - **Hausa is a first draft written without a native speaker.** It must be read by someone fluent before launch, especially the delivery and returns page, the checkout wording, and the order emails (`apps/api/src/notify/order-copy.ts`). It uses the respectful plural form so it reads the same for men and women.

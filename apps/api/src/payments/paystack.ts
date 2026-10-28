@@ -32,10 +32,10 @@ export function createPaystack(secretKey: string, fetchImpl: typeof fetch = fetc
     try {
       res = await fetchImpl(`${base}${path}`, { ...init, headers: { authorization: `Bearer ${secretKey}`, 'content-type': 'application/json' }, signal: AbortSignal.timeout(15_000) });
     } catch {
-      throw new AppError(502, 'payment_provider_unreachable', 'The payment service could not be reached. Please try again.');
+      throw new AppError(502, 'payment_provider_unreachable', 'The payment service could not be reached. Please try again.', undefined, { key: 'err.pay.unreachable' });
     }
     const json = (await res.json().catch(() => ({}))) as { status?: boolean; message?: string; data?: any };
-    if (!res.ok || json.status === false) throw new AppError(502, 'payment_provider_error', 'The payment service could not process this request.');
+    if (!res.ok || json.status === false) throw new AppError(502, 'payment_provider_error', 'The payment service could not process this request.', undefined, { key: 'err.pay.failed' });
     return json.data;
   };
   return {
@@ -45,7 +45,7 @@ export function createPaystack(secretKey: string, fetchImpl: typeof fetch = fetc
         method: 'POST',
         body: JSON.stringify({ email: i.email, amount: i.amountMinor, currency: i.currency, reference: i.reference, callback_url: i.callbackUrl }),
       });
-      if (!data?.authorization_url) throw new AppError(502, 'payment_provider_error', 'The payment service gave an unexpected answer.');
+      if (!data?.authorization_url) throw new AppError(502, 'payment_provider_error', 'The payment service gave an unexpected answer.', undefined, { key: 'err.pay.unexpected' });
       return { authorizationUrl: data.authorization_url as string };
     },
     async verify(reference) {
@@ -55,7 +55,7 @@ export function createPaystack(secretKey: string, fetchImpl: typeof fetch = fetc
     },
     async refund(i) {
       const data = await call('/refund', { method: 'POST', body: JSON.stringify({ transaction: i.reference, amount: i.amountMinor }) });
-      if (!data?.id) throw new AppError(502, 'payment_provider_error', 'The payment service gave an unexpected answer.');
+      if (!data?.id) throw new AppError(502, 'payment_provider_error', 'The payment service gave an unexpected answer.', undefined, { key: 'err.pay.unexpected' });
       return { providerRef: String(data.id), status: data.status === 'processed' ? 'processed' : 'pending' };
     },
   };

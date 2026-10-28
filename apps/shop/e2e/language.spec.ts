@@ -87,3 +87,16 @@ test.describe('company-written content', () => {
     await expect(page.locator('.topbar')).toHaveText('Free delivery over ₦100,000');     // no Hausa tagline: the English shows
   });
 });
+
+test.describe('answers from the shop', () => {
+  test('a refused coupon is explained in the shopper\'s language', async ({ page }) => {
+    await page.goto('/shop');
+    await page.getByLabel('Language').selectOption('fr');
+    await page.locator('article', { hasText: 'Wax Ankara imprimé' }).getByRole('link', { name: 'Wax Ankara imprimé' }).click();
+    await page.getByRole('button', { name: 'Ajouter au panier' }).click();
+    await page.getByRole('link', { name: 'Voir le panier' }).click();
+    await page.getByPlaceholder('Code promo').fill('NOSUCHCODE');
+    await page.getByRole('button', { name: 'Appliquer' }).click();
+    await expect(page.getByText('Ce code promo n’est pas valable')).toBeVisible();
+  });
+});

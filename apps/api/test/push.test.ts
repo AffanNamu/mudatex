@@ -20,7 +20,7 @@ const pusher = new FakePusher();
 beforeAll(async () => { ctx = await setupApp({}, { pusher }); });
 afterAll(async () => { await ctx.close(); });
 
-const drain = async (d: Dispatcher, hours = 1) => { for (let i = 0; i < 40; i++) if ((await d.runOnce(new Date(Date.now() + hours * 3_600_000))) === 0) return; };
+const drain = async (d: Dispatcher, hours = 1) => { for (let i = 0; i < 2000; i++) if ((await d.runOnce(new Date(Date.now() + hours * 3_600_000))) === 0) return; };
 
 async function ready() {
   const s = await shopWorld(ctx);

@@ -1,4 +1,5 @@
 import { API_URL, SHOP_SLUG } from './config';
+import { currentLang } from './i18n';
 import type { Page, ProductCard, ProductDetail, Review, Store } from './types';
 
 export class ApiError extends Error {
@@ -43,6 +44,8 @@ export async function shopRequest<T>(path: string, init: { method?: string; body
     method: init.method ?? (init.body ? 'POST' : 'GET'),
     headers: {
       ...(init.body ? { 'content-type': 'application/json' } : {}),
+      // The shop's answers ("that coupon has expired") come back in the shopper's language.
+      'accept-language': currentLang(),
       ...(init.token ? { authorization: `Bearer ${init.token}` } : {}),
       ...(init.key ? { 'idempotency-key': init.key } : {}),
     },

@@ -83,7 +83,7 @@ export const shopCustomerRoutes: FastifyPluginAsync<{ db: Db; verify: TokenVerif
       [req.shopper.subject, req.storefront.organizationId],
     );
     if (!rows[0]) throw notFound('Customer');
-    if (rows[0].status !== 'active') throw forbidden('This account is blocked');
+    if (rows[0].status !== 'active') throw forbidden('This account is blocked', { key: 'err.account.blocked' });
     return rows[0].id;
   }
 
@@ -97,7 +97,7 @@ export const shopCustomerRoutes: FastifyPluginAsync<{ db: Db; verify: TokenVerif
   app.post('/shop/:slug/me', async (req, reply) => {
     const body = profileBody.parse(req.body);
     const { subject, email } = req.shopper;
-    if (!email) throw invalid('Your sign-in has no email address');
+    if (!email) throw invalid('Your sign-in has no email address', { key: 'err.account.noEmail' });
     const { organizationId } = req.storefront;
     const existing = await db.query(`SELECT ${CUSTOMER_COLUMNS} FROM customers WHERE external_subject = $1 AND organization_id = $2`, [subject, organizationId]);
     if (existing.rows[0]) return existing.rows[0];
@@ -109,7 +109,7 @@ export const shopCustomerRoutes: FastifyPluginAsync<{ db: Db; verify: TokenVerif
       );
       return reply.status(201).send(rows[0]);
     } catch (err) {
-      if ((err as { code?: string }).code === '23505') throw conflict('An account with this email already exists');
+      if ((err as { code?: string }).code === '23505') throw conflict('An account with this email already exists', { key: 'err.account.exists' });
       throw err;
     }
   });
@@ -145,7 +145,7 @@ export const shopCustomerRoutes: FastifyPluginAsync<{ db: Db; verify: TokenVerif
       const id = await customer(req, tx);
       await tx.query('SELECT 1 FROM customers WHERE id = $1 FOR UPDATE', [id]);
       const count = await tx.query<{ n: number }>('SELECT count(*)::int AS n FROM customer_addresses WHERE customer_id = $1', [id]);
-      if (count.rows[0]!.n >= MAX_ADDRESSES) throw conflict(`You can save up to ${MAX_ADDRESSES} addresses`);
+      if (count.rows[0]!.n >= MAX_ADDRESSES) throw conflict(`You can save up to ${MAX_ADDRESSES} addresses`, { key: 'err.address.max', vars: { n: MAX_ADDRESSES } });
       // the first address is the default; choosing another default moves it
       const makeDefault = body.isDefault === true || count.rows[0]!.n === 0;
       if (makeDefault) await tx.query('UPDATE customer_addresses SET is_default = false WHERE customer_id = $1', [id]);
@@ -218,7 +218,7 @@ export const shopCustomerRoutes: FastifyPluginAsync<{ db: Db; verify: TokenVerif
       const product = await tx.query<{ id: string }>('SELECT id FROM storefront_products WHERE storefront_id = $1 AND slug = $2 AND published', [req.storefront.id, productSlug]);
       if (!product.rows[0]) throw notFound('Product');
       const count = await tx.query<{ n: number }>('SELECT count(*)::int AS n FROM wishlist_items WHERE customer_id = $1', [id]);
-      if (count.rows[0]!.n >= MAX_WISHLIST) throw conflict('Your wishlist is full');
+      if (count.rows[0]!.n >= MAX_WISHLIST) throw conflict('Your wishlist is full', { key: 'err.wishlist.full' });
       await tx.query('INSERT INTO wishlist_items (customer_id, storefront_product_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [id, product.rows[0].id]);
     });
     return reply.status(204).send();
@@ -240,7 +240,7 @@ export const shopCustomerRoutes: FastifyPluginAsync<{ db: Db; verify: TokenVerif
     const body = orderBody.parse(req.body);
     const key = req.headers['idempotency-key'];
     if (typeof key !== 'string' || key.length < 8 || key.length > 128) {
-      throw new AppError(400, 'idempotency_key_required', 'Idempotency-Key header (8-128 characters) is required');
+      throw new AppError(400, 'idempotency_key_required', 'Idempotency-Key header (8-128 characters) is required', undefined, { key: 'err.idempotency' });
     }
     const id = await customer(req);
     const { order, replayed } = await placeOrder(db, req.storefront, id, body, key, req.id);
@@ -274,7 +274,7 @@ export const shopCustomerRoutes: FastifyPluginAsync<{ db: Db; verify: TokenVerif
   // ---- card payment. The amount is the order's; the outcome is whatever the provider confirms to the server.
   const orderNoParam = z.object({ orderNo: z.string().regex(/^[A-Z]{2,5}-\d{6,}$/) });
   const needProvider = () => {
-    if (!payments) throw new AppError(503, 'payments_unavailable', 'Card payments are not available right now');
+    if (!payments) throw new AppError(503, 'payments_unavailable', 'Card payments are not available right now', undefined, { key: 'err.pay.unavailable' });
     return payments;
   };
 
@@ -317,7 +317,7 @@ export const shopCustomerRoutes: FastifyPluginAsync<{ db: Db; verify: TokenVerif
           WHERE o.customer_id = $1 AND o.status IN ('shipped', 'delivered') AND v.product_id = $2 ORDER BY o.placed_at DESC LIMIT 1`,
         [id, product.rows[0].product_id],
       );
-      if (!bought.rows[0]) throw forbidden('You can review a product once it has been delivered to you');
+      if (!bought.rows[0]) throw forbidden('You can review a product once it has been delivered to you', { key: 'err.review.afterDelivery' });
       const who = await tx.query<{ full_name: string }>('SELECT full_name FROM customers WHERE id = $1', [id]);
       const parts = who.rows[0]!.full_name.trim().split(/\s+/);
       const display = parts.length > 1 ? `${parts[0]} ${parts[parts.length - 1]![0]!.toUpperCase()}.` : parts[0]!;
@@ -329,7 +329,7 @@ export const shopCustomerRoutes: FastifyPluginAsync<{ db: Db; verify: TokenVerif
         );
         return rows[0];
       } catch (err) {
-        if ((err as { code?: string }).code === '23505') throw conflict('You have already reviewed this product');
+        if ((err as { code?: string }).code === '23505') throw conflict('You have already reviewed this product', { key: 'err.review.already' });
         throw err;
       }
     });
@@ -343,7 +343,7 @@ export const shopCustomerRoutes: FastifyPluginAsync<{ db: Db; verify: TokenVerif
     const body = z.object({ businessName: z.string().trim().min(2).max(150), taxId: z.string().trim().max(50).optional() }).parse(req.body);
     const id = await customer(req);
     const existing = await db.query<{ status: string }>('SELECT status FROM trade_accounts WHERE storefront_id = $1 AND customer_id = $2', [req.storefront.id, id]);
-    if (existing.rows[0] && existing.rows[0].status !== 'rejected') throw conflict('You already have a trade application or account');
+    if (existing.rows[0] && existing.rows[0].status !== 'rejected') throw conflict('You already have a trade application or account', { key: 'err.trade.exists' });
     const { rows } = await db.query(
       `INSERT INTO trade_accounts (organization_id, storefront_id, customer_id, business_name, tax_id) VALUES ($1, $2, $3, $4, $5)
        ON CONFLICT (storefront_id, customer_id) DO UPDATE SET business_name = $4, tax_id = $5, status = 'pending', note = NULL, reviewed_at = NULL

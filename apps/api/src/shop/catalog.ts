@@ -224,7 +224,7 @@ export async function quoteDelivery(db: Pick<Db, 'query'>, sf: Storefront, count
     [sf.id, countryCode, state],
   );
   const zone = rows[0];
-  if (!zone) throw invalid('We do not deliver to that location yet');
+  if (!zone) throw invalid('We do not deliver to that location yet', { key: 'err.delivery.none' });
   const free = zone.free !== null && BigInt(subtotalMinor) >= BigInt(zone.free);
   return {
     zoneId: zone.id,

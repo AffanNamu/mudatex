@@ -116,7 +116,7 @@ describe('a shopper\'s language', () => {
     await call(ctx.app, 'POST', `/v1/storefronts/${s.id}/delivery-zones`, s.a, { name: 'All', countryCode: 'NG', feeMinor: 100000 });
     const mailer = new Outbox();
     const d = new Dispatcher(ctx.db, { secretBox: null, urlPolicy: { allowHttp: false, allowPrivate: false }, consumers: [orderEmailConsumer(mailer)] });
-    const drain = async () => { for (let i = 0; i < 40; i++) if ((await d.runOnce(new Date(Date.now() + 3_600_000))) === 0) return; };
+    const drain = async () => { for (let i = 0; i < 2000; i++) if ((await d.runOnce(new Date(Date.now() + 3_600_000))) === 0) return; };
 
     const subjects: Record<string, string> = {};
     for (const language of ['fr', 'ha', 'en'] as const) {
@@ -126,7 +126,7 @@ describe('a shopper\'s language', () => {
       const order = await call(ctx.app, 'POST', `/shop/${s.slug}/me/orders`, { ...c.auth, 'idempotency-key': crypto.randomUUID() }, {
         lines: [{ variantId: s.w.fabric.variantId, quantity: '2' }], addressId: addr.body.id, paymentMethod: 'bank_transfer',
       });
-      await drain();
+      await drain();   // drains the whole backlog, which earlier test files in this run also fed
       const mail = mailer.sent.find((m) => m.to === c.email)!;
       subjects[language] = mail.subject;
       expect(mail.text).toContain('₦8,526.08');

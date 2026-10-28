@@ -12,6 +12,7 @@ import { createTokenVerifier, type TokenVerifier } from './auth/token.js';
 import type { Config } from './config.js';
 import type { Db } from './db.js';
 import { checkReadiness } from './readiness.js';
+import { hasMessage, isShopperRoute, languageOf, shopMessage, VALIDATION_KEYS, type ShopMessageKey } from './shop/messages.js';
 import { AppError, forbidden, unauthorized } from './errors.js';
 import { accountingConfigRoutes } from './routes/accounting-config.js';
 import { accountingReportRoutes } from './routes/accounting-reports.js';
@@ -92,7 +93,7 @@ export async function buildServer({ config, db, verifier, migrationsDir, cron, p
   await app.register(cors, {
     origin: config.CORS_ORIGINS.length ? config.CORS_ORIGINS : false,
     methods: ['GET', 'HEAD', 'POST', 'PUT', 'DELETE'],
-    allowedHeaders: ['authorization', 'content-type', 'idempotency-key', 'x-request-id'],
+    allowedHeaders: ['authorization', 'content-type', 'idempotency-key', 'x-request-id', 'accept-language'],
     exposedHeaders: ['idempotent-replayed', 'x-request-id'],
     maxAge: 600,
   });
@@ -115,17 +116,21 @@ export async function buildServer({ config, db, verifier, migrationsDir, cron, p
   }
 
   app.setErrorHandler((err, req, reply) => {
+    // Answers to the public shop are worded in the shopper's language (Accept-Language); everything else stays English.
+    const lang = isShopperRoute(req.url) ? languageOf(req.headers['accept-language']) : 'en';
+    const worded = (key: ShopMessageKey, fallback: string) => (lang === 'en' ? fallback : shopMessage(lang, key));
     if (err instanceof AppError) {
-      return reply.status(err.status).send({ error: err.code, message: err.message, ...(err.details === undefined ? {} : { details: err.details }) });
+      const message = err.say && lang !== 'en' && hasMessage(err.say.key) ? shopMessage(lang, err.say.key, err.say.vars) : err.message;
+      return reply.status(err.status).send({ error: err.code, message, ...(err.details === undefined ? {} : { details: err.details }) });
     }
     if (err instanceof ZodError) {
-      return reply.status(400).send({ error: 'bad_request', message: 'Invalid request', issues: err.issues });
+      return reply.status(400).send({ error: 'bad_request', message: worded('err.invalidRequest', 'Invalid request'), issues: lang === 'en' ? err.issues : err.issues.map((i) => ({ ...i, message: VALIDATION_KEYS[i.message] ? shopMessage(lang, VALIDATION_KEYS[i.message]!) : i.message })) });
     }
     // Errors Fastify and its plugins raise for bad requests (malformed JSON, oversized body, rate limit) carry their own status.
     const fe = err as { statusCode?: number; code?: string };
     if (typeof fe.statusCode === 'number' && fe.statusCode >= 400 && fe.statusCode < 500) {
-      const messages: Record<number, string> = { 400: 'Bad request', 413: 'Request body too large', 415: 'Unsupported media type', 429: 'Too many requests' };
-      return reply.status(fe.statusCode).send({ error: fe.statusCode === 429 ? 'rate_limited' : 'bad_request', message: messages[fe.statusCode] ?? 'Bad request' });
+      const messages: Record<number, string> = { 400: worded('err.badRequest', 'Bad request'), 413: worded('err.large', 'Request body too large'), 415: 'Unsupported media type', 429: worded('err.rate', 'Too many requests') };
+      return reply.status(fe.statusCode).send({ error: fe.statusCode === 429 ? 'rate_limited' : 'bad_request', message: messages[fe.statusCode] ?? worded('err.badRequest', 'Bad request') });
     }
     const pg = err as { code?: string; constraint?: string };
     if (pg.code === '23505') {
@@ -136,7 +141,7 @@ export async function buildServer({ config, db, verifier, migrationsDir, cron, p
     }
     if (process.env.DEBUG_ERRORS) console.error(err);
     req.log.error(err);
-    return reply.status(500).send({ error: 'internal', message: 'Internal server error' });
+    return reply.status(500).send({ error: 'internal', message: worded('err.internal', 'Internal server error') });
   });
 
   // Liveness: the process is up. Readiness: the database answers and every migration has been applied.

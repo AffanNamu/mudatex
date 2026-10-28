@@ -6,7 +6,7 @@ import type { Storefront } from './catalog.js';
 
 /** Starts a card payment for an order that is waiting for one and returns the provider's payment page address. */
 export async function startCardPayment(db: Db, provider: PaymentProvider, sf: Storefront, customerId: string, orderNo: string) {
-  if (!sf.siteUrl) throw conflict('Card payments are not set up for this store yet');
+  if (!sf.siteUrl) throw conflict('Card payments are not set up for this store yet', { key: 'err.card.notSetUp' });
   const { rows } = await db.query<{ id: string; status: string; payment_method: string; total_minor: string; paid_minor: string; currency: string; email: string }>(
     `SELECT o.id, o.status, o.payment_method, o.total_minor, o.paid_minor, o.currency, c.email
        FROM sales_orders o JOIN customers c ON c.id = o.customer_id
@@ -15,8 +15,8 @@ export async function startCardPayment(db: Db, provider: PaymentProvider, sf: St
   );
   const o = rows[0];
   if (!o) throw notFound('Order');
-  if (o.status !== 'pending_payment') throw conflict('This order is not waiting for payment');
-  if (o.payment_method !== 'card') throw invalid('This order was placed for bank transfer');
+  if (o.status !== 'pending_payment') throw conflict('This order is not waiting for payment', { key: 'err.card.notWaiting' });
+  if (o.payment_method !== 'card') throw invalid('This order was placed for bank transfer', { key: 'err.card.bankOrder' });
   // The amount comes from the order, never from the request.
   const amount = Number(BigInt(o.total_minor) - BigInt(o.paid_minor));
   const reference = `${orderNo}-${crypto.randomUUID().slice(0, 8)}`;
