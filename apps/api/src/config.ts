@@ -14,6 +14,9 @@ const schema = z
     // Local development and automated browser tests only: lets anyone who can reach the server sign in as any existing user.
     // Off unless explicitly enabled, and refused outright in production.
     DEV_TOKEN_ENDPOINT: z.enum(['true', 'false']).default('false').transform((v) => v === 'true'),
+    // required: staff (the console and its API) must have signed in with a second factor. Customers of the shop are not affected.
+    // Turn it on once every staff member has enrolled an authenticator app, or they are locked out of the console.
+    STAFF_MFA: z.enum(['off', 'required']).default('off'),
     // Comma-separated browser origins allowed to call the API. Empty means no cross-origin access.
     CORS_ORIGINS: z.string().default('').transform((v) => v.split(',').map((o) => o.trim()).filter(Boolean)),
     // Requests per minute per client address. Unset: 600 outside tests, off in tests.

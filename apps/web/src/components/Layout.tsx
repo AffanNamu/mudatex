@@ -39,6 +39,7 @@ export function Layout() {
         </nav>
         <div className="who">
           <span className="muted" title={session.user.email}>{session.user.displayName}</span>
+          <NavLink to="/security" className="btn btn-ghost">Security</NavLink>
           <button type="button" className="btn btn-ghost" onClick={signOut}>Sign out</button>
         </div>
       </header>

@@ -12,7 +12,7 @@ import { scopeFilter, uuid } from '../inventory/common.js';
 export const clientReadRoutes: FastifyPluginAsync<{ db: Db }> = async (app, { db }) => {
   // What this person may do, and over what. A UI uses it to show only what will work; the server still decides.
   app.get('/me/grants', async (req) => {
-    const u = await db.query<{ email: string; display_name: string }>('SELECT email, display_name FROM users WHERE id = $1', [req.actor.userId]);
+    const mfaRequired = req.actor.mfaPending === true;    const u = await db.query<{ email: string; display_name: string }>('SELECT email, display_name FROM users WHERE id = $1', [req.actor.userId]);
     const { rows } = await db.query<{ permission: string; scope_type: string; scope_id: string | null; scope_country: string | null; role_key: string; valid_until: Date | null }>(
       `SELECT rp.permission, m.scope_type, m.scope_id, m.scope_country, r.key AS role_key, m.valid_until
          FROM memberships m JOIN roles r ON r.id = m.role_id JOIN role_permissions rp ON rp.role_id = r.id
@@ -24,7 +24,8 @@ export const clientReadRoutes: FastifyPluginAsync<{ db: Db }> = async (app, { db
     for (const r of rows) {
       (byPermission[r.permission] ??= []).push({ scope: r.scope_type, ...(r.scope_id ? { id: r.scope_id } : {}), ...(r.scope_country ? { country: r.scope_country.trim() } : {}), role: r.role_key });
     }
-    return { user: { id: req.actor.userId, email: u.rows[0]!.email, displayName: u.rows[0]!.display_name, organizationId: req.actor.organizationId }, permissions: byPermission };
+    // Without the second factor the person is told what to do, not what they could do.
+    return { user: { id: req.actor.userId, email: u.rows[0]!.email, displayName: u.rows[0]!.display_name, organizationId: req.actor.organizationId }, permissions: mfaRequired ? {} : byPermission, ...(mfaRequired ? { mfaRequired: true } : {}) };
   });
 
   app.get('/permissions', async () => PERMISSIONS);
@@ -121,7 +122,7 @@ export const devAuthRoutes: FastifyPluginAsync<{ db: Db; config: Config }> = asy
     const body = z.object({ email: z.string().email() }).parse(req.body);
     const u = await db.query<{ external_subject: string; status: string }>('SELECT external_subject, status FROM users WHERE email = $1 LIMIT 1', [body.email]);
     if (!u.rows[0] || u.rows[0].status !== 'active') return reply.status(404).send({ error: 'not_found', message: 'No active user with that email' });
-    const token = await new SignJWT({}).setProtectedHeader({ alg: 'HS256' }).setSubject(u.rows[0].external_subject).setIssuedAt().setExpirationTime('8h').sign(key);
+    const token = await new SignJWT({ aal: 'aal2' }).setProtectedHeader({ alg: 'HS256' }).setSubject(u.rows[0].external_subject).setIssuedAt().setExpirationTime('8h').sign(key);
     return { token, note: 'Development token. Not available in production.' };
   });
 };

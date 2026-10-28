@@ -5,6 +5,8 @@ import type { Permission } from './permissions.js';
 export interface Actor {
   userId: string;
   organizationId: string;
+  /** Set when the deployment demands a second factor and this sign-in has none yet. Only the profile may be read. */
+  mfaPending?: boolean;
 }
 
 /** The place a permission is being exercised: organization, entity or location. */

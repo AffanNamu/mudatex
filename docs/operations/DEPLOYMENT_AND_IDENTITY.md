@@ -25,6 +25,7 @@ docker compose up --build      # PostgreSQL, one-off migration, API on :3000
 | `AUTH_DEV_SECRET` | dev/test only | HS256 secret, 32+ characters. **Refused in production.** |
 | `CORS_ORIGINS` | no | comma-separated browser origins allowed to call the API. Empty = none |
 | `RATE_LIMIT_MAX` | no | requests per minute per client address, default 600 |
+| `STAFF_MFA` | no | `required` makes staff sign in with an authenticator-app code as well as a password; default `off`. See `TWO_STEP_SIGN_IN.md` before turning it on |
 | `TRUST_PROXY` | no | `true` only behind a trusted reverse proxy, so client addresses come from `X-Forwarded-For` (otherwise everyone shares the proxy's address and one limit) |
 | `BODY_LIMIT_BYTES` | no | default 1,048,576 |
 | `DB_POOL_MAX` | no | default 10 |

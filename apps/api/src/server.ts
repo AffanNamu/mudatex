@@ -179,7 +179,7 @@ export async function buildServer({ config, db, verifier, migrationsDir, cron, p
       v1.addHook('onRequest', async (req: FastifyRequest) => {
         const header = req.headers.authorization;
         if (!header?.startsWith('Bearer ')) throw unauthorized();
-        const { subject } = await verify(header.slice('Bearer '.length));
+        const { subject, aal } = await verify(header.slice('Bearer '.length));
         const { rows } = await db.query<{ id: string; organization_id: string; status: string }>(
           'SELECT id, organization_id, status FROM users WHERE external_subject = $1',
           [subject],
@@ -187,7 +187,10 @@ export async function buildServer({ config, db, verifier, migrationsDir, cron, p
         const user = rows[0];
         if (!user) throw unauthorized('Unknown user');
         if (user.status !== 'active') throw forbidden('User is suspended');
-        req.actor = { userId: user.id, organizationId: user.organization_id };
+        const mfaPending = config.STAFF_MFA === 'required' && aal !== 'aal2';
+        // Without a second factor the only thing a signed-in person can do is learn that they need one (the profile).
+        if (mfaPending && !req.url.split('?')[0]!.endsWith('/v1/me/grants')) throw new AppError(403, 'mfa_required', 'Two-step sign-in is required. Set up an authenticator app and sign in again.');
+        req.actor = { userId: user.id, organizationId: user.organization_id, ...(mfaPending ? { mfaPending: true } : {}) };
       });
 
       v1.get('/me', async (req) => req.actor);

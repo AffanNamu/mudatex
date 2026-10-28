@@ -2,7 +2,7 @@ import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from 'jose';
 import type { Config } from '../config.js';
 import { unauthorized } from '../errors.js';
 
-export type TokenVerifier = (token: string) => Promise<{ subject: string; email?: string }>;
+export type TokenVerifier = (token: string) => Promise<{ subject: string; email?: string; aal?: 'aal1' | 'aal2' }>;
 
 export function createTokenVerifier(config: Config): TokenVerifier {
   let key: JWTVerifyGetKey | Uint8Array;
@@ -27,7 +27,9 @@ export function createTokenVerifier(config: Config): TokenVerifier {
       });
       if (!payload.sub) throw new Error('missing sub');
       const email = typeof payload.email === 'string' ? payload.email.trim().toLowerCase() : undefined;
-      return { subject: payload.sub, ...(email ? { email } : {}) };
+      // Supabase says how the person signed in: aal2 means a second factor (authenticator app) was verified in this session.
+      const aal = payload.aal === 'aal1' || payload.aal === 'aal2' ? payload.aal : undefined;
+      return { subject: payload.sub, ...(email ? { email } : {}), ...(aal ? { aal } : {}) };
     } catch {
       throw unauthorized('Invalid or expired token');
     }

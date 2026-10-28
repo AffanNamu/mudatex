@@ -32,6 +32,7 @@ import { Orders } from './pages/Orders';
 import { Quotes } from './pages/Quotes';
 import { Reviews } from './pages/Reviews';
 import { StandingOrders } from './pages/StandingOrders';
+import { Security } from './pages/Security';
 import { Setup } from './pages/Setup';
 import { TradeAccounts } from './pages/TradeAccounts';
 import { Store } from './pages/Store';
@@ -86,6 +87,7 @@ export function App() {
           <Route path="boms" element={<Boms />} />
           <Route path="quality" element={<Quality />} />
         </Route>
+        <Route path="security" element={<Security />} />
         <Route path="access" element={<Needs permission="iam.manage"><Access /></Needs>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

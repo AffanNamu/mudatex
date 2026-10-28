@@ -14,8 +14,8 @@ export async function setupApp(env: Record<string, string> = {}, deps: { migrati
   return { app, db, close: async () => { await app.close(); await db.end(); } };
 }
 
-export async function token(subject: string, opts: { expiresIn?: string; secret?: string; noExpiry?: boolean; noSubject?: boolean; email?: string } = {}) {
-  let jwt = new SignJWT(opts.email ? { email: opts.email } : {}).setProtectedHeader({ alg: 'HS256' }).setIssuedAt();
+export async function token(subject: string, opts: { expiresIn?: string; secret?: string; noExpiry?: boolean; noSubject?: boolean; email?: string; aal?: 'aal1' | 'aal2' } = {}) {
+  let jwt = new SignJWT({ ...(opts.email ? { email: opts.email } : {}), ...(opts.aal ? { aal: opts.aal } : {}) }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt();
   if (!opts.noSubject) jwt = jwt.setSubject(subject);
   if (!opts.noExpiry) jwt = jwt.setExpirationTime(opts.expiresIn ?? '5m');
   return jwt.sign(new TextEncoder().encode(opts.secret ?? SECRET));

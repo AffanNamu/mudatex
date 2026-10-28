@@ -88,3 +88,65 @@ export async function setNewPassword(linkToken: string, password: string): Promi
   if (res.status === 401 || res.status === 403) throw new SignInError('credentials', 'This link has expired or was already used. Request a new one from the sign-in page.');
   throw new SignInError('other', typeof j.msg === 'string' ? j.msg : 'The new password was not accepted. Try a longer one.');
 }
+
+// ---- Second factor (authenticator app) ------------------------------------------------------------------------------
+
+export interface Factor { id: string; status: 'verified' | 'unverified'; friendlyName: string | null }
+export interface TotpEnrolment { factorId: string; qrCode: string; secret: string }
+
+/** Which assurance level a token carries ('aal2' once a second factor was verified). Read for the screen only; the server checks it for real. */
+export function tokenAal(accessToken: string): 'aal1' | 'aal2' | null {
+  try {
+    const part = accessToken.split('.')[1];
+    if (!part) return null;
+    const json = JSON.parse(atob(part.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(part.length / 4) * 4, '=')));
+    return json.aal === 'aal2' ? 'aal2' : json.aal === 'aal1' ? 'aal1' : null;
+  } catch { return null; }
+}
+
+async function authed(method: 'GET' | 'POST' | 'DELETE', path: string, accessToken: string, body?: unknown): Promise<Response> {
+  try {
+    return await fetch(`${base()}${path}`, {
+      method,
+      headers: { 'content-type': 'application/json', apikey: cfg().supabaseKey!, authorization: `Bearer ${accessToken}` },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+  } catch {
+    throw new SignInError('network', 'Cannot reach the sign-in service. Check your connection and try again.');
+  }
+}
+
+/** The authenticator apps this person has set up (only the verified ones count). */
+export async function listFactors(accessToken: string): Promise<Factor[]> {
+  const res = await authed('GET', '/user', accessToken);
+  if (!res.ok) throw new SignInError('other', 'Could not check your two-step sign-in. Try again.');
+  const j = await res.json().catch(() => ({}));
+  return (Array.isArray(j.factors) ? j.factors : [])
+    .filter((f: { factor_type?: string }) => f.factor_type === 'totp')
+    .map((f: { id: string; status: string; friendly_name?: string | null }) => ({ id: f.id, status: f.status === 'verified' ? 'verified' : 'unverified', friendlyName: f.friendly_name ?? null }));
+}
+
+/** Starts setting up an authenticator app: returns the QR code and the secret to type in by hand. Not active until a code is verified. */
+export async function enrollTotp(accessToken: string, name = `Authenticator ${new Date().toISOString().slice(0, 16).replace('T', ' ')}`): Promise<TotpEnrolment> {
+  const res = await authed('POST', '/factors', accessToken, { factor_type: 'totp', friendly_name: name, issuer: 'Mudatex' });
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok || !j.id || !j.totp) throw new SignInError('other', 'Could not start setting up two-step sign-in. Try again.');
+  return { factorId: j.id, qrCode: j.totp.qr_code, secret: j.totp.secret };
+}
+
+/** Proves possession of the authenticator app. Returns a new session that carries the second factor. */
+export async function verifyTotp(accessToken: string, factorId: string, code: string): Promise<Tokens> {
+  const ch = await authed('POST', `/factors/${factorId}/challenge`, accessToken, {});
+  const cj = await ch.json().catch(() => ({}));
+  if (!ch.ok || !cj.id) throw new SignInError(ch.status === 429 ? 'rate_limited' : 'other', ch.status === 429 ? 'Too many attempts. Wait a minute and try again.' : 'Could not check the code. Try again.');
+  const res = await authed('POST', `/factors/${factorId}/verify`, accessToken, { challenge_id: cj.id, code: code.replace(/\s/g, '') });
+  const j = await res.json().catch(() => ({}));
+  if (res.ok) return toTokens(j);
+  if (res.status === 429) throw new SignInError('rate_limited', 'Too many attempts. Wait a minute and try again.');
+  throw new SignInError('credentials', 'That code is not right, or it has expired. Enter the newest code from your app.');
+}
+
+export async function removeFactor(accessToken: string, factorId: string): Promise<void> {
+  const res = await authed('DELETE', `/factors/${factorId}`, accessToken);
+  if (!res.ok) throw new SignInError('other', 'Could not remove it. Sign in again with your code, then retry.');
+}

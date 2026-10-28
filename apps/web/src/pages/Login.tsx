@@ -4,9 +4,11 @@ import { ErrorBanner, Field, Notice } from '../components/ui';
 import { ApiError } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { SignInError, requestPasswordReset } from '../lib/identity';
+import { TotpSetup } from '../components/TotpSetup';
 
 export function Login() {
-  const { session, signIn, loading, mode } = useAuth();
+  const { session, signIn, loading, mode, pending, verifyCode, adoptVerified, accessToken, signOut } = useAuth();
+  const [code, setCode] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
@@ -23,6 +25,40 @@ export function Login() {
     if (err instanceof ApiError && err.status === 404) return new Error('No active user with that email.');
     return err;
   };
+
+  const submitCode = async (e: FormEvent) => {
+    e.preventDefault();
+    setBusy(true); setError(null);
+    try { await verifyCode(code); } catch (err) { setError(explain(err)); setCode(''); } finally { setBusy(false); }
+  };
+
+  if (pending?.kind === 'challenge') {
+    return (
+      <main className="login">
+        <h1>Mudatex</h1>
+        <form onSubmit={submitCode}>
+          <p>Enter the 6-digit code from your authenticator app.</p>
+          <Field label="6-digit code">
+            <input inputMode="numeric" autoComplete="one-time-code" pattern="[0-9 ]{6,7}" maxLength={7} required value={code} onChange={(e) => setCode(e.target.value)} autoFocus />
+          </Field>
+          <button className="btn btn-primary" type="submit" disabled={busy || code.replace(/\s/g, '').length !== 6}>{busy ? 'Checking…' : 'Verify'}</button>
+          <button type="button" className="link" onClick={signOut}>Use a different account</button>
+        </form>
+        <ErrorBanner error={error} />
+      </main>
+    );
+  }
+  if (pending?.kind === 'enrol') {
+    return (
+      <main className="login">
+        <h1>Mudatex</h1>
+        <h2>Set up two-step sign-in</h2>
+        <p>Your company requires a second step when you sign in. It takes a minute and protects the company's money and stock.</p>
+        <TotpSetup accessToken={accessToken} onVerified={adoptVerified} />
+        <button type="button" className="link" onClick={signOut}>Sign out</button>
+      </main>
+    );
+  }
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();

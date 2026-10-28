@@ -109,3 +109,58 @@ test('an expired link is explained', async ({ page }) => {
   await page.getByRole('button', { name: 'Save password' }).click();
   await expect(page.getByRole('alert')).toContainText('expired or was already used');
 });
+
+test('a person with an authenticator app is asked for a code after the password, and a wrong code does not let them in', async ({ page }) => {
+  await page.goto('/');
+  await page.getByLabel('Email').fill('planner@e2e.test');
+  await page.getByLabel('Password').fill(PASSWORD);
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByText('Enter the 6-digit code from your authenticator app.')).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'Main' })).toHaveCount(0);
+  await noA11yViolations(page);
+
+  await page.getByLabel('6-digit code').fill('000000');
+  await page.getByRole('button', { name: 'Verify' }).click();
+  await expect(page.getByRole('alert')).toContainText('not right');
+  await expect(page.getByRole('navigation', { name: 'Main' })).toHaveCount(0);
+
+  await page.getByLabel('6-digit code').fill('123 456');
+  await page.getByRole('button', { name: 'Verify' }).click();
+  await expect(page.getByRole('navigation', { name: 'Main' })).toBeVisible();
+
+  // a reload keeps the stronger session: no second question
+  await page.reload();
+  await expect(page.getByRole('navigation', { name: 'Main' })).toBeVisible();
+});
+
+test('a person turns two-step sign-in on from the Security page and is asked for a code from then on', async ({ page }) => {
+  await page.goto('/');
+  await page.getByLabel('Email').fill('storeman@e2e.test');
+  await page.getByLabel('Password').fill(PASSWORD);
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await page.getByRole('link', { name: 'Security' }).click();
+  await expect(page.getByText(/^Off\./)).toBeVisible();
+  await page.getByRole('button', { name: 'Set up an authenticator app' }).click();
+  await expect(page.getByRole('img', { name: 'QR code for your authenticator app' })).toBeVisible();
+  await expect(page.getByText('JBSWY3DPEHPK3PXP')).toBeVisible();
+  await noA11yViolations(page);
+  await page.getByLabel('6-digit code').fill('123456');
+  await page.getByRole('button', { name: 'Turn on two-step sign-in' }).click();
+  await expect(page.getByText('Two-step sign-in is on.')).toBeVisible();
+  await expect(page.getByText(/^On\./)).toBeVisible();
+
+  await page.getByRole('button', { name: 'Sign out' }).click();
+  await page.getByLabel('Email').fill('storeman@e2e.test');
+  await page.getByLabel('Password').fill(PASSWORD);
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByLabel('6-digit code')).toBeVisible();
+  await page.getByLabel('6-digit code').fill('123456');
+  await page.getByRole('button', { name: 'Verify' }).click();
+  await expect(page.getByRole('navigation', { name: 'Main' })).toBeVisible();
+
+  // turning it off again needs the stronger session, which this one has
+  await page.getByRole('link', { name: 'Security' }).click();
+  await page.getByRole('button', { name: 'Remove' }).click();
+  await expect(page.getByText('Removed.')).toBeVisible();
+  await expect(page.getByText(/^Off\./)).toBeVisible();
+});
