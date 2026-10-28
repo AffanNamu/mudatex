@@ -107,3 +107,30 @@ details > summary { cursor: pointer; font-weight: 600; margin: 8px 0; }
 .stack > * + * { margin-top: 16px; }
 :root { --chart-1: #2b5fb3; --chart-2: #b36d00; }
 @media (prefers-color-scheme: dark) { :root { --chart-1: #7fa8ee; --chart-2: #f0b24a; } }
+
+/* Stock on a phone: big touch targets, one column, the action pinned where a thumb reaches. */
+.stock { max-width: 640px; margin: 0 auto; }
+.stock-where { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: end; justify-content: space-between; margin-bottom: 8px; }
+.stock-where select { min-width: 12rem; min-height: 44px; }
+.stock-tabs { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; margin: 12px 0; border-bottom: 2px solid var(--border); }
+.stock-tabs button { font: inherit; min-height: 48px; background: transparent; color: var(--text); border: 0; border-bottom: 3px solid transparent; margin-bottom: -2px; cursor: pointer; }
+.stock-tabs button.active { border-bottom-color: var(--primary); font-weight: 700; }
+.stock-modes { display: flex; gap: 8px; margin-bottom: 12px; } .stock-modes .btn { flex: 1; min-height: 48px; }
+.scan-row { display: flex; gap: 8px; align-items: end; flex-wrap: wrap; }
+.scan-field { flex: 1 1 12rem; margin-bottom: 0; } .scan-field input { min-height: 48px; font-size: 1.1rem; }
+.scan-row .btn { min-height: 48px; }
+.scan-video { width: 100%; max-height: 40vh; border-radius: 10px; background: #000; margin-top: 8px; object-fit: cover; }
+.stock-results { list-style: none; padding: 0; margin: 0 0 12px; display: grid; gap: 6px; }
+.stock-results .btn { width: 100%; text-align: left; min-height: 48px; }
+.stock-rows { list-style: none; padding: 0; margin: 12px 0; display: grid; gap: 8px; }
+.stock-row { display: grid; grid-template-columns: 1fr auto auto; gap: 4px 8px; align-items: center; padding: 10px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
+.stock-row-wide { grid-template-columns: 1fr; }
+.stock-row-name { display: flex; flex-direction: column; min-width: 0; }
+.stock-qty { display: flex; align-items: center; gap: 6px; } .stock-qty input { width: 7rem; min-height: 48px; font-size: 1.15rem; text-align: right; }
+.stock-row .field-error { grid-column: 1 / -1; }
+.stock-damaged summary { cursor: pointer; padding: 6px 0; color: var(--muted); } .stock-damaged .stock-qty { margin-top: 6px; } .stock-damaged input { width: 100%; text-align: left; }
+.stock-submit { position: sticky; bottom: 0; background: var(--bg); padding: 8px 0 12px; border-top: 1px solid var(--border); }
+.stock-diffs { margin: 6px 0 0; padding-left: 1.2rem; }
+.stock-actions { display: flex; gap: 12px; align-items: center; margin-bottom: 8px; }
+.stock-card table { width: 100%; }
+@media (max-width: 480px) { .stock-row { grid-template-columns: 1fr auto; } .stock-row .stock-qty:nth-of-type(1) { grid-column: 1 / -1; } .stock-qty input { width: 100%; } }

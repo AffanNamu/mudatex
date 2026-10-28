@@ -11,6 +11,7 @@ const NAV: { to: string; label: string; needs: string }[] = [
   { to: '/trade', label: 'Trade accounts', needs: 'trade.manage' },
   { to: '/store', label: 'Online store', needs: 'storefront.manage' },
   { to: '/catalogue', label: 'Catalogue', needs: 'catalog.read' },
+  { to: '/stock', label: 'Stock (phone)', needs: 'inventory.read' },
   { to: '/inventory', label: 'Inventory', needs: 'inventory.read' },
   { to: '/till-exceptions', label: 'Offline shortfalls', needs: 'inventory.adjust' },
   { to: '/purchasing', label: 'Purchasing', needs: 'procurement.read' },

@@ -23,6 +23,7 @@ import { integrationRoutes } from './routes/integrations.js';
 import { catalogRoutes } from './routes/catalog.js';
 import { iamRoutes } from './routes/iam.js';
 import { inventoryAdjustmentRoutes } from './routes/inventory-adjustments.js';
+import { stockCountRoutes } from './routes/stock-counts.js';
 import { inventoryReservationRoutes } from './routes/inventory-reservations.js';
 import { inventoryStockRoutes } from './routes/inventory-stock.js';
 import { inventoryTransferRoutes } from './routes/inventory-transfers.js';
@@ -189,6 +190,7 @@ export async function buildServer({ config, db, verifier, migrationsDir, cron, p
       await v1.register(inventoryReservationRoutes, { db });
       await v1.register(inventoryTransferRoutes, { db });
       await v1.register(inventoryAdjustmentRoutes, { db });
+      await v1.register(stockCountRoutes, { db });
       await v1.register(pricingRoutes, { db });
       await v1.register(storefrontAdminRoutes, { db });
       await v1.register(salesOrderRoutes, { db, payments });

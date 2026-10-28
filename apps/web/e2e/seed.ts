@@ -17,6 +17,8 @@ export const USERS = {
   admin: 'admin@e2e.test',
   cashier: 'cashier@e2e.test',
   clerk: 'clerk@e2e.test',
+  stockhand: 'stockhand@e2e.test',
+  stockboss: 'stockboss@e2e.test',
   offlineCashier: 'offline-cashier@e2e.test',
   refundMaker: 'refund-maker@e2e.test',
   refundChecker: 'refund-checker@e2e.test',
@@ -70,6 +72,11 @@ export default async function seed() {
   };
   await stocked('Calico', 'CAL-001', metre.id, '500');
   await stocked('Button', 'BTN-001', pieces.id, '2000');
+  // Stock-app fixtures: a boxed item with a barcode, and a lot-tracked cloth.
+  const zip = await post('/v1/products', { name: 'Brass Zip', baseUnitId: pieces.id, variants: [{ sku: 'ZIP-001', barcodes: ['5012345678900'] }] });
+  await post('/v1/inventory/receipts', { locationId: shop.id, lines: [{ variantId: zip.variantIds[0], quantity: '40' }] });
+  const linen = await post('/v1/products', { name: 'Linen Bolt', baseUnitId: metre.id, variants: [{ sku: 'LIN-001', tracking: 'lot' }] });
+  await post('/v1/inventory/receipts', { locationId: shop.id, lines: [{ variantId: linen.variantIds[0], quantity: '25', lotCode: 'LOT-A' }] });
   await post('/v1/products', { name: 'Shirt', baseUnitId: pieces.id, variants: [{ sku: 'SHT-001', tracking: 'lot' }] });
   await post('/v1/manufacturing/work-centres', { locationId: shop.id, code: 'CUT', name: 'Cutting table' });
   await post('/v1/manufacturing/work-centres', { locationId: shop.id, code: 'SEW', name: 'Sewing line' });
@@ -114,5 +121,7 @@ export default async function seed() {
   await staff(USERS.refundMaker, 'Refund Maker Mary', ['orders.read', 'orders.refund'], company);
   await staff(USERS.refundChecker, 'Refund Checker Chuka', ['orders.read', 'orders.refund.approve'], company);
   await staff(USERS.offlineCashier, 'Offline Cashier Ola', ['pos.sell', 'pos.session', 'pos.discount', 'pos.read', 'inventory.read']);
+  await staff(USERS.stockhand, 'Stock Hand Hauwa', ['inventory.read', 'inventory.adjust', 'inventory.receive', 'procurement.receive', 'procurement.read']);
+  await staff(USERS.stockboss, 'Stock Boss Bashir', ['inventory.read', 'inventory.adjust.approve']);
   await staff(USERS.clerk, 'Clerk Kemi', ['catalog.read', 'inventory.read', 'inventory.receive']);
 }
