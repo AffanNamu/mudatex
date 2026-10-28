@@ -40,7 +40,7 @@ describe('answers in the shopper\'s language', () => {
     await call(ctx.app, 'POST', `/v1/storefronts/${s.id}/delivery-zones`, s.a, { name: 'All', countryCode: 'NG', feeMinor: 100000 });
     return s;
   }
-  const withLang = (auth: Record<string, string> | undefined, lang: string) => ({ ...(auth ?? {}), 'accept-language': lang }) as { authorization: string } & Record<string, string>;
+  const withLang = (auth: Record<string, string> | undefined, lang: string) => ({ ...(auth ?? {}), 'accept-language': lang }) as unknown as { authorization: string } & Record<string, string>;
 
   it('words coupon, delivery, not-found and sign-in refusals in French or Hausa, and leaves English alone', async () => {
     const s = await liveShop();
