@@ -6,7 +6,7 @@ export interface ProductCard {
 }
 
 export interface Store {
-  slug: string; name: string; tagline: string | null; currency: string; minorUnit: number; cardPayments: boolean;
+  slug: string; name: string; tagline: string | null; currency: string; minorUnit: number; cardPayments: boolean; pushKey: string | null;
   contact: { whatsapp?: string; phone?: string; email?: string; address?: string; bankName?: string; accountName?: string; accountNumber?: string };
   departments: Department[]; featured: ProductCard[];
 }

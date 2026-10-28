@@ -352,4 +352,26 @@ export const shopCustomerRoutes: FastifyPluginAsync<{ db: Db; verify: TokenVerif
     const t = await approvedTrade(db, req.storefront.id, id);
     return { ...acct, creditUsedMinor: Number(used), creditAvailableMinor: Number((t?.creditLimitMinor ?? 0n) - used), statement: await tradeStatement(db, id) };
   });
+
+  // ---- phone notifications
+  const subBody = z.object({ endpoint: z.string().url().max(1000).refine((u) => u.startsWith('https://'), 'Must be https'), keys: z.object({ p256dh: z.string().min(10).max(200), auth: z.string().min(5).max(100) }) });
+
+  app.put('/shop/:slug/me/push', async (req, reply) => {
+    const body = subBody.parse(req.body);
+    const id = await customer(req);
+    // A device belongs to whoever subscribed last on it.
+    await db.query(
+      `INSERT INTO push_subscriptions (organization_id, customer_id, endpoint, p256dh, auth, user_agent) VALUES ($1,$2,$3,$4,$5,$6)
+       ON CONFLICT (endpoint) DO UPDATE SET customer_id = $2, organization_id = $1, p256dh = $4, auth = $5, user_agent = $6`,
+      [req.storefront.organizationId, id, body.endpoint, body.keys.p256dh, body.keys.auth, String(req.headers['user-agent'] ?? '').slice(0, 200)],
+    );
+    return reply.status(204).send();
+  });
+
+  app.delete('/shop/:slug/me/push', async (req, reply) => {
+    const body = z.object({ endpoint: z.string().url().max(1000) }).parse(req.body);
+    const id = await customer(req);
+    await db.query('DELETE FROM push_subscriptions WHERE customer_id = $1 AND endpoint = $2', [id, body.endpoint]);
+    return reply.status(204).send();
+  });
 };

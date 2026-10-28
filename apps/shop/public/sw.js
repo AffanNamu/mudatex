@@ -48,3 +48,22 @@ self.addEventListener('fetch', (event) => {
     })());
   }
 });
+
+// Order updates pushed to the phone. The message is short and carries only a link back to the order.
+self.addEventListener('push', (event) => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; } catch { /* a plain-text push */ }
+  event.waitUntil(self.registration.showNotification(data.title || 'Your order', {
+    body: data.body || 'There is an update on your order.',
+    icon: '/icons/icon-192.png', badge: '/icons/icon-192.png', tag: data.tag, data: { url: data.url || '/account/orders' },
+  }));
+});
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = new URL((event.notification.data && event.notification.data.url) || '/account/orders', self.location.origin).href;
+  event.waitUntil((async () => {
+    const all = await clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const c of all) if ('focus' in c) { await c.focus(); if ('navigate' in c) await c.navigate(url); return; }
+    await clients.openWindow(url);
+  })());
+});

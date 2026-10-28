@@ -4,6 +4,7 @@ import { createSecretBox } from './events/secretbox.js';
 import { startWorker } from './events/worker.js';
 import { allConsumers } from './consumers.js';
 import { mailerFromConfig } from './notify/mailer.js';
+import { pusherFromConfig } from './notify/push.js';
 import { releaseExpiredReservations } from './inventory/expiry.js';
 import { expireUnpaidOrders } from './shop/orders.js';
 
@@ -14,7 +15,7 @@ const handle = startWorker(db, {
   pollMs: config.WORKER_POLL_MS,
   secretBox: createSecretBox(config.SECRETS_ENCRYPTION_KEY),
   urlPolicy: { allowHttp: config.WEBHOOK_ALLOW_HTTP, allowPrivate: config.WEBHOOK_ALLOW_PRIVATE },
-  consumers: allConsumers(mailerFromConfig(config)),
+  consumers: allConsumers(mailerFromConfig(config), pusherFromConfig(config)),
 });
 // Unpaid orders and expired reservations give their stock back about once a minute.
 const sweep = setInterval(() => {

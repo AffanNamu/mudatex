@@ -36,6 +36,10 @@ const schema = z
     // Order emails to customers, through Resend. Without both, no email is sent.
     RESEND_API_KEY: z.string().min(10).optional(),
     MAIL_FROM: z.string().min(5).max(200).optional(),
+    // Browser push notifications (generate once with `npx web-push generate-vapid-keys`). Without all three, push is off.
+    VAPID_PUBLIC_KEY: z.string().min(40).optional(),
+    VAPID_PRIVATE_KEY: z.string().min(20).optional(),
+    VAPID_SUBJECT: z.string().regex(/^(mailto:|https:\/\/)/).optional(),
     DB_POOL_MAX: z.coerce.number().int().positive().default(10),
     // A statement running longer than this is cancelled, so one bad query cannot hold locks for long.
     DB_STATEMENT_TIMEOUT_MS: z.coerce.number().int().positive().default(20_000),

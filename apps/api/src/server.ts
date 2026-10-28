@@ -5,6 +5,7 @@ import rateLimit from '@fastify/rate-limit';
 import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
 import { ZodError } from 'zod';
 import type { Actor } from './auth/authorize.js';
+import { pusherFromConfig, type Pusher } from './notify/push.js';
 import { createPaystack, type PaymentProvider } from './payments/paystack.js';
 import { paystackWebhookRoutes } from './routes/webhooks-paystack.js';
 import { createTokenVerifier, type TokenVerifier } from './auth/token.js';
@@ -67,11 +68,13 @@ export interface ServerDeps {
   cron?: CronDeps;
   /** Card payments. Defaults to Paystack when PAYSTACK_SECRET_KEY is set; tests pass a stand-in. */
   payments?: PaymentProvider;
+  /** Browser push. Defaults to the VAPID keys in the environment; tests pass a stand-in. */
+  pusher?: Pusher;
   /** Hosts with no background worker: runs one delivery pass after each successful write, within a short time limit. */
   kick?: () => Promise<unknown>;
 }
 
-export async function buildServer({ config, db, verifier, migrationsDir, cron, payments: injected, kick }: ServerDeps): Promise<FastifyInstance> {
+export async function buildServer({ config, db, verifier, migrationsDir, cron, payments: injected, kick, pusher: injectedPusher }: ServerDeps): Promise<FastifyInstance> {
   const verify = verifier ?? createTokenVerifier(config);
   const app = Fastify({
     logger: config.NODE_ENV === 'test' ? false : { redact: ['req.headers.authorization'] },
@@ -155,8 +158,9 @@ export async function buildServer({ config, db, verifier, migrationsDir, cron, p
   await app.register(devAuthRoutes, { db, config, prefix: '/v1' });
 
   // The customer-facing shop: public catalogue reads and signed-in shopper endpoints, apart from staff routes.
+  const pusher = injectedPusher ?? pusherFromConfig(config);
   const payments = injected ?? (config.PAYSTACK_SECRET_KEY ? createPaystack(config.PAYSTACK_SECRET_KEY, fetch, config.PAYSTACK_BASE_URL) : undefined);
-  await app.register(shopPublicRoutes, { db, verify, cardPayments: !!payments });
+  await app.register(shopPublicRoutes, { db, verify, cardPayments: !!payments, pushKey: pusher?.publicKey });
   await app.register(shopCustomerRoutes, { db, verify, payments });
   if (payments && config.PAYSTACK_SECRET_KEY) await app.register(paystackWebhookRoutes, { db, provider: payments, secretKey: config.PAYSTACK_SECRET_KEY });
 

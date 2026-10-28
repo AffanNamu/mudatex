@@ -22,6 +22,10 @@ const MESSAGES: Record<string, (o: any, s: Store) => { subject: string; lead: st
   'order.expire': (o) => ({ subject: `Your order ${o.orderNo} has lapsed`, lead: 'We did not receive payment in time, so the fabric was released. You are welcome to order again.' }),
 };
 
+/** The sentence a customer is told for an order event, or null when they are not told about it. */
+export const orderMessage = (eventType: string, order: any, store: Store) => MESSAGES[eventType]?.(order, store) ?? null;
+export const ORDER_EVENTS = Object.keys(MESSAGES);
+
 export function renderOrderEmail(eventType: string, order: any, store: Store): Mail | null {
   const m = MESSAGES[eventType]?.(order, store);
   if (!m) return null;

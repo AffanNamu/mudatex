@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
+import { PushToggle } from '@/components/PushToggle';
 import { useAuth } from '@/lib/auth';
 
 export default function Profile() {
@@ -18,6 +19,7 @@ export default function Profile() {
     } catch (err) { setError((err as Error).message); }
   };
   return (
+    <>
     <form className="card stack" style={{ maxWidth: 480 }} onSubmit={submit}>
       <div className="field"><label htmlFor="email">Email</label><input id="email" value={email ?? customer.email} readOnly /></div>
       <div className="field"><label htmlFor="fullName">Full name</label><input id="fullName" name="fullName" defaultValue={customer.fullName} required minLength={2} /></div>
@@ -27,5 +29,7 @@ export default function Profile() {
       {msg && <p className="ok" role="status">{msg}</p>}
       <button className="btn">Save changes</button>
     </form>
+    <PushToggle />
+    </>
   );
 }

@@ -105,9 +105,19 @@ The shop emails customers when an order is placed, paid, shipped, delivered or c
 
 Without these two settings no emails are sent and nothing else is affected. On Vercel's free plan the API sends pending emails right after each order action, so they do not wait for the once-a-day schedule.
 
+## 7b. Phone notifications (optional)
+
+Shoppers can ask for a notification on their phone or browser when their order is paid, shipped or delivered.
+
+1. On any computer with Node, run `npx web-push generate-vapid-keys`. It prints a public and a private key.
+2. In the API's Vercel settings add `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` (secret: never share it) and `VAPID_SUBJECT` (for example `mailto:ops@yourdomain.com`). Redeploy the API.
+3. In the shop, a signed-in customer will now see **Order updates on this device** on their account page, with a button to turn notifications on.
+
+Without these three settings the button simply does not appear. iPhones only support this for apps added to the Home Screen.
+
 ## 8. What is not live yet
 
 - Trade accounts are done (apply, approve with a trade price list, credit limit and terms, order on account, statements). Make a *wholesale price list* in Business setup first.
-- WhatsApp and SMS messages about order status (email is done).
+- WhatsApp and SMS messages about order status (email and phone notifications are done).
 - Trade accounts with credit terms, statements and standing orders for wholesale buyers.
 - The free Vercel and Supabase plans are for testing. Move to the paid plans before taking real orders.

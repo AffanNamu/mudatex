@@ -53,7 +53,7 @@ const escapeLike = (s: string) => s.replace(/[\\%_]/g, (c) => `\\${c}`);
  * The public shop window. No sign-in; everything is derived on the server, and storefronts that are not live do not
  * exist as far as these endpoints are concerned.
  */
-export const shopPublicRoutes: FastifyPluginAsync<{ db: Db; verify?: TokenVerifier; cardPayments?: boolean }> = async (app, { db, verify, cardPayments = false }) => {
+export const shopPublicRoutes: FastifyPluginAsync<{ db: Db; verify?: TokenVerifier; cardPayments?: boolean; pushKey?: string }> = async (app, { db, verify, cardPayments = false, pushKey }) => {
   app.addHook('onSend', async (req, reply) => {
     if (req.method === 'GET' && reply.statusCode === 200) {
       reply.header('cache-control', 'public, max-age=30, s-maxage=60, stale-while-revalidate=300');
@@ -87,6 +87,7 @@ export const shopPublicRoutes: FastifyPluginAsync<{ db: Db; verify?: TokenVerifi
       contact: sf.contact,
       // Card payments need both a payment provider on the server and the store's own web address for the return trip.
       cardPayments: cardPayments && !!sf.siteUrl,
+      pushKey: pushKey ?? null,
       departments: departments.rows,
       featured: await cardsFor(db, sf, featured.rows),
     };
