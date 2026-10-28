@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useState, type FormEvent } from 'react';
 import { RequireShopper } from '@/components/RequireShopper';
 import { ApiError, shopRequest } from '@/lib/api';
@@ -7,7 +8,7 @@ import { useAuth } from '@/lib/auth';
 import { useCart } from '@/lib/cart';
 import { formatMoney } from '@/lib/format';
 import { T, useI18n } from '@/lib/i18n';
-import type { TradeAccount } from '@/lib/types';
+import type { QuoteRow, TradeAccount } from '@/lib/types';
 
 function Trade() {
   const { token } = useAuth();
@@ -17,10 +18,12 @@ function Trade() {
   const [acct, setAcct] = useState<TradeAccount | null | undefined>(undefined);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [quotes, setQuotes] = useState<QuoteRow[]>([]);
 
   useEffect(() => {
     if (!token) return;
     shopRequest<TradeAccount>('/me/trade', { token }).then(setAcct).catch((e) => setAcct(e instanceof ApiError && e.status === 404 ? null : null));
+    shopRequest<QuoteRow[]>('/me/quotes', { token }).then(setQuotes).catch(() => undefined);
   }, [token]);
 
   const apply = async (e: FormEvent<HTMLFormElement>) => {
@@ -61,6 +64,15 @@ function Trade() {
             </dl>
           </dl>
           <p>{t('trade.autoPrices.pre')} <strong>{t('checkout.onAccount')}</strong> {t('trade.autoPrices.post')}</p>
+          <h2>{t('quote.title')}</h2>
+          {quotes.length ? (
+            <table className="plain">
+              <thead><tr><th>{t('quote.col.quote')}</th><th>{t('quote.col.valid')}</th><th style={{ textAlign: 'right' }}>{t('quote.col.goods')}</th><th>{t('quote.col.status')}</th></tr></thead>
+              <tbody>{quotes.map((q) => (
+                <tr key={q.quoteNo}><td><Link href={`/quotes/${q.quoteNo}`}>{q.quoteNo}</Link></td><td>{q.validUntil}</td><td style={{ textAlign: 'right' }}>{money(q.totalMinor)}</td><td>{t(`quote.status.${q.status}`)}</td></tr>
+              ))}</tbody>
+            </table>
+          ) : <p className="muted">{t('quote.none')}</p>}
           <h2>{t('trade.statement')}</h2>
           {acct.statement?.length ? (
             <table className="plain">

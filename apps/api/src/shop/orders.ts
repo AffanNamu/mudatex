@@ -6,8 +6,9 @@ import { fromScaled, normalize, toScaled } from '../domain/decimal.js';
 import { conflict, invalid, notFound, shortage } from '../errors.js';
 import { stable } from '../idempotency.js';
 import { fulfilReferenceReservations, createReservation, releaseReferenceReservations } from '../inventory/service.js';
-import { priceSaleLines, saleTotals } from '../pos/pricing.js';
+import { priceSaleLines, saleTotals, type PricedSaleLine } from '../pos/pricing.js';
 import { availability, quoteDelivery, type Storefront } from './catalog.js';
+import { quoteForOrder } from '../trade/quotes.js';
 
 const statusWord = (status: string) => `@err.status.${status}`;
 
@@ -20,6 +21,8 @@ export interface PlaceOrderInput {
   addressId: string;
   paymentMethod: 'card' | 'bank_transfer' | 'account';
   note?: string;
+  /** Accepting a quote: the order is placed at exactly the quoted lines and prices, whatever else is sent. */
+  quoteNo?: string;
 }
 
 export type Actor = { type: 'customer'; id: string } | { type: 'staff'; id: string } | { type: 'system'; id: null };
@@ -222,7 +225,10 @@ export async function placeOrder(db: Db, sf: Storefront, customerId: string, inp
       return { orderId: prior.rows[0].id, replayed: true };
     }
 
-    const ids = input.lines.map((l) => l.variantId);
+    if (input.quoteNo && input.couponCode) throw invalid('A coupon cannot be used on a quoted order', { key: 'err.quote.coupon' });
+    const fixed = input.quoteNo ? await quoteForOrder(tx, sf, customerId, input.quoteNo) : null;
+    const orderLines = fixed ? fixed.priced.map((l) => ({ variantId: l.variantId, quantity: l.quantity })) : input.lines;
+    const ids = orderLines.map((l) => l.variantId);
     if (new Set(ids).size !== ids.length) throw invalid('Each product variant can appear on an order once; adjust its quantity instead', { key: 'err.order.duplicate' });
 
     const addr = await tx.query<{ recipient: string; phone: string; line1: string; line2: string | null; city: string; state: string; country_code: string }>(
@@ -232,12 +238,13 @@ export async function placeOrder(db: Db, sf: Storefront, customerId: string, inp
     const address = addr.rows[0];
     if (!address) throw invalid('Choose one of your saved delivery addresses', { key: 'err.address.choose' });
 
-    const titles = await sellableTitles(tx, sf, ids);
+    const titles = fixed ? new Map(fixed.priced.map((l) => [l.variantId, l.title])) : await sellableTitles(tx, sf, ids);
 
     const now = new Date();
     const trade = await approvedTrade(tx, sf.id, customerId, true);
+    if (fixed && !trade) throw conflict('Your trade account is on hold, so this quote cannot be accepted', { key: 'err.quote.hold' });
     if (input.paymentMethod === 'account' && !trade) throw invalid('Your business does not have an approved trade account', { key: 'err.trade.none' });
-    const { priced, coupon } = await priceWithCoupon(tx, trade ? { ...sf, priceListId: trade.priceListId } : sf, input.lines, input.couponCode, customerId, true);
+    const { priced, coupon } = fixed ? { priced: fixed.priced as PricedSaleLine[], coupon: null as CouponInfo | null } : await priceWithCoupon(tx, trade ? { ...sf, priceListId: trade.priceListId } : sf, input.lines, input.couponCode, customerId, true);
 
     const orderId = crypto.randomUUID();
     const shortages: unknown[] = [];
@@ -288,7 +295,11 @@ export async function placeOrder(db: Db, sf: Storefront, customerId: string, inp
       }
     }
     const actor: Actor = { type: 'customer', id: customerId };
-    await addEvent(tx, orderId, onAccount ? 'confirmed' : 'pending_payment', actor, onAccount ? `On account, payment due ${dueOn}` : undefined);
+    if (fixed) {
+      await tx.query(`UPDATE quotes SET status = 'accepted', decided_at = now(), order_id = $2 WHERE id = $1`, [fixed.id, orderId]);
+      await tx.query('UPDATE sales_orders SET quote_id = $2 WHERE id = $1', [orderId, fixed.id]);
+    }
+    await addEvent(tx, orderId, onAccount ? 'confirmed' : 'pending_payment', actor, [fixed ? `Placed from quote ${input.quoteNo}` : '', onAccount ? `On account, payment due ${dueOn}` : ''].filter(Boolean).join('. ') || undefined);
     await audit(tx, sf.organizationId, actor, 'order.place', orderId, { orderNo, totalMinor: Number(total), paymentMethod: input.paymentMethod }, requestId);
     return { orderId, replayed: false };
   });

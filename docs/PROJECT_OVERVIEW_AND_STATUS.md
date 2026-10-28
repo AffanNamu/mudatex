@@ -66,6 +66,7 @@ foundations that suit a large company, and does not copy Sakash's code or its we
 | **Wholesale** | Trade accounts: apply online, staff approve with a trade price list, credit limit and terms; orders on account with credit checked in the order's own transaction; part payments; a statement. |
 | **Refunds** | Two-person refunds on online orders: asked by one, approved by another; card refunds go back through Paystack, bank refunds are recorded when paid out. |
 | **Collections** | Overdue trade balances: reminders before and after the due date (once each, in the customer's language), automatic hold when a business is too late and automatic release when it pays, an ageing view for staff and a manual reminder. Guide: `operations/COLLECTIONS.md`. |
+| **Quotes** | Staff price a list of goods for a trade buyer at agreed prices for a limited time (below-list prices need their own permission); the buyer is emailed, opens it in the shop and accepts it into an order at exactly those prices, on account or by transfer. Guide: `operations/QUOTES.md`. |
 | **Offline till** | Cash sales continue with no connection: a saved price list, local pricing identical to the server's, a safe on-device queue, automatic catch-up with official receipt numbers, server re-pricing with variance, shortfalls listed for the stock controller. Guide: `operations/OFFLINE_TILL.md`. |
 | **Stock on a phone** | Count a shelf, receive against purchase orders or without one, and look up stock from a phone: barcode scanning (scanner, typed, or camera), blind counts compared against the books as they were at counting time, differences raised as one maker-checker adjustment, a downloaded stock list and an on-device queue so work continues without signal. Guide: `operations/STOCK_APP.md`. |
 | **Shop languages** | English, French and Hausa with a picker and browser-language detection; prices unchanged across languages. Hausa is a draft that needs a native reader. Guide: `operations/SHOP_LANGUAGES.md`. |
@@ -89,7 +90,7 @@ backups).
 
 ## 5. What is not built yet
 
-1. **Standing orders and quotes** for wholesale buyers (trade accounts, trade prices, credit and statements are built).
+1. **Standing orders** for wholesale buyers (quotes, trade accounts, trade prices, credit and statements are built).
 2. ~~Dunning for overdue trade balances~~ — built (see Collections).
 3. **Wider offline work.** The till can now sell cash offline (see ADR 002); offline card payments, rolls and lots, stock
    receiving and counts are not offline-capable.

@@ -292,4 +292,52 @@ test.describe('trade accounts', () => {
     await expect(page.getByRole('cell', { name: /Order SO-/ })).toBeVisible();
     await expect(page.getByText('₦17,625.00').first()).toBeVisible();
   });
+
+  test('a buyer opens a quote staff sent, and accepting it places the order at the agreed prices', async ({ page }) => {
+    const email = uniqueEmail('quote');
+    await signUp(page, email, '/account');
+    await completeProfile(page, 'Hajiya Rabi', '+2348030000002');
+    await page.goto('/trade');
+    await page.getByLabel('Business name').fill('Rabi Textiles');
+    await page.getByRole('button', { name: 'Send application' }).click();
+    await expect(page.getByText(/application received/)).toBeVisible();
+    const queue = await admin('GET', '/v1/trade-accounts?status=pending');
+    const mine = queue.find((t: any) => t.email === email);
+    const lists = await admin('GET', '/v1/pricing/price-lists');
+    await admin('POST', `/v1/trade-accounts/${mine.id}/decision`, { status: 'approved', priceListId: lists.find((l: any) => l.name === 'Wholesale NGN').id, creditLimitMinor: 5_000_000, paymentTermsDays: 30 });
+
+    // staff agree 1,400 a metre (below the 1,500 trade price) for ten metres and send the quote
+    const products = await admin('GET', '/v1/products?limit=200');
+    const atampa = products.find((p: any) => p.variants.some((v: any) => v.sku === 'ATP-001')).variants.find((v: any) => v.sku === 'ATP-001');
+    const until = new Date(Date.now() + 14 * 86_400_000).toISOString().slice(0, 10);
+    const quote = await admin('POST', '/v1/quotes', { tradeAccountId: mine.id, validUntil: until, note: 'Eid rush price', lines: [{ variantId: atampa.id, quantity: '10', unitPrice: '1400' }] });
+    await admin('POST', `/v1/quotes/${quote.id}/send`, {});
+
+    await page.goto('/trade');
+    await page.getByRole('link', { name: quote.quoteNo }).click();
+    await expect(page.getByRole('heading', { name: `Quote ${quote.quoteNo}` })).toBeVisible();
+    await expect(page.getByText('Eid rush price')).toBeVisible();
+    await expect(page.getByText('₦15,050.00').first()).toBeVisible();   // 10 × 1,400 + 7.5%
+    await expect(page.getByText('Save a delivery address first.')).toBeVisible();
+
+    await page.goto('/account/addresses');
+    await page.getByLabel('Recipient').fill('Rabi');
+    await page.getByLabel('Phone', { exact: true }).fill('+2348030000002');
+    await page.getByLabel('Address', { exact: true }).fill('Sabon Gari Market');
+    await page.getByLabel('City').fill('Kano');
+    await page.getByLabel('State').fill('Kano');
+    await page.getByRole('button', { name: 'Save address' }).click();
+    await expect(page.getByText('Sabon Gari Market')).toBeVisible();
+
+    await page.goto(`/quotes/${quote.quoteNo}`);
+    await page.getByRole('radio', { name: /On account/ }).check();
+    await page.getByRole('button', { name: 'Accept and place the order' }).click();
+    await expect(page).toHaveURL(/\/orders\/SO-/);
+    await expect(page.getByText('₦16,550.00').first()).toBeVisible();   // goods 15,050.00 + 1,500.00 delivery
+    await expect(page.getByText(/on your trade account/)).toBeVisible();
+
+    await page.goto(`/quotes/${quote.quoteNo}`);
+    await expect(page.getByText(/This quote is accepted/)).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Accept and place the order' })).toHaveCount(0);
+  });
 });

@@ -42,6 +42,7 @@ import { posSaleRoutes } from './routes/pos-sales.js';
 import { pricingRoutes } from './routes/pricing.js';
 import { enquiryRoutes } from './routes/enquiries.js';
 import { tradeAccountRoutes } from './routes/trade-accounts.js';
+import { quoteRoutes } from './routes/quotes.js';
 import { demoRoutes } from './routes/demo.js';
 import { reportRoutes } from './routes/reports.js';
 import { reviewRoutes } from './routes/reviews.js';
@@ -203,6 +204,7 @@ export async function buildServer({ config, db, verifier, migrationsDir, cron, p
       await v1.register(salesOrderRoutes, { db, payments });
       await v1.register(enquiryRoutes, { db });
       await v1.register(reviewRoutes, { db });
+      await v1.register(quoteRoutes, { db });
       await v1.register(tradeAccountRoutes, { db, mailer: injectedMailer ?? mailerFromConfig(config) });
       await v1.register(reportRoutes, { db });
       await v1.register(demoRoutes, { db });

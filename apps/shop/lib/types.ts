@@ -60,3 +60,10 @@ export interface TradeAccount {
   paymentTermsDays: number; note: string | null; creditUsedMinor?: number; creditAvailableMinor?: number;
   statement?: { at: string; kind: 'order' | 'payment'; reference: string; amountMinor: number; balanceMinor: number }[];
 }
+
+export interface QuoteRow { quoteNo: string; status: 'sent' | 'accepted' | 'declined' | 'cancelled' | 'expired'; currency: string; totalMinor: number; validUntil: string; sentAt: string | null; lineCount: number }
+export interface Quote {
+  id: string; quoteNo: string; status: QuoteRow['status']; currency: string; minorUnit: number; validUntil: string; note: string | null; subtotalMinor: number; taxMinor: number;
+  orderNo: string | null; businessName: string;
+  lines: { lineNo: number; sku: string; title: string; quantity: string; unitPrice: string; totalMinor: number }[];
+}

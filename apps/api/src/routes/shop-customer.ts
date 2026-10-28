@@ -1,10 +1,12 @@
 import type { FastifyPluginAsync, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import type { TokenVerifier } from '../auth/token.js';
+import { writeAudit } from '../audit.js';
 import { withTx, type Db } from '../db.js';
 import { conflict, forbidden, invalid, notFound, unauthorized } from '../errors.js';
 import { cardsFor, loadLiveStorefront, type Storefront } from '../shop/catalog.js';
 import { SHOP_LANGUAGES } from '../shop/translations.js';
+import { readQuote } from '../trade/quotes.js';
 import { approvedTrade, cancelOrder, creditUsed, MAX_ORDER_LINES, placeOrder, readOrder, tradeStatement } from '../shop/orders.js';
 import { AppError } from '../errors.js';
 import type { PaymentProvider } from '../payments/paystack.js';
@@ -246,6 +248,58 @@ export const shopCustomerRoutes: FastifyPluginAsync<{ db: Db; verify: TokenVerif
     const { order, replayed } = await placeOrder(db, req.storefront, id, body, key, req.id);
     if (replayed) reply.header('Idempotent-Replayed', 'true');
     return reply.status(replayed ? 200 : 201).send(order);
+  });
+
+  // ---- quotes. Staff agree the prices; accepting places an order at exactly those lines and prices.
+  const quoteNoParam = z.object({ quoteNo: z.string().regex(/^[A-Z]{2,5}-\d{6,}$/) });
+  const acceptBody = z.object({ addressId: z.string().uuid(), paymentMethod: z.enum(['bank_transfer', 'account']), note: z.string().trim().max(500).optional() }).strict();
+
+  app.get('/shop/:slug/me/quotes', async (req) => {
+    const id = await customer(req);
+    const { rows } = await db.query(
+      `SELECT q.quote_no AS "quoteNo", CASE WHEN q.status = 'sent' AND q.valid_until < CURRENT_DATE THEN 'expired' ELSE q.status END AS status,
+              q.currency, (q.subtotal_minor)::float8 AS "totalMinor", to_char(q.valid_until, 'YYYY-MM-DD') AS "validUntil", q.sent_at AS "sentAt",
+              (SELECT count(*)::int FROM quote_lines l WHERE l.quote_id = q.id) AS "lineCount"
+         FROM quotes q WHERE q.customer_id = $1 AND q.storefront_id = $2 AND q.status <> 'draft' ORDER BY q.created_at DESC LIMIT 100`,
+      [id, req.storefront.id],
+    );
+    return rows;
+  });
+
+  app.get('/shop/:slug/me/quotes/:quoteNo', async (req) => {
+    const { quoteNo } = quoteNoParam.parse(req.params);
+    const id = await customer(req);
+    const q = await readQuote(db, { quoteNo, customerId: id, organizationId: req.storefront.organizationId, storefrontId: req.storefront.id });
+    if (q.status === 'draft') throw notFound('Quote');
+    const { createdBy: _c, tradeAccountId: _t, legalEntityId: _l, customerId: _u, storefrontId: _s, ...visible } = q;
+    return visible;
+  });
+
+  app.post('/shop/:slug/me/quotes/:quoteNo/accept', async (req, reply) => {
+    const { quoteNo } = quoteNoParam.parse(req.params);
+    const body = acceptBody.parse(req.body);
+    const key = req.headers['idempotency-key'];
+    if (typeof key !== 'string' || key.length < 8 || key.length > 128) {
+      throw new AppError(400, 'idempotency_key_required', 'Idempotency-Key header (8-128 characters) is required', undefined, { key: 'err.idempotency' });
+    }
+    const id = await customer(req);
+    const { order, replayed } = await placeOrder(db, req.storefront, id, { lines: [], addressId: body.addressId, paymentMethod: body.paymentMethod, note: body.note, quoteNo }, key, req.id);
+    if (replayed) reply.header('Idempotent-Replayed', 'true');
+    return reply.status(replayed ? 200 : 201).send(order);
+  });
+
+  app.post('/shop/:slug/me/quotes/:quoteNo/decline', async (req) => {
+    const { quoteNo } = quoteNoParam.parse(req.params);
+    const id = await customer(req);
+    return withTx(db, async (tx) => {
+      const found = await tx.query<{ id: string; status: string }>('SELECT id, status FROM quotes WHERE storefront_id = $1 AND customer_id = $2 AND quote_no = $3 AND status <> \'draft\' FOR UPDATE', [req.storefront.id, id, quoteNo]);
+      const q = found.rows[0];
+      if (!q) throw notFound('Quote');
+      if (q.status !== 'sent') throw conflict('This quote is no longer open', { key: 'err.quote.closed' });
+      await tx.query(`UPDATE quotes SET status = 'declined', decided_at = now() WHERE id = $1`, [q.id]);
+      await writeAudit(tx, { organizationId: req.storefront.organizationId, actorUserId: null, requestId: req.id, action: 'quote.decline', entityType: 'quote', entityId: q.id, after: { by: 'customer', customerId: id } });
+      return readQuote(tx, { id: q.id, organizationId: req.storefront.organizationId }).then(({ createdBy: _c, tradeAccountId: _t, legalEntityId: _l, customerId: _u, storefrontId: _s, ...visible }) => visible);
+    });
   });
 
   app.get('/shop/:slug/me/orders', async (req) => {

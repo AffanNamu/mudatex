@@ -9,6 +9,7 @@ const NAV: { to: string; label: string; needs: string }[] = [
   { to: '/enquiries', label: 'Enquiries', needs: 'enquiries.manage' },
   { to: '/reviews', label: 'Reviews', needs: 'reviews.moderate' },
   { to: '/trade', label: 'Trade accounts', needs: 'trade.manage' },
+  { to: '/quotes', label: 'Quotes', needs: 'quotes.manage' },
   { to: '/collections', label: 'Collections', needs: 'trade.manage' },
   { to: '/store', label: 'Online store', needs: 'storefront.manage' },
   { to: '/catalogue', label: 'Catalogue', needs: 'catalog.read' },

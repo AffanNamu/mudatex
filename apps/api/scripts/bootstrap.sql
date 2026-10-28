@@ -85,7 +85,9 @@ perms AS (
       'reviews.moderate',
       'trade.manage',
       'orders.refund',
-      'orders.refund.approve'
+      'orders.refund.approve',
+      'quotes.manage',
+      'quotes.price.override'
   ]) AS p
   RETURNING 1
 ),

@@ -149,6 +149,33 @@ test('staff approve a wholesale application with a price list and credit', async
   await noA11yViolations(page);
 });
 
+test('staff price a quote for a trade buyer, with the server working out the totals, and send it', async ({ page }) => {
+  await signIn(page, 'admin@e2e.test');
+  await nav(page, 'Quotes');
+  await expect(page.getByRole('heading', { name: 'Quotes' })).toBeVisible();
+  await page.getByText('New quote').click();
+  test.skip(await page.getByText('No business has an approved trade account yet.').isVisible(), 'needs the trade account from the earlier test');
+  await page.getByLabel('Product 1').selectOption({ label: 'Ankara Wax Print (ANK-001)' });
+  await page.getByLabel('Quantity 1').fill('5');
+  await page.getByRole('button', { name: 'Create draft' }).click();
+  const quote = page.getByRole('article', { name: /^Quote QT-/ });
+  await expect(quote).toContainText('Draft');
+  await expect(quote).toContainText('Zainab Fabrics');
+  await expect(quote.getByRole('cell', { name: '₦5,375.00' }).first()).toBeVisible();   // 5 × 1,000 + 7.5%, worked out by the server
+  await noA11yViolations(page);
+
+  await quote.getByRole('button', { name: 'Edit' }).click();
+  await page.getByLabel('Agreed price 1').fill('950');
+  await page.getByRole('button', { name: 'Save changes' }).click();
+  await expect(quote.getByRole('cell', { name: '₦5,106.25' }).first()).toBeVisible();   // 5 × 950 + 7.5%
+  await quote.getByRole('button', { name: 'Send to the buyer' }).click();
+  await expect(page.getByText('Sent. The buyer has been emailed.')).toBeVisible();
+  await expect(quote).toContainText('Sent, waiting for the buyer');
+  await expect(quote.getByRole('button', { name: 'Edit' })).toHaveCount(0);
+  await page.getByRole('button', { name: '← All quotes' }).click();
+  await expect(page.getByRole('row', { name: /QT-/ })).toContainText('Zainab Fabrics');
+});
+
 test('one person asks for a refund and another approves it', async ({ page, request }) => {
   const { createHmac } = await import('node:crypto');
   const b64 = (o: object) => Buffer.from(JSON.stringify(o)).toString('base64url');
