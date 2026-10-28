@@ -63,6 +63,7 @@ export const PERMISSIONS = [
   'quotes.manage',
   'quotes.price.override',
   'carriers.manage',
+  'customers.manage',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];

@@ -110,3 +110,32 @@ test('staff say which location sends orders for which states, and it is kept', a
   await expect(again.getByLabel('States')).toHaveValue('kano, kaduna');
   await expect(again.getByLabel('Location')).toContainText('Kano Warehouse');
 });
+
+test('staff look a shopper up, see their orders and block and unblock the account', async ({ page, request }) => {
+  const { createHmac } = await import('node:crypto');
+  const b64 = (o: object) => Buffer.from(JSON.stringify(o)).toString('base64url');
+  const email = 'parcel-shopper@e2e.test';
+  const now = Math.floor(Date.now() / 1000);
+  const head = b64({ alg: 'HS256', typ: 'JWT' });
+  const body = b64({ sub: email, email, iat: now, exp: now + 3600, aud: 'authenticated' });
+  const auth = { authorization: `Bearer ${head}.${body}.${createHmac('sha256', 'e2e-dev-secret-e2e-dev-secret-0001').update(`${head}.${body}`).digest('base64url')}` };
+  test.skip((await request.get('http://localhost:3100/shop/console-shop/me', { headers: auth })).status() !== 200, 'needs the shopper from the delivery test');
+
+  await signIn(page, 'admin@e2e.test');
+  await nav(page, 'Customers');
+  await expect(page.getByRole('heading', { name: 'Customers' })).toBeVisible();
+  await page.getByLabel('Search').fill('parcel-shopper');
+  await page.getByRole('button', { name: 'Parcel Shopper' }).click();
+  const panel = page.getByRole('region', { name: 'Customer Parcel Shopper' });
+  await expect(panel.getByText(/SO-\d{6} · .* · delivered/)).toBeVisible();
+  await expect(panel.getByText(/1 Road/)).toBeVisible();
+  await noA11yViolations(page);
+
+  await panel.getByLabel('Reason for blocking').fill('Test: repeated chargebacks');
+  await panel.getByRole('button', { name: 'Block this account' }).click();
+  await expect(panel.getByText(/Blocked.*Test: repeated chargebacks/)).toBeVisible();
+  expect((await request.get('http://localhost:3100/shop/console-shop/me', { headers: auth })).status()).toBe(403);
+  await panel.getByRole('button', { name: 'Lift the block' }).click();
+  await expect(panel.getByRole('button', { name: 'Block this account' })).toBeVisible();
+  expect((await request.get('http://localhost:3100/shop/console-shop/me', { headers: auth })).status()).toBe(200);
+});
