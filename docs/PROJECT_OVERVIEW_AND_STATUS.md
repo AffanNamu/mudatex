@@ -90,7 +90,7 @@ backups).
 2. **Dunning for overdue trade balances** and credit holds that act automatically.
 3. **Wider offline work.** The till can now sell cash offline (see ADR 002); offline card payments, rolls and lots, stock
    receiving and counts are not offline-capable.
-4. **Mobile apps** (Android/iPhone), **push, SMS and WhatsApp notifications** (email is done).
+4. **Store-listed phone apps** (Play Store / App Store) and **push, SMS and WhatsApp notifications** (email is done). The shop and console are already installable on phones from the browser.
 5. **Delivery and riders** and order routing to the nearest shop. (Dashboards: a first version exists; profit and valuation need costing.)
 6. **Costing and valuation,** and automatic posting of stock and online sales to the ledger. Blocked on finance decisions.
 7. **Second-factor sign-in** for staff, **customer-facing documents** (invoices, tax receipts per country), **backups plan.**

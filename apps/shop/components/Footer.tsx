@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { whatsappLink } from '@/lib/format';
+import { PwaSupport } from './PwaSupport';
 import type { Store } from '@/lib/types';
 
 export function Footer({ store }: { store: Store }) {
@@ -48,7 +49,7 @@ export function Footer({ store }: { store: Store }) {
               </ul>
             </div>
           </div>
-          <div className="legal">© {new Date().getFullYear()} {store.name}. All rights reserved.</div>
+          <div className="legal row spread"><span>© {new Date().getFullYear()} {store.name}. All rights reserved.</span><PwaSupport /></div>
         </div>
       </footer>
       {wa && <a className="wa" href={wa} aria-label="Chat with us on WhatsApp" target="_blank" rel="noopener noreferrer">💬</a>}

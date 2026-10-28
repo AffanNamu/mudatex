@@ -17,6 +17,8 @@ export async function generateMetadata(): Promise<Metadata> {
     title: { default: `${name} — premium textiles, lace and fabrics`, template: `%s | ${name}` },
     description: store?.tagline ?? 'Premium African textiles, lace and fabrics, delivered across Nigeria.',
     openGraph: { siteName: name, type: 'website' },
+    appleWebApp: { capable: true, title: name, statusBarStyle: 'default' },
+    icons: { icon: '/icons/icon-192.png', apple: '/icons/icon-180.png' },
   };
 }
 

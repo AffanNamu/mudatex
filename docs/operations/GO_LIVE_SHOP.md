@@ -69,6 +69,15 @@ Then redeploy the API.
 4. In the console, **Online orders**: open the order, enter a bank reference, confirm payment, then prepare, ship (this takes the stock off the shelf) and deliver.
 5. Check the stock in **Inventory** went down only when you shipped.
 
+## 5b. Install it on a phone (no app store needed)
+
+The shop and the staff console are both installable web apps.
+
+- **Android (Chrome):** open the site, tap the menu, then **Install app** (or use the *Install the app* link at the bottom of the shop). It gets its own icon and opens full screen.
+- **iPhone (Safari):** tap **Share**, then **Add to Home Screen**.
+
+The shop keeps its pictures and pages ready so repeat visits are fast, and shows a friendly page if the line drops (the basket is saved on the phone). Accounts, baskets and orders are never stored for offline use. For the till, install the *console* the same way on the shop tablet; see `OFFLINE_TILL.md`.
+
 ## 6. Accept card payments (Paystack)
 
 Bank transfer works without this. Card and online-banking payments need a Paystack account.

@@ -69,3 +69,38 @@ test.describe('browsing the shop', () => {
     }
   });
 });
+
+test.describe('as an installable app', () => {
+  test('has a manifest with icons and the pages a phone user wants', async ({ page, request }) => {
+    await page.goto('/');
+    const href = await page.locator('link[rel="manifest"]').getAttribute('href');
+    const manifest = await (await request.get(href!)).json();
+    expect(manifest).toMatchObject({ display: 'standalone', start_url: '/?source=pwa', theme_color: '#1f2a5c' });
+    expect(manifest.icons.map((i: any) => i.purpose ?? 'any')).toEqual(expect.arrayContaining(['any', 'maskable']));
+    for (const icon of manifest.icons) expect((await request.get(icon.src)).status()).toBe(200);
+    expect(manifest.shortcuts.map((s: any) => s.url)).toEqual(['/shop', '/cart', '/account/orders']);
+  });
+
+  test('installs a service worker that keeps a friendly offline page ready and never stores private pages', async ({ page }) => {
+    await page.goto('/shop');
+    await page.evaluate(() => navigator.serviceWorker.ready);
+    // the offline page is stored in advance, so it can be shown when the line is down
+    const stored = await page.evaluate(async () => {
+      const cache = await caches.open('mudatex-shop-pages-v1');
+      return (await cache.keys()).map((r) => new URL(r.url).pathname);
+    });
+    expect(stored).toContain('/offline');
+    await page.goto('/offline');
+    await expect(page.getByRole('heading', { name: /You.re offline/ })).toBeVisible();
+    await expect(page.getByText(/basket is saved/)).toBeVisible();
+    // visit a private page; it must not end up in any cache
+    await page.goto('/cart');
+    await page.reload();
+    const privatePaths = await page.evaluate(async () => {
+      const out: string[] = [];
+      for (const name of await caches.keys()) for (const r of await (await caches.open(name)).keys()) out.push(new URL(r.url).pathname);
+      return out.filter((p) => /^\/(cart|account|checkout|orders|login|trade)/.test(p));
+    });
+    expect(privatePaths).toEqual([]);
+  });
+});
