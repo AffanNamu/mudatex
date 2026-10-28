@@ -78,7 +78,9 @@ export const salesOrderRoutes: FastifyPluginAsync<{ db: Db; payments?: PaymentPr
     const { id } = z.object({ id: uuid }).parse(req.params);
     await authorize(db, req.actor, 'orders.read', { kind: 'legal_entity', legalEntityId: await entityOf(id, req.actor.organizationId) });
     const order = await readOrder(db, { id, organizationId: req.actor.organizationId }, true);
-    return { ...order, refunds: await listRefunds(db, id) };
+    const from = await db.query<{ name: string }>(
+      `SELECT DISTINCT l.name FROM stock_reservations r JOIN locations l ON l.id = r.location_id WHERE r.reference_type = 'sales_order' AND r.reference_id = $1 ORDER BY l.name`, [id]);
+    return { ...order, refunds: await listRefunds(db, id), shipFrom: from.rows.map((r) => r.name) };
   });
 
   /** The same invoice or receipt the buyer can print, for staff to hand over or send. */

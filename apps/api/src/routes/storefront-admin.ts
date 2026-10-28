@@ -371,6 +371,53 @@ export const storefrontAdminRoutes: FastifyPluginAsync<{ db: Db }> = async (app,
     });
   });
 
+  // ---- fulfilment areas: which location sends orders for which places
+  const areaBody = z.object({
+    areas: z.array(z.object({
+      locationId: uuid,
+      countryCode: z.string().length(2).transform((c) => c.toUpperCase()),
+      states: z.array(z.string().trim().min(1).max(80)).max(60).default([]),
+      priority: z.number().int().min(0).max(10_000).default(100),
+    })).max(200),
+  });
+
+  app.get('/storefronts/:id/fulfilment-areas', async (req) => {
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    await managed(db, req, id);
+    const { rows } = await db.query(
+      `SELECT a.id, a.location_id AS "locationId", l.name AS "locationName", a.country_code AS "countryCode", a.states, a.priority
+         FROM fulfilment_areas a JOIN locations l ON l.id = a.location_id WHERE a.storefront_id = $1 ORDER BY a.country_code, a.priority, l.name`, [id]);
+    return rows;
+  });
+
+  /** Replaces all of the storefront's areas at once, so what is saved is exactly what the page shows. */
+  app.put('/storefronts/:id/fulfilment-areas', async (req) => {
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const body = areaBody.parse(req.body);
+    return withTx(db, async (tx) => {
+      await managed(tx, req, id);
+      const sf = await tx.query<{ stock_location_ids: string[] }>('SELECT stock_location_ids FROM storefronts WHERE id = $1', [id]);
+      const keys = new Set<string>();
+      for (const a of body.areas) {
+        if (!sf.rows[0]!.stock_location_ids.includes(a.locationId)) throw invalid('An area can only name one of this store\'s stock locations');
+        const key = `${a.locationId}/${a.countryCode}`;
+        if (keys.has(key)) throw invalid('A location can have one area per country');
+        keys.add(key);
+      }
+      await tx.query('DELETE FROM fulfilment_areas WHERE storefront_id = $1', [id]);
+      for (const a of body.areas) {
+        await tx.query(
+          'INSERT INTO fulfilment_areas (organization_id, storefront_id, location_id, country_code, states, priority) VALUES ($1,$2,$3,$4,$5,$6)',
+          [req.actor.organizationId, id, a.locationId, a.countryCode, [...new Set(a.states.map((x) => x.toLowerCase()))], a.priority]);
+      }
+      await audit(tx, req, 'storefront.fulfilment_areas', 'storefront', id, { count: body.areas.length });
+      const { rows } = await tx.query(
+        `SELECT a.id, a.location_id AS "locationId", l.name AS "locationName", a.country_code AS "countryCode", a.states, a.priority
+           FROM fulfilment_areas a JOIN locations l ON l.id = a.location_id WHERE a.storefront_id = $1 ORDER BY a.country_code, a.priority, l.name`, [id]);
+      return rows;
+    });
+  });
+
   // ---- delivery zones
   const zoneColumns = `id, name, country_code AS "countryCode", states, fee_minor AS "feeMinor", free_over_minor AS "freeOverMinor",
     eta_days_min AS "etaDaysMin", eta_days_max AS "etaDaysMax", active`;

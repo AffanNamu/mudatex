@@ -66,3 +66,29 @@ test('staff set up delivery companies, send an order with one, and follow the pa
   await expect(parcel.getByRole('heading', { name: 'Parcel: Delivered' })).toBeVisible();
   await expect(panel.getByRole('heading', { name: new RegExp(`${order.orderNo} Delivered`) })).toBeVisible();
 });
+
+test('staff say which location sends orders for which states, and it is kept', async ({ page, request }) => {
+  test.skip((await request.get('http://localhost:3100/shop/console-shop')).status() !== 200, 'needs the store from the online-store tests');
+  const api = 'http://localhost:3100';
+  const tok = (await (await request.post(`${api}/v1/dev/token`, { data: { email: 'admin@e2e.test' } })).json()).token;
+  const h = { authorization: `Bearer ${tok}` };
+  const store = (await (await request.get(`${api}/v1/storefronts`, { headers: h })).json()).find((s: any) => s.slug === 'console-shop');
+  const loc = await (await request.post(`${api}/v1/locations`, { headers: h, data: { legalEntityId: store.legalEntityId, type: 'warehouse', name: 'Kano Warehouse', countryCode: 'NG', timezone: 'Africa/Lagos' } })).json();
+  expect((await request.put(`${api}/v1/storefronts/${store.id}`, { headers: h, data: { stockLocationIds: [...store.stockLocationIds, loc.id] } })).status()).toBe(200);
+
+  await signIn(page, 'admin@e2e.test');
+  await nav(page, 'Online store');
+  const section = page.getByRole('region', { name: 'Where orders are sent from' });
+  await expect(section.getByText('No areas: orders are sent from the first location that has the goods.')).toBeVisible();
+  await section.getByRole('button', { name: 'Add an area' }).click();
+  await section.getByLabel('Location').selectOption({ label: 'Kano Warehouse' });
+  await section.getByLabel('States').fill('Kano, Kaduna');
+  await noA11yViolations(page);
+  await section.getByRole('button', { name: 'Save' }).click();
+  await expect(section.getByText('Saved.')).toBeVisible();
+
+  await page.reload();
+  const again = page.getByRole('region', { name: 'Where orders are sent from' });
+  await expect(again.getByLabel('States')).toHaveValue('kano, kaduna');
+  await expect(again.getByLabel('Location')).toContainText('Kano Warehouse');
+});

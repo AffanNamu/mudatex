@@ -96,6 +96,7 @@ function StoreEditor({ store, onChanged }: { store: Storefront; onChanged(): voi
       <Publishing store={store} depts={depts.data ?? []} onChanged={onChanged} />
       <Translations store={store} depts={depts.data ?? []} />
       <Delivery storeId={store.id} />
+      <Fulfilment store={store} />
       <Coupons storeId={store.id} />
     </>
   );
@@ -270,6 +271,49 @@ function Delivery({ storeId }: { storeId: string }) {
         <Field label="Days (to)"><input type="number" min={0} value={max} onChange={(e) => setMax(e.target.value)} /></Field>
         <div className="form-actions"><button className="btn btn-primary" disabled={a.busy || !name}>Add zone</button></div>
       </form>
+      <ErrorBanner error={a.error} />{a.ok && <Notice tone="ok">{a.ok}</Notice>}
+    </section>
+  );
+}
+
+interface Area { locationId: string; locationName: string; countryCode: string; states: string[]; priority: number }
+
+/** Which of the store's stock locations sends orders for which places. Only the order of choice changes; no order is refused because of it. */
+function Fulfilment({ store }: { store: Storefront }) {
+  const places = useLoad<Place[]>('/v1/locations');
+  const saved = useLoad<Area[]>(`/v1/storefronts/${store.id}/fulfilment-areas`);
+  const [draft, setDraft] = useState<{ locationId: string; countryCode: string; states: string; priority: string }[] | null>(null);
+  const a = useAction();
+  const rows = draft ?? (saved.data ?? []).map((x) => ({ locationId: x.locationId, countryCode: x.countryCode, states: x.states.join(', '), priority: String(x.priority) }));
+  const mine = (places.data ?? []).filter((p) => store.stockLocationIds.includes(p.id));
+  if (store.stockLocationIds.length < 2) return null;
+  const set = (i: number, patch: Partial<(typeof rows)[number]>) => setDraft(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  const save = () => a.run(() => api(`/v1/storefronts/${store.id}/fulfilment-areas`, { method: 'PUT', body: {
+    areas: rows.map((r) => ({ locationId: r.locationId, countryCode: r.countryCode, states: r.states.split(',').map((x) => x.trim()).filter(Boolean), priority: Number(r.priority) || 100 })),
+  } }), 'Saved.', () => { setDraft(null); saved.reload(); });
+  return (
+    <section className="panel" aria-label="Where orders are sent from"><h2>Where orders are sent from</h2>
+      <p className="muted">When a customer orders, the order is sent from the nearest location that has all of it. Say which places each location serves; locations with no entry are used after those that do. Lower priority numbers are tried first.</p>
+      <ErrorBanner error={places.error ?? saved.error} />
+      <div className="table-wrap"><table>
+        <thead><tr><th scope="col">Location</th><th scope="col">Country</th><th scope="col">States</th><th scope="col">Priority</th><th scope="col"><span className="sr-only">Remove</span></th></tr></thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={i}>
+              <td><select aria-label="Location" value={r.locationId} onChange={(e) => set(i, { locationId: e.target.value })}>{mine.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></td>
+              <td><input aria-label="Country code" value={r.countryCode} onChange={(e) => set(i, { countryCode: e.target.value.toUpperCase() })} maxLength={2} pattern="[A-Z]{2}" size={3} /></td>
+              <td><input aria-label="States" value={r.states} onChange={(e) => set(i, { states: e.target.value })} placeholder="Kano, Kaduna (empty = whole country)" /></td>
+              <td><input aria-label="Priority" inputMode="numeric" value={r.priority} onChange={(e) => set(i, { priority: e.target.value })} size={4} /></td>
+              <td><button className="btn" onClick={() => setDraft(rows.filter((_, j) => j !== i))}>Remove</button></td>
+            </tr>
+          ))}
+          {rows.length === 0 && <tr><td colSpan={5} className="muted">No areas: orders are sent from the first location that has the goods.</td></tr>}
+        </tbody>
+      </table></div>
+      <div className="row">
+        <button className="btn" disabled={!mine.length} onClick={() => setDraft([...rows, { locationId: mine[0]!.id, countryCode: 'NG', states: '', priority: '100' }])}>Add an area</button>
+        <button className="btn btn-primary" disabled={a.busy || draft === null} onClick={save}>Save</button>
+      </div>
       <ErrorBanner error={a.error} />{a.ok && <Notice tone="ok">{a.ok}</Notice>}
     </section>
   );

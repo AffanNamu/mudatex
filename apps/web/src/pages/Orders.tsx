@@ -19,6 +19,7 @@ interface Detail {
   events: { status: string; actorType: string; note: string | null; at: string }[];
   payments: { method: string; reference: string; amountMinor: number; at: string }[];
   refunds: { id: string; amountMinor: number; reason: string; method: string; status: string; requestedBy: string; payoutRef: string | null; detail: string | null }[];
+  shipFrom?: string[];
   shipment: { status: string; carrierName: string; trackingRef: string | null; trackingUrl: string | null; eta: string | null; events: { status: string | null; description: string | null; location: string | null; at: string }[] } | null;
 }
 
@@ -99,6 +100,7 @@ function OrderPanel({ id, onChanged }: { id: string; onChanged(): void }) {
           <tr><th scope="row">Total</th><td /><td><strong>{money(o.totalMinor)}</strong></td></tr>
         </tbody>
       </table></div>
+      {o.shipFrom?.length ? <p className="muted">{['shipped', 'delivered'].includes(o.status) ? 'Sent' : 'Will be sent'} from {o.shipFrom.join(' and ')}.</p> : null}
       <ErrorBanner error={error} />
 
       {o.paymentMethod === 'account' && o.status !== 'cancelled' && o.status !== 'expired' && can('orders.payment.record') && (

@@ -10,6 +10,7 @@ import { priceSaleLines, saleTotals, type PricedSaleLine } from '../pos/pricing.
 import { availability, quoteDelivery, type Storefront } from './catalog.js';
 import { quoteForOrder } from '../trade/quotes.js';
 import { recordShipment } from '../shipping/record.js';
+import { loadAreas, routeOrder } from './routing.js';
 import { trackingUrl } from '../shipping/url.js';
 
 const statusWord = (status: string) => `@err.status.${status}`;
@@ -261,8 +262,18 @@ export async function placeOrder(db: Db, sf: Storefront, customerId: string, inp
     const orderId = crypto.randomUUID();
     const shortages: unknown[] = [];
     const reservations: Alloc[][] = [];
-    for (const l of priced) {
-      const { allocs, missing } = await allocate(tx, sf, l.variantId, l.quantity);
+    // Send it from the nearest location that has everything; if none does, take from the serving locations first.
+    const route = routeOrder(sf.stockLocationIds, await loadAreas(tx, sf.id), address.country_code, address.state);
+    let whole: { allocs: Alloc[]; missing: string }[] | null = null;
+    if (route.length > 1) {
+      for (const loc of route) {
+        const attempt: { allocs: Alloc[]; missing: string }[] = [];
+        for (const l of priced) attempt.push(await allocate(tx, { ...sf, stockLocationIds: [loc] }, l.variantId, l.quantity));
+        if (attempt.every((a) => toScaled(a.missing) === 0n)) { whole = attempt; break; }
+      }
+    }
+    for (const [i, l] of priced.entries()) {
+      const { allocs, missing } = whole ? whole[i]! : await allocate(tx, { ...sf, stockLocationIds: route }, l.variantId, l.quantity);
       if (toScaled(missing) > 0n) shortages.push({ variantId: l.variantId, sku: l.sku, requested: l.quantity, available: fromScaled(toScaled(l.quantity) - toScaled(missing)) });
       reservations.push(allocs);
     }
