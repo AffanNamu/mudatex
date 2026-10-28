@@ -84,7 +84,7 @@ jobs:
         run: ./scripts/restore-check.sh "${{ steps.backup.outputs.file }}"
       - name: Keep the encrypted backup for 30 days
         if: steps.configured.outputs.go == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: mudatex-backup
           path: |
