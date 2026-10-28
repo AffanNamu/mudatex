@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ApiError, shopRequest } from './api';
 import { SUPABASE_KEY, SUPABASE_URL } from './config';
+import { tr } from './i18n';
 import type { Customer } from './types';
 
 interface Session { accessToken: string; refreshToken: string; expiresAt: number }
@@ -37,7 +38,7 @@ async function identity(path: string, body: unknown): Promise<any> {
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
     const raw = String(json.msg ?? json.error_description ?? json.message ?? '');
-    throw new Error(/invalid login/i.test(raw) ? 'Email or password is not right.' : /already registered/i.test(raw) ? 'An account with this email already exists. Try signing in.' : raw || 'Could not complete that. Please try again.');
+    throw new Error(/invalid login/i.test(raw) ? tr('auth.invalid') : /already registered/i.test(raw) ? tr('auth.exists') : raw || tr('auth.generic'));
   }
   return json;
 }
@@ -128,12 +129,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
     signOut() { store(null); },
     async createProfile(input) {
-      if (!token) throw new Error('Please sign in first.');
+      if (!token) throw new Error(tr('auth.signInFirst'));
       setCustomer(await shopRequest<Customer>('/me', { method: 'POST', body: input, token }));
       setProfile('ready');
     },
     async updateProfile(input) {
-      if (!token) throw new Error('Please sign in first.');
+      if (!token) throw new Error(tr('auth.signInFirst'));
       setCustomer(await shopRequest<Customer>('/me', { method: 'PUT', body: input, token }));
     },
   }), [ready, session, token, customer, profile, store]);

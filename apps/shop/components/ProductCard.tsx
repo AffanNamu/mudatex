@@ -1,13 +1,17 @@
+'use client';
+
 import Link from 'next/link';
 import { formatMoney } from '@/lib/format';
+import { useI18n } from '@/lib/i18n';
 import type { ProductCard as Card, Store } from '@/lib/types';
 import { WishlistButton } from './WishlistButton';
 
 export function ProductCard({ p, store }: { p: Card; store: Store }) {
+  const { t } = useI18n();
   return (
     <article className="pcard">
       <div className="chips">
-        {!p.inStock && <span className="chip out">Sold out</span>}
+        {!p.inStock && <span className="chip out">{t('product.soldOut')}</span>}
         {p.badges.map((b) => <span className="chip" key={b}>{b}</span>)}
       </div>
       <WishlistButton slug={p.slug} className="iconbtn wish" />

@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { ProductCard } from '@/components/ProductCard';
 import { getStore } from '@/lib/api';
+import { T } from '@/lib/i18n';
 
 export const revalidate = 60;
 
@@ -12,11 +13,11 @@ export default async function Home() {
       <section className="hero">
         <div className="wrap">
           <div>
-            <h1>Fabrics with the finest finish, straight from the source.</h1>
-            <p>Lace, Ankara, brocade, atampa and more — sold by the metre or the roll, priced honestly, and delivered to your door.</p>
+            <h1><T k="home.title" /></h1>
+            <p><T k="home.lead" /></p>
             <div className="row">
-              <Link className="btn" href="/shop">Shop the collection</Link>
-              <Link className="btn ghost" href="/wholesale">Buy wholesale</Link>
+              <Link className="btn" href="/shop"><T k="home.shopCollection" /></Link>
+              <Link className="btn ghost" href="/wholesale"><T k="home.buyWholesale" /></Link>
             </div>
           </div>
           <div className="hero-art" aria-hidden="true" />
@@ -24,15 +25,15 @@ export default async function Home() {
       </section>
 
       <div className="wrap trust" role="list">
-        <div role="listitem"><strong>Sold by the metre</strong><span className="muted small">Cut to the length you need</span></div>
-        <div role="listitem"><strong>Real stock</strong><span className="muted small">What you see is what we hold</span></div>
-        <div role="listitem"><strong>Delivery nationwide</strong><span className="muted small">Clear fees before you pay</span></div>
-        <div role="listitem"><strong>Made by Mudassir &amp; Brothers</strong><span className="muted small">Trading since 1997</span></div>
+        <div role="listitem"><strong><T k="home.trust1" /></strong><span className="muted small"><T k="home.trust1b" /></span></div>
+        <div role="listitem"><strong><T k="home.trust2" /></strong><span className="muted small"><T k="home.trust2b" /></span></div>
+        <div role="listitem"><strong><T k="home.trust3" /></strong><span className="muted small"><T k="home.trust3b" /></span></div>
+        <div role="listitem"><strong><T k="home.trust4" /></strong><span className="muted small"><T k="home.trust4b" /></span></div>
       </div>
 
       {store.departments.length > 0 && (
         <section className="section wrap" aria-labelledby="depts">
-          <h2 id="depts">Shop by department</h2>
+          <h2 id="depts"><T k="home.byDepartment" /></h2>
           <div className="tiles">
             {store.departments.map((d) => (
               <Link className="tile" key={d.slug} href={`/shop?department=${d.slug}`}>
@@ -45,7 +46,7 @@ export default async function Home() {
       )}
 
       <section className="section wrap" aria-labelledby="feat">
-        <div className="row spread"><h2 id="feat">Featured fabrics</h2><Link href="/shop">See everything →</Link></div>
+        <div className="row spread"><h2 id="feat"><T k="home.featured" /></h2><Link href="/shop"><T k="home.seeEverything" /></Link></div>
         <div className="products">
           {store.featured.map((p) => <ProductCard key={p.id} p={p} store={store} />)}
         </div>

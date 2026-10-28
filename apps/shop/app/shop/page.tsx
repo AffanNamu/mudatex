@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import { ProductCard } from '@/components/ProductCard';
+import { EmptyListing, ListingBar, ListingTitle, Pager, ShopFilters } from '@/components/ShopFilters';
 import { getProducts, getStore } from '@/lib/api';
 
 export const metadata: Metadata = { title: 'Shop all fabrics' };
@@ -8,9 +8,7 @@ export const metadata: Metadata = { title: 'Shop all fabrics' };
 type SP = Record<string, string | string[] | undefined>;
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
 
-const SORTS = [
-  ['featured', 'Featured'], ['newest', 'Newest'], ['price_asc', 'Price: low to high'], ['price_desc', 'Price: high to low'],
-] as const;
+const SORTS = ['featured', 'newest', 'price_asc', 'price_desc'] as const;
 
 export default async function Shop({ searchParams }: { searchParams: Promise<SP> }) {
   const sp = await searchParams;
@@ -35,58 +33,26 @@ export default async function Shop({ searchParams }: { searchParams: Promise<SP>
 
   return (
     <div className="wrap section">
-      <h1>{q.get('q') ? `Results for “${q.get('q')}”` : current?.name ?? 'All fabrics'}</h1>
+      <ListingTitle q={q.get('q') ?? ''} department={current?.name ?? null} />
       <div className="listing">
-        <aside className="filters" aria-label="Filters">
-          <fieldset>
-            <legend>Department</legend>
-            <ul>
-              <li><Link href={href({ department: null })} aria-current={!q.get('department')}>All</Link></li>
-              {store.departments.map((d) => (
-                <li key={d.slug}><Link href={href({ department: d.slug })} aria-current={q.get('department') === d.slug}>{d.name} ({d.productCount})</Link></li>
-              ))}
-            </ul>
-          </fieldset>
-          <form action="/shop" method="get">
-            {q.get('department') && <input type="hidden" name="department" value={q.get('department')!} />}
-            {q.get('sort') && <input type="hidden" name="sort" value={q.get('sort')!} />}
-            <fieldset>
-              <legend>Search</legend>
-              <input name="q" type="search" defaultValue={q.get('q') ?? ''} aria-label="Search" />
-            </fieldset>
-            <fieldset>
-              <legend>Price ({store.currency})</legend>
-              <div className="grid2">
-                <input name="minPrice" inputMode="decimal" placeholder="Min" defaultValue={q.get('minPrice') ?? ''} aria-label="Minimum price" />
-                <input name="maxPrice" inputMode="decimal" placeholder="Max" defaultValue={q.get('maxPrice') ?? ''} aria-label="Maximum price" />
-              </div>
-            </fieldset>
-            <label className="row"><input type="checkbox" name="inStock" value="true" defaultChecked={q.get('inStock') === 'true'} style={{ width: 'auto', minHeight: 0 }} /> In stock only</label>
-            <button className="btn small" type="submit" style={{ marginTop: 12 }}>Apply</button>
-          </form>
-        </aside>
-
+        <ShopFilters
+          departments={store.departments}
+          currency={store.currency}
+          query={{ department: q.get('department') ?? '', q: q.get('q') ?? '', sort: q.get('sort') ?? '', minPrice: q.get('minPrice') ?? '', maxPrice: q.get('maxPrice') ?? '', inStock: q.get('inStock') === 'true' }}
+          hrefs={{
+            allDepartments: href({ department: null }),
+            department: Object.fromEntries(store.departments.map((d) => [d.slug, href({ department: d.slug })])),
+            sort: Object.fromEntries(SORTS.map((v) => [v, href({ sort: v })])),
+          }}
+        />
         <div>
-          <div className="row spread" style={{ marginBottom: 16 }}>
-            <span className="muted" aria-live="polite">{data ? `${data.total} ${data.total === 1 ? 'product' : 'products'}` : ''}</span>
-            <nav className="row" aria-label="Sort">
-              {SORTS.map(([v, label]) => (
-                <Link key={v} href={href({ sort: v })} aria-current={(q.get('sort') ?? 'featured') === v} className="small" style={{ fontWeight: (q.get('sort') ?? 'featured') === v ? 700 : 400 }}>{label}</Link>
-              ))}
-            </nav>
-          </div>
+          <ListingBar total={data ? data.total : null} sort={q.get('sort') ?? ''} sortHrefs={Object.fromEntries(SORTS.map((v) => [v, href({ sort: v })]))} />
           {!data || data.items.length === 0 ? (
-            <div className="empty"><h2>Nothing matches yet</h2><p className="muted">Try fewer filters or a different word.</p><Link className="btn" href="/shop">Clear filters</Link></div>
+            <EmptyListing />
           ) : (
             <div className="products">{data.items.map((p) => <ProductCard key={p.id} p={p} store={store} />)}</div>
           )}
-          {pages > 1 && (
-            <nav className="pager" aria-label="Pages">
-              {page > 1 && <Link className="btn ghost small" href={href({ page: String(page - 1) })}>← Previous</Link>}
-              <span className="muted">Page {page} of {pages}</span>
-              {page < pages && <Link className="btn ghost small" href={href({ page: String(page + 1) })}>Next →</Link>}
-            </nav>
-          )}
+          {pages > 1 && <Pager page={page} pages={pages} prev={page > 1 ? href({ page: String(page - 1) }) : null} next={page < pages ? href({ page: String(page + 1) }) : null} />}
         </div>
       </div>
     </div>

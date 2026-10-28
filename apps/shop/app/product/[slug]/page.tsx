@@ -5,6 +5,7 @@ import { ReviewForm } from '@/components/ReviewForm';
 import { Stars } from '@/components/Stars';
 import { getProduct, getReviews, getStore } from '@/lib/api';
 import { SITE_URL } from '@/lib/config';
+import { T } from '@/lib/i18n';
 
 export const revalidate = 60;
 type Props = { params: Promise<{ slug: string }> };
@@ -38,18 +39,18 @@ export default async function ProductPage({ params }: Props) {
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(ld).replace(/</g, '\\u003c') }} />
       <ProductView p={p} />
       <section className="section" aria-labelledby="reviews">
-        <h2 id="reviews">Reviews {p.rating.count > 0 && <span className="muted small"><Stars value={p.rating.average ?? 0} /> {p.rating.average} from {p.rating.count} {p.rating.count === 1 ? 'review' : 'reviews'}</span>}</h2>
+        <h2 id="reviews"><T k="reviews.title" /> {p.rating.count > 0 && <span className="muted small"><Stars value={p.rating.average ?? 0} /> <T k={p.rating.count === 1 ? 'reviews.summary.one' : 'reviews.summary.other'} vars={{ avg: p.rating.average ?? 0, n: p.rating.count }} /></span>}</h2>
         {reviews && reviews.items.length > 0 ? (
           <ul className="plain" style={{ listStyle: 'none', padding: 0 }}>
             {reviews.items.map((r, i) => (
               <li key={i} className="card" style={{ marginBottom: 12 }}>
                 <Stars value={r.rating} /> {r.title && <strong>{r.title}</strong>}
                 <p style={{ margin: '6px 0' }}>{r.body}</p>
-                <span className="small muted">{r.name} · {new Date(r.at).toLocaleDateString()} · verified purchase</span>
+                <span className="small muted">{r.name} · {new Date(r.at).toLocaleDateString()} · <T k="reviews.verified" /></span>
               </li>
             ))}
           </ul>
-        ) : <p className="muted">No reviews yet.</p>}
+        ) : <p className="muted"><T k="reviews.none" /></p>}
         <ReviewForm productSlug={p.slug} />
       </section>
     </div>

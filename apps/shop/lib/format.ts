@@ -10,10 +10,5 @@ export function formatMoney(minor: number, currency: string, minorUnit: number):
 /** Trailing zeros removed: "2.50" -> "2.5". Quantities are decimal strings and stay strings. */
 export const trimQty = (q: string) => (q.includes('.') ? q.replace(/0+$/, '').replace(/\.$/, '') : q);
 
-export const STATUS_LABEL: Record<string, string> = {
-  pending_payment: 'Awaiting payment', confirmed: 'Confirmed (on account)', paid: 'Paid', processing: 'Being prepared', shipped: 'On its way',
-  delivered: 'Delivered', cancelled: 'Cancelled', expired: 'Expired',
-};
-
 export const whatsappLink = (number: string | undefined, text: string) =>
   number ? `https://wa.me/${number.replace(/\D/g, '')}?text=${encodeURIComponent(text)}` : null;

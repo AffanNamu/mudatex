@@ -216,3 +216,5 @@ table.plain th, table.plain td { text-align: left; padding: 10px 8px; border-bot
 .prose { max-width: 70ch; }
 .prose h2 { margin-top: 1.6em; }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+.icons select.lang { width: auto; min-height: 36px; padding: 4px 8px; font-size: .85rem; }

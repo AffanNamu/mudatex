@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { EnquiryForm } from '@/components/EnquiryForm';
+import { T } from '@/lib/i18n';
 
 export const metadata: Metadata = { title: 'Wholesale' };
 
@@ -8,13 +9,13 @@ export default function Wholesale() {
   return (
     <div className="wrap section">
       <div className="prose">
-        <h1>Wholesale</h1>
-        <p><Link className="btn" href="/trade">Apply for a trade account</Link></p>
-        <p>Buying by the roll or the bale for your shop or market stall? Tell us what you buy and how often. We will send wholesale prices, arrange standing orders and quote delivery.</p>
+        <h1><T k="wholesale.title" /></h1>
+        <p><Link className="btn" href="/trade"><T k="wholesale.apply" /></Link></p>
+        <p><T k="wholesale.text" /></p>
       </div>
       <div style={{ maxWidth: 640 }}>
-        <EnquiryForm kind="wholesale" showCompany messageLabel="What do you buy, and how much?" placeholder="For example: 200 rolls of Atampa a month, delivered to Kaduna." cta="Request wholesale prices" />
-        <p className="small muted">A trade account gives you wholesale prices, credit terms and a statement, online.</p>
+        <EnquiryForm kind="wholesale" showCompany messageLabel="wholesale.message" placeholder="wholesale.placeholder" cta="wholesale.cta" />
+        <p className="small muted"><T k="wholesale.note" /></p>
       </div>
     </div>
   );

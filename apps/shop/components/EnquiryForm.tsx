@@ -2,12 +2,15 @@
 
 import { useState, type FormEvent } from 'react';
 import { shopRequest } from '@/lib/api';
+import { useI18n } from '@/lib/i18n';
 
 type Kind = 'contact' | 'wholesale' | 'custom_order' | 'careers';
 
-export function EnquiryForm({ kind, messageLabel, placeholder, showCompany = false, cta = 'Send message' }: {
+/** `messageLabel`, `placeholder` and `cta` are message keys, so the form follows the shopper's language. */
+export function EnquiryForm({ kind, messageLabel, placeholder, showCompany = false, cta = 'enq.send' }: {
   kind: Kind; messageLabel: string; placeholder?: string; showCompany?: boolean; cta?: string;
 }) {
+  const { t } = useI18n();
   const [state, setState] = useState<'idle' | 'sending' | 'sent'>('idle');
   const [error, setError] = useState('');
   const [reference, setReference] = useState('');
@@ -33,29 +36,29 @@ export function EnquiryForm({ kind, messageLabel, placeholder, showCompany = fal
   if (state === 'sent') {
     return (
       <div className="card stack" role="status">
-        <h2>Thank you — we have your message</h2>
-        <p>We will reply by phone or email, usually within one working day.{reference && <> Your reference is <strong>{reference}</strong>.</>}</p>
+        <h2>{t('enq.thanks')}</h2>
+        <p>{t('enq.reply')}{reference && <> {t('enq.reference')} <strong>{reference}</strong>.</>}</p>
       </div>
     );
   }
   return (
     <form className="card stack" onSubmit={submit}>
       <div className="grid2">
-        <div className="field"><label htmlFor="eq-name">Your name</label><input id="eq-name" name="name" required minLength={2} maxLength={120} autoComplete="name" /></div>
-        {showCompany && <div className="field"><label htmlFor="eq-company">Business name (optional)</label><input id="eq-company" name="company" maxLength={150} autoComplete="organization" /></div>}
+        <div className="field"><label htmlFor="eq-name">{t('enq.name')}</label><input id="eq-name" name="name" required minLength={2} maxLength={120} autoComplete="name" /></div>
+        {showCompany && <div className="field"><label htmlFor="eq-company">{t('enq.company')}</label><input id="eq-company" name="company" maxLength={150} autoComplete="organization" /></div>}
       </div>
       <div className="grid2">
-        <div className="field"><label htmlFor="eq-phone">Phone / WhatsApp</label><input id="eq-phone" name="phone" type="tel" autoComplete="tel" /></div>
-        <div className="field"><label htmlFor="eq-email">Email</label><input id="eq-email" name="email" type="email" autoComplete="email" /></div>
+        <div className="field"><label htmlFor="eq-phone">{t('enq.phone')}</label><input id="eq-phone" name="phone" type="tel" autoComplete="tel" /></div>
+        <div className="field"><label htmlFor="eq-email">{t('enq.email')}</label><input id="eq-email" name="email" type="email" autoComplete="email" /></div>
       </div>
-      <p className="small muted" style={{ margin: 0 }}>Give at least one, so we can reply.</p>
-      <div className="field"><label htmlFor="eq-message">{messageLabel}</label><textarea id="eq-message" name="message" required minLength={10} maxLength={3000} placeholder={placeholder} /></div>
+      <p className="small muted" style={{ margin: 0 }}>{t('enq.atLeastOne')}</p>
+      <div className="field"><label htmlFor="eq-message">{t(messageLabel)}</label><textarea id="eq-message" name="message" required minLength={10} maxLength={3000} placeholder={placeholder ? t(placeholder) : undefined} /></div>
       {/* Hidden from people; bots tend to fill every field. */}
       <div aria-hidden="true" style={{ position: 'absolute', left: '-9999px' }}>
-        <label htmlFor="eq-website">Website</label><input id="eq-website" name="website" tabIndex={-1} autoComplete="off" />
+        <label htmlFor="eq-website">{t('enq.website')}</label><input id="eq-website" name="website" tabIndex={-1} autoComplete="off" />
       </div>
       {error && <p className="err" role="alert">{error}</p>}
-      <button className="btn" disabled={state === 'sending'}>{state === 'sending' ? 'Sending…' : cta}</button>
+      <button className="btn" disabled={state === 'sending'}>{state === 'sending' ? t('sending') : t(cta)}</button>
     </form>
   );
 }

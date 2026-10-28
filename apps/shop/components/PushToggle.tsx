@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { shopRequest } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useCart } from '@/lib/cart';
+import { useI18n } from '@/lib/i18n';
 
 const toKey = (b64: string) => {
   const pad = '='.repeat((4 - (b64.length % 4)) % 4);
@@ -15,6 +16,7 @@ const toKey = (b64: string) => {
 export function PushToggle() {
   const { store } = useCart();
   const { token } = useAuth();
+  const { t } = useI18n();
   const [supported, setSupported] = useState(false);
   const [on, setOn] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -33,13 +35,13 @@ export function PushToggle() {
     setBusy(true); setMessage('');
     try {
       const permission = await Notification.requestPermission();
-      if (permission !== 'granted') { setMessage('Notifications are blocked for this site. You can allow them in your browser settings.'); return; }
+      if (permission !== 'granted') { setMessage(t('push.blocked')); return; }
       const reg = await navigator.serviceWorker.ready;
       const sub = (await reg.pushManager.getSubscription()) ?? await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: toKey(store.pushKey!) });
       const json = sub.toJSON();
       await shopRequest('/me/push', { method: 'PUT', token, body: { endpoint: json.endpoint, keys: json.keys } });
       setOn(true);
-    } catch (e) { setMessage((e as Error).message || 'Could not turn notifications on.'); } finally { setBusy(false); }
+    } catch (e) { setMessage((e as Error).message || t('push.failed')); } finally { setBusy(false); }
   };
   const turnOff = async () => {
     setBusy(true); setMessage('');
@@ -53,11 +55,11 @@ export function PushToggle() {
 
   return (
     <section className="card stack" style={{ maxWidth: 480, marginTop: 16 }} aria-labelledby="notif">
-      <h2 id="notif">Order updates on this device</h2>
-      <p className="muted">Get a notification when your order is paid, on its way and delivered.</p>
+      <h2 id="notif">{t('push.title')}</h2>
+      <p className="muted">{t('push.text')}</p>
       {message && <p className="err" role="alert">{message}</p>}
-      {on ? <button className="btn ghost" onClick={turnOff} disabled={busy}>Turn off notifications</button> : <button className="btn" onClick={turnOn} disabled={busy}>Turn on notifications</button>}
-      {on && <p className="ok small" role="status">Notifications are on for this device.</p>}
+      {on ? <button className="btn ghost" onClick={turnOff} disabled={busy}>{t('push.turnOff')}</button> : <button className="btn" onClick={turnOn} disabled={busy}>{t('push.turnOn')}</button>}
+      {on && <p className="ok small" role="status">{t('push.isOn')}</p>}
     </section>
   );
 }

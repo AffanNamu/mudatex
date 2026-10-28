@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useI18n } from '@/lib/i18n';
 
 interface InstallEvent extends Event { prompt(): Promise<void>; userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }> }
 
@@ -9,6 +10,7 @@ export function PwaSupport() {
   const [event, setEvent] = useState<InstallEvent | null>(null);
   const [ios, setIos] = useState(false);
   const [installed, setInstalled] = useState(false);
+  const { t } = useI18n();
 
   useEffect(() => {
     if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') navigator.serviceWorker.register('/sw.js').catch(() => undefined);
@@ -24,8 +26,8 @@ export function PwaSupport() {
 
   if (installed) return null;
   if (event) {
-    return <button type="button" className="link" onClick={async () => { await event.prompt(); await event.userChoice; setEvent(null); }}>Install the app</button>;
+    return <button type="button" className="link" onClick={async () => { await event.prompt(); await event.userChoice; setEvent(null); }}>{t('pwa.install')}</button>;
   }
-  if (ios) return <span className="small">To install: tap Share, then “Add to Home Screen”.</span>;
+  if (ios) return <span className="small">{t('pwa.ios')}</span>;
   return null;
 }
