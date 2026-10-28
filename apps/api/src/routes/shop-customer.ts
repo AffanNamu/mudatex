@@ -25,6 +25,8 @@ const profileBody = z.object({
   fullName: z.string().trim().min(2).max(120),
   phone: z.string().trim().regex(/^\+?[0-9 ()-]{7,20}$/).nullable().optional(),
   marketingOptIn: z.boolean().optional(),
+  /** Text messages when an order is paid, sent or delivered. */
+  smsOptIn: z.boolean().optional(),
   /** The language of the shopper's emails and notifications. */
   language: z.enum(SHOP_LANGUAGES).optional(),
 });
@@ -54,7 +56,7 @@ const orderBody = z.object({
 });
 
 const ADDRESS_COLUMNS = `id, label, recipient, phone, line1, line2, city, state, country_code AS "countryCode", is_default AS "isDefault"`;
-const CUSTOMER_COLUMNS = `id, email, full_name AS "fullName", phone, marketing_opt_in AS "marketingOptIn", language, status, created_at AS "createdAt"`;
+const CUSTOMER_COLUMNS = `id, email, full_name AS "fullName", phone, marketing_opt_in AS "marketingOptIn", sms_opt_in AS "smsOptIn", language, status, created_at AS "createdAt"`;
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -109,9 +111,9 @@ export const shopCustomerRoutes: FastifyPluginAsync<{ db: Db; verify: TokenVerif
     if (existing.rows[0]) return existing.rows[0];
     try {
       const { rows } = await db.query(
-        `INSERT INTO customers (organization_id, external_subject, email, full_name, phone, marketing_opt_in, language)
-         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING ${CUSTOMER_COLUMNS}`,
-        [organizationId, subject, email, body.fullName, body.phone ?? null, body.marketingOptIn ?? false, body.language ?? 'en'],
+        `INSERT INTO customers (organization_id, external_subject, email, full_name, phone, marketing_opt_in, sms_opt_in, language)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING ${CUSTOMER_COLUMNS}`,
+        [organizationId, subject, email, body.fullName, body.phone ?? null, body.marketingOptIn ?? false, body.smsOptIn ?? false, body.language ?? 'en'],
       );
       return reply.status(201).send(rows[0]);
     } catch (err) {
@@ -124,9 +126,9 @@ export const shopCustomerRoutes: FastifyPluginAsync<{ db: Db; verify: TokenVerif
     const body = profileBody.parse(req.body);
     const id = await customer(req);
     const { rows } = await db.query(
-      `UPDATE customers SET full_name = $2, phone = COALESCE($3, phone), marketing_opt_in = COALESCE($4, marketing_opt_in), language = COALESCE($5, language)
+      `UPDATE customers SET full_name = $2, phone = COALESCE($3, phone), marketing_opt_in = COALESCE($4, marketing_opt_in), language = COALESCE($5, language), sms_opt_in = COALESCE($6, sms_opt_in)
         WHERE id = $1 RETURNING ${CUSTOMER_COLUMNS}`,
-      [id, body.fullName, body.phone ?? null, body.marketingOptIn ?? null, body.language ?? null],
+      [id, body.fullName, body.phone ?? null, body.marketingOptIn ?? null, body.language ?? null, body.smsOptIn ?? null],
     );
     return rows[0];
   });

@@ -23,7 +23,7 @@ interface AuthValue {
   recover(email: string): Promise<void>;
   signOut(): void;
   createProfile(input: { fullName: string; phone?: string; marketingOptIn?: boolean; language?: string }): Promise<void>;
-  updateProfile(input: { fullName: string; phone?: string | null; marketingOptIn?: boolean; language?: string }): Promise<void>;
+  updateProfile(input: { fullName: string; phone?: string | null; marketingOptIn?: boolean; smsOptIn?: boolean; language?: string }): Promise<void>;
 }
 
 const STORAGE_KEY = 'mudatex.shopper';

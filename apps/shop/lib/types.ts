@@ -30,7 +30,7 @@ export interface ProductDetail {
 
 export interface Page<T> { page: number; limit: number; total: number; items: T[] }
 
-export interface Customer { id: string; email: string; fullName: string; phone: string | null; marketingOptIn: boolean; language?: 'en' | 'fr' | 'ha' }
+export interface Customer { id: string; email: string; fullName: string; phone: string | null; marketingOptIn: boolean; smsOptIn?: boolean; language?: 'en' | 'fr' | 'ha' }
 
 export interface Address {
   id: string; label: string; recipient: string; phone: string; line1: string; line2: string | null; city: string; state: string;

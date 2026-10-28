@@ -16,7 +16,7 @@ export default function Profile() {
     const f = new FormData(e.currentTarget);
     setMsg(''); setError('');
     try {
-      await updateProfile({ fullName: String(f.get('fullName')).trim(), phone: String(f.get('phone') ?? '').trim() || null, marketingOptIn: f.get('marketing') === 'on' });
+      await updateProfile({ fullName: String(f.get('fullName')).trim(), phone: String(f.get('phone') ?? '').trim() || null, marketingOptIn: f.get('marketing') === 'on', smsOptIn: f.get('sms') === 'on' });
       setMsg(t('profile.saved'));
     } catch (err) { setError((err as Error).message); }
   };
@@ -27,6 +27,7 @@ export default function Profile() {
       <div className="field"><label htmlFor="fullName">{t('profile.fullName')}</label><input id="fullName" name="fullName" defaultValue={customer.fullName} required minLength={2} /></div>
       <div className="field"><label htmlFor="phone">{t('profile.phone')}</label><input id="phone" name="phone" type="tel" defaultValue={customer.phone ?? ''} /></div>
       <label className="row" style={{ fontWeight: 400 }}><input type="checkbox" name="marketing" defaultChecked={customer.marketingOptIn} style={{ width: 'auto', minHeight: 0 }} /> {t('profile.marketing')}</label>
+      <label className="row" style={{ fontWeight: 400 }}><input type="checkbox" name="sms" defaultChecked={customer.smsOptIn} style={{ width: 'auto', minHeight: 0 }} /> {t('profile.sms')}</label>
       {error && <p className="err" role="alert">{error}</p>}
       {msg && <p className="ok" role="status">{msg}</p>}
       <button className="btn">{t('profile.save')}</button>

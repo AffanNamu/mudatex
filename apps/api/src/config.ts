@@ -40,6 +40,11 @@ const schema = z
     RESEND_API_KEY: z.string().min(10).optional(),
     MAIL_FROM: z.string().min(5).max(200).optional(),
     // Browser push notifications (generate once with `npx web-push generate-vapid-keys`). Without all three, push is off.
+    // Text messages (Termii). Off unless both the key and a registered sender ID are set.
+    TERMII_API_KEY: z.string().min(10).optional(),
+    TERMII_SENDER_ID: z.string().min(3).max(11).optional(),
+    TERMII_BASE_URL: z.string().url().optional(),
+    TERMII_CHANNEL: z.enum(['generic', 'dnd', 'whatsapp']).optional(),
     VAPID_PUBLIC_KEY: z.string().min(40).optional(),
     VAPID_PRIVATE_KEY: z.string().min(20).optional(),
     VAPID_SUBJECT: z.string().regex(/^(mailto:|https:\/\/)/).optional(),

@@ -573,6 +573,7 @@ export const en = {
   'ret.withdraw': 'Withdraw this request',
   'ret.refund': 'Refund being processed: {amount}',
   'ret.noneLeft': 'Every item on this order is already in a return request.',
+  'profile.sms': 'Text me when my order is paid, sent or delivered',
 } as const;
 
 export type MessageKey = keyof typeof en;

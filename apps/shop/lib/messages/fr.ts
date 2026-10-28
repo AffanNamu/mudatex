@@ -561,4 +561,5 @@ export const fr: Record<MessageKey, string> = {
   'ret.withdraw': 'Retirer cette demande',
   'ret.refund': 'Remboursement en cours : {amount}',
   'ret.noneLeft': 'Tous les articles de cette commande figurent déjà dans une demande de retour.',
+  'profile.sms': 'M’envoyer un SMS quand ma commande est payée, expédiée ou livrée',
 };

@@ -103,6 +103,20 @@ For each person: (1) Supabase, Authentication, Users, **Invite user**; (2) in Mu
 user with the **Supabase user id** shown for them; (3) give them a role scoped to their company, country or shop. They
 open the invitation link, choose a password, and sign in.
 
+## Part F. Switches you turn on when ready
+
+Each is optional and off until its settings exist. All go on the **API** project (Production only) and need a redeploy.
+
+| What | Settings | Guide |
+|---|---|---|
+| Card payments | `PAYSTACK_SECRET_KEY` (live key, `sk_live_…`), and the webhook address `https://<api>/webhooks/paystack` set in the Paystack dashboard | `GO_LIVE_SHOP.md` |
+| Emails to customers | `RESEND_API_KEY`, `MAIL_FROM` | `GO_LIVE_SHOP.md` |
+| Phone (web push) notifications | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | `GO_LIVE_SHOP.md` |
+| Text messages | `TERMII_API_KEY`, `TERMII_SENDER_ID` | `SMS.md` |
+| Two-step sign-in for all staff | `STAFF_MFA=required` (after everyone has set up an authenticator app) | `TWO_STEP_SIGN_IN.md` |
+| Delivery companies that send updates | uses `SECRETS_ENCRYPTION_KEY` from step 6 | `DELIVERY.md` |
+| Nightly encrypted backups | GitHub secrets `BACKUP_DATABASE_URL`, `BACKUP_PASSPHRASE` (not Vercel) | `BACKUPS.md` |
+
 ## Checks after go-live
 
 - `/ready` is true on the API; the web page loads over https; sign-in works, and a wrong password says "Wrong email or

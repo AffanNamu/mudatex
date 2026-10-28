@@ -565,4 +565,5 @@ export const ha: Record<MessageKey, string> = {
   'ret.withdraw': 'Janye wannan buƙata',
   'ret.refund': 'Ana shirya mayar da kuɗi: {amount}',
   'ret.noneLeft': 'Duk kayan da ke cikin wannan odar suna cikin buƙatar dawo da kaya.',
+  'profile.sms': 'A aiko mini saƙon text idan an biya, an aika ko an kawo odata',
 };
