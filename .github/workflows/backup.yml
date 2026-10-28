@@ -1,0 +1,94 @@
+name: Nightly backup
+
+# Takes an encrypted copy of the production database every night, restores it into a scratch database and checks that the
+# copy is whole. A backup that has not been restored is only a hope. If any step fails GitHub emails the repository owner.
+#
+# Needs two repository secrets (Settings → Secrets and variables → Actions); without them this workflow does nothing:
+#   BACKUP_DATABASE_URL  the database's DIRECT connection string (Supabase: Connect → Direct connection / session pooler, port 5432)
+#   BACKUP_PASSPHRASE    a long random passphrase. Keep a copy somewhere safe OUTSIDE GitHub: without it the backups cannot be opened.
+
+on:
+  schedule:
+    - cron: '17 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      scratch:
+        image: postgres:17
+        env:
+          POSTGRES_USER: scratch
+          POSTGRES_PASSWORD: scratch
+          POSTGRES_DB: scratch
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U scratch" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      BACKUP_DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+      BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+    steps:
+      - name: Check the secrets are set
+        id: configured
+        run: |
+          if [ -z "$BACKUP_DATABASE_URL" ] || [ -z "$BACKUP_PASSPHRASE" ]; then
+            echo "::warning::BACKUP_DATABASE_URL and BACKUP_PASSPHRASE are not set, so no backup was taken. See docs/operations/BACKUPS.md."
+            echo "go=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "go=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.configured.outputs.go == 'true'
+      - name: Newer PostgreSQL client (the dump tool must be at least as new as the database)
+        if: steps.configured.outputs.go == 'true'
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt noble-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-17
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+      - uses: actions/setup-node@v4
+        if: steps.configured.outputs.go == 'true'
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/api/package-lock.json
+      - name: Build the checker
+        if: steps.configured.outputs.go == 'true'
+        working-directory: apps/api
+        run: |
+          npm ci
+          npm run build
+      - name: Back up
+        if: steps.configured.outputs.go == 'true'
+        working-directory: apps/api
+        id: backup
+        env:
+          DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+        run: echo "file=$(./scripts/backup.sh "$RUNNER_TEMP/backups")" >> "$GITHUB_OUTPUT"
+      - name: Restore into a scratch database and check the copy
+        if: steps.configured.outputs.go == 'true'
+        working-directory: apps/api
+        env:
+          SCRATCH_DATABASE_URL: postgres://scratch:scratch@localhost:5432/scratch
+        run: ./scripts/restore-check.sh "${{ steps.backup.outputs.file }}"
+      - name: Keep the encrypted backup for 30 days
+        if: steps.configured.outputs.go == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: mudatex-backup
+          path: |
+            ${{ runner.temp }}/backups/*.gpg
+            ${{ runner.temp }}/backups/*.sha256
+          retention-days: 30
+          if-no-files-found: error

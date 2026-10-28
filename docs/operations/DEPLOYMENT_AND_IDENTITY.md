@@ -55,7 +55,7 @@ On the API side, add the console's address to `CORS_ORIGINS`. The console sends 
 3. Start the API. `GET /health` is liveness (the process is up). `GET /ready` is readiness: it returns 503 until the database answers and every migration is applied, so a load balancer holds traffic off a version that is ahead of its schema.
 4. Create the first administrator once: `node dist/bootstrap-cli.js "<organization>" "<idp subject>" "<email>" "<name>"`. This is the only way to create an administrator without an existing one; it is not an HTTP endpoint.
 
-Migrations are forward-only. A bad migration is fixed with a new migration. Take a database backup before every production migration; backup and restore policy (RPO/RTO) is an open decision (ADR 009).
+Migrations are forward-only. A bad migration is fixed with a new migration. Take a database backup before every production migration (run *Nightly backup* by hand, or see `BACKUPS.md`); the target recovery times are an open decision (ADR 009).
 
 ## How authentication works
 

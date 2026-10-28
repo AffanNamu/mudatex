@@ -110,7 +110,7 @@ open the invitation link, choose a password, and sign in.
 - Vercel, API project, **Settings, Cron Jobs** shows the scheduled job. You can trigger it by hand there; its log should show a 200.
 - A request with the publishable key to `https://xdgjomvsbjldmejwwoyb.supabase.co/rest/v1/users` returns nothing or an
   error, never rows.
-- Upgrade Supabase to Pro and note its backup schedule before entering real data. Decide your recovery targets
+- Upgrade Supabase to Pro and note its backup schedule before entering real data. Turn on the nightly encrypted copy and practise a recovery (`BACKUPS.md`). Decide your recovery targets
   (ADR 009).
 
 ## Everyday operations

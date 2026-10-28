@@ -61,6 +61,13 @@ jobs:
         run: |
           PGPASSWORD=mudatex psql -h localhost -U mudatex -d mudatex_test -c 'CREATE DATABASE mudatex_smoke'
           ./scripts/smoke.sh
+      - name: Back up the test database, restore the backup into an empty one and check the copy
+        env:
+          PGPASSWORD: mudatex
+        run: |
+          psql -h localhost -U mudatex -d mudatex_test -c 'CREATE DATABASE mudatex_scratch'
+          file=$(DATABASE_URL=postgres://mudatex:mudatex@localhost:5432/mudatex_test BACKUP_PASSPHRASE=ci-only-passphrase ./scripts/backup.sh "$RUNNER_TEMP/backups")
+          SCRATCH_DATABASE_URL=postgres://mudatex:mudatex@localhost:5432/mudatex_scratch BACKUP_PASSPHRASE=ci-only-passphrase ./scripts/restore-check.sh "$file"
 
   web:
     runs-on: ubuntu-24.04
