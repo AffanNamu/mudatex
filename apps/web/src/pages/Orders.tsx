@@ -147,6 +147,7 @@ function OrderPanel({ id, onChanged }: { id: string; onChanged(): void }) {
         </details>
       )}
       <PrintInvoice id={o.id} />
+      <ReturnsPanel orderId={o.id} onChanged={() => { d.reload(); onChanged(); }} />
       <Refunds o={o} money={money} me={session?.user.id ?? ''} onChanged={() => { d.reload(); onChanged(); }} />
       {o.refundDueMinor > 0 && <Notice tone="warn">Refund owed to the customer: {money(o.refundDueMinor)}. Refunds are paid out manually for now.</Notice>}
       {o.shipment ? <ShipmentPanel o={o} orderId={o.id} onChanged={() => { d.reload(); onChanged(); }} /> : o.trackingRef && <p>Courier: {o.carrier ?? '—'} · {o.trackingRef}</p>}
@@ -286,6 +287,56 @@ function ShipmentPanel({ o, orderId, onChanged }: { o: Detail; orderId: string; 
         </form>
       )}
       <ErrorBanner error={error} />
+    </section>
+  );
+}
+
+interface Ret { id: string; status: 'requested' | 'approved' | 'rejected' | 'received' | 'cancelled'; reason: string; note: string | null; decisionNote: string | null; refundMinor: number; createdAt: string; lines: { lineNo: number; quantity: string; title: string; restocked: boolean }[] }
+const RET_STATUS: Record<Ret['status'], string> = { requested: 'Waiting for a decision', approved: 'Approved, waiting for the goods', rejected: 'Declined', received: 'Goods received', cancelled: 'Withdrawn by the customer' };
+
+/** Customers' return requests for this order: decide them, book the goods in and put the good ones back on the shelf. */
+function ReturnsPanel({ orderId, onChanged }: { orderId: string; onChanged(): void }) {
+  const { can } = useAuth();
+  const list = useLoad<Ret[]>(`/v1/sales-orders/${orderId}/returns`);
+  const places = useLoad<{ id: string; name: string }[]>(can('orders.fulfil') ? '/v1/locations' : null);
+  const [note, setNote] = useState(''); const [where, setWhere] = useState(''); const [back, setBack] = useState<Record<string, boolean>>({});
+  const [error, setError] = useState<unknown>(null); const [busy, setBusy] = useState(false);
+  const rets = list.data ?? [];
+  if (!rets.length) return null;
+  const act = async (path: string, body: unknown) => {
+    setBusy(true); setError(null);
+    try { await api(path, { method: 'POST', body }); setNote(''); setBack({}); list.reload(); onChanged(); } catch (e) { setError(e); } finally { setBusy(false); }
+  };
+  return (
+    <section className="panel" aria-label="Returns">
+      <h3>Returns asked for by the customer</h3>
+      <ErrorBanner error={error} />
+      <ul className="plain">
+        {rets.map((r) => (
+          <li key={r.id}>
+            <strong>{RET_STATUS[r.status]}</strong> · {r.reason.replace('_', ' ')} · {r.lines.map((l) => `${l.title} × ${l.quantity}`).join(', ')}
+            {r.note && <div className="muted">Customer: {r.note}</div>}
+            {r.decisionNote && <div className="muted">Decision: {r.decisionNote}</div>}
+            {r.status === 'requested' && can('orders.refund') && (
+              <form className="form-grid" onSubmit={(e) => { e.preventDefault(); void act(`/v1/order-returns/${r.id}/decision`, { decision: 'approve', ...(note.trim() ? { note: note.trim() } : {}) }); }}>
+                <Field label="Note to the customer" hint="Needed to decline; the customer is emailed."><input value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} /></Field>
+                <div className="form-actions">
+                  <button className="btn btn-primary" disabled={busy}>Approve (raises a refund for someone else to approve)</button>
+                  <button type="button" className="btn" disabled={busy || !note.trim()} onClick={() => void act(`/v1/order-returns/${r.id}/decision`, { decision: 'reject', note: note.trim() })}>Decline</button>
+                </div>
+              </form>
+            )}
+            {r.status === 'approved' && can('orders.fulfil') && (
+              <form className="form-grid" onSubmit={(e) => { e.preventDefault(); void act(`/v1/order-returns/${r.id}/received`, { locationId: where || places.data?.[0]?.id, restockLines: r.lines.filter((l) => back[`${r.id}/${l.lineNo}`]).map((l) => l.lineNo) }); }}>
+                <p className="muted">Refund raised: {r.refundMinor ? (r.refundMinor / 100).toLocaleString(undefined, { minimumFractionDigits: 2 }) : 'none'}. When the goods are back, tick the ones that can be sold again.</p>
+                {r.lines.map((l) => <label key={l.lineNo} className="row"><input type="checkbox" checked={!!back[`${r.id}/${l.lineNo}`]} onChange={(e) => setBack({ ...back, [`${r.id}/${l.lineNo}`]: e.target.checked })} /> Put {l.title} × {l.quantity} back on the shelf</label>)}
+                <Field label="Shelf location"><select value={where} onChange={(e) => setWhere(e.target.value)}>{(places.data ?? []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></Field>
+                <div className="form-actions"><button className="btn btn-primary" disabled={busy}>Goods received</button></div>
+              </form>
+            )}
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }

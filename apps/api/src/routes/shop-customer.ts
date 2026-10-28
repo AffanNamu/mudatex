@@ -9,6 +9,8 @@ import { SHOP_LANGUAGES } from '../shop/translations.js';
 import { readQuote } from '../trade/quotes.js';
 import { orderDocument } from '../shop/documents.js';
 import { changeStandingOrder, createBody as standingBody, createStandingOrder, readStandingOrders } from '../trade/standing-orders.js';
+import { cancelReturn, requestReturn } from '../shop/returns.js';
+import { RETURN_REASONS } from '../shop/returns-read.js';
 import { approvedTrade, cancelOrder, creditUsed, MAX_ORDER_LINES, placeOrder, readOrder, tradeStatement } from '../shop/orders.js';
 import { AppError } from '../errors.js';
 import type { PaymentProvider } from '../payments/paystack.js';
@@ -361,6 +363,32 @@ export const shopCustomerRoutes: FastifyPluginAsync<{ db: Db; verify: TokenVerif
     const { orderNo } = z.object({ orderNo: z.string().regex(/^[A-Z]{2,5}-\d{6,}$/) }).parse(req.params);
     const id = await customer(req);
     return cancelOrder(db, req.storefront.organizationId, { orderNo, customerId: id }, { type: 'customer', id }, 'Cancelled by the customer', req.id);
+  });
+
+  // ---- returns. Asked for by the buyer within the store's return window; staff decide.
+  const returnBody = z.object({
+    reason: z.enum(RETURN_REASONS),
+    note: z.string().trim().max(1000).optional(),
+    lines: z.array(z.object({ lineNo: z.number().int().min(1).max(MAX_ORDER_LINES), quantity: z.string().regex(/^\d+(\.\d{1,6})?$/) })).min(1).max(MAX_ORDER_LINES),
+  });
+  app.post('/shop/:slug/me/orders/:orderNo/returns', async (req, reply) => {
+    const { orderNo } = z.object({ orderNo: z.string().regex(/^[A-Z]{2,5}-\d{6,}$/) }).parse(req.params);
+    const body = returnBody.parse(req.body);
+    const key = req.headers['idempotency-key'];
+    if (typeof key !== 'string' || key.length < 8 || key.length > 128) {
+      throw new AppError(400, 'idempotency_key_required', 'Idempotency-Key header (8-128 characters) is required', undefined, { key: 'err.idempotency' });
+    }
+    const id = await customer(req);
+    const r = await requestReturn(db, req.storefront.organizationId, id, orderNo, body, key, req.id);
+    if (r.replayed) reply.header('Idempotent-Replayed', 'true');
+    return reply.status(r.replayed ? 200 : 201).send(await readOrder(db, { orderNo, customerId: id, organizationId: req.storefront.organizationId }));
+  });
+
+  app.post('/shop/:slug/me/returns/:id/cancel', async (req) => {
+    const { id: returnId } = z.object({ id: z.string().uuid() }).parse(req.params);
+    const id = await customer(req);
+    await cancelReturn(db, req.storefront.organizationId, id, returnId, req.id);
+    return { ok: true };
   });
 
   // ---- card payment. The amount is the order's; the outcome is whatever the provider confirms to the server.

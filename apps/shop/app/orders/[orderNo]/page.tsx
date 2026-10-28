@@ -10,6 +10,7 @@ import { useAuth } from '@/lib/auth';
 import { useCart } from '@/lib/cart';
 import { formatMoney, trimQty, whatsappLink } from '@/lib/format';
 import { useI18n } from '@/lib/i18n';
+import { ReturnRequest } from '@/components/ReturnRequest';
 import type { Order } from '@/lib/types';
 
 function OrderView() {
@@ -116,6 +117,7 @@ function OrderView() {
       )}
 
       <p><Link className="btn ghost small" href={`/orders/${order.orderNo}/invoice`}>{t('doc.link')}</Link></p>
+      {token && <ReturnRequest order={order} token={token} minorUnit={store.minorUnit} onChange={setOrder} />}
       {order.status !== 'cancelled' && order.status !== 'expired' && order.paymentMethod !== 'card' && <RepeatOrder orderNo={order.orderNo} paymentMethod={order.paymentMethod} />}
 
       <div className="cartgrid">

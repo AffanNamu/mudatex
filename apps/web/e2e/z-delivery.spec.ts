@@ -65,6 +65,24 @@ test('staff set up delivery companies, send an order with one, and follow the pa
   await parcel.getByRole('button', { name: 'Add update' }).click();
   await expect(parcel.getByRole('heading', { name: 'Parcel: Delivered' })).toBeVisible();
   await expect(panel.getByRole('heading', { name: new RegExp(`${order.orderNo} Delivered`) })).toBeVisible();
+
+  // the customer asks to send some back; staff decide in the order panel
+  const asked = await request.post(`${api}/shop/console-shop/me/orders/${order.orderNo}/returns`, { headers: { ...auth, 'idempotency-key': crypto.randomUUID() }, data: { reason: 'damaged', note: 'Torn at the edge', lines: [{ lineNo: 1, quantity: '1' }] } });
+  expect(asked.status()).toBe(201);
+  await page.reload();
+  await page.getByRole('button', { name: order.orderNo }).first().click();
+  const again = page.getByRole('region', { name: `Order ${order.orderNo}` });
+  const returns = again.getByRole('region', { name: 'Returns' });
+  await expect(returns.getByText('Waiting for a decision')).toBeVisible();
+  await expect(returns.getByText('Customer: Torn at the edge')).toBeVisible();
+  await noA11yViolations(page);
+  await returns.getByLabel('Note to the customer').fill('Sorry about that');
+  await returns.getByRole('button', { name: /Approve/ }).click();
+  await expect(returns.getByText('Approved, waiting for the goods')).toBeVisible();
+  await returns.getByLabel(/Put .* back on the shelf/).check();
+  await returns.getByRole('button', { name: 'Goods received' }).click();
+  await expect(returns.getByText('Goods received')).toBeVisible();
+  await expect(again.getByText(/Refund of \d+ requested/)).toBeVisible();
 });
 
 test('staff say which location sends orders for which states, and it is kept', async ({ page, request }) => {

@@ -52,6 +52,12 @@ export interface Order {
   lines: { lineNo: number; variantId: string; productSlug: string | null; image: string | null; unit: string; title: string; sku: string; quantity: string; unitPrice: string; totalMinor: number }[];
   events: { status: string; at: string; note: string | null }[];
   shipment: Shipment | null;
+  returns: OrderReturn[];
+}
+
+export interface OrderReturn {
+  id: string; status: 'requested' | 'approved' | 'rejected' | 'received' | 'cancelled'; reason: string; note: string | null; decisionNote: string | null; refundMinor: number; createdAt: string;
+  lines: { lineNo: number; quantity: string; title: string }[];
 }
 
 export interface Shipment {

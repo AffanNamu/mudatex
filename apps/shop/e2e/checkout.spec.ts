@@ -88,6 +88,21 @@ test.describe('buying', () => {
     await expect(parcel.getByText(/With the rider/)).toBeVisible();
     expect((await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze()).violations).toEqual([]);
 
+    // after delivery the shopper can ask to send goods back, and withdraw the request
+    await admin('POST', `/v1/sales-orders/${id}/steps`, { action: 'deliver' });
+    await page.goto(`/orders/${orderNo}`);
+    const returns = page.getByRole('region', { name: 'Returns' });
+    await expect(returns.getByRole('heading', { name: 'Return items from this order' })).toBeVisible();
+    await returns.getByLabel(/How many/).fill('1');
+    await returns.getByLabel('Reason').selectOption('damaged');
+    await returns.getByLabel('Tell us more (optional)').fill('Torn at the edge');
+    expect((await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze()).violations).toEqual([]);
+    await returns.getByRole('button', { name: 'Send return request' }).click();
+    await expect(returns.getByText('Your request was sent. We will reply by email.')).toBeVisible();
+    await expect(returns.getByText('Waiting for the store')).toBeVisible();
+    await returns.getByRole('button', { name: 'Withdraw this request' }).click();
+    await expect(returns.getByText('Withdrawn')).toBeVisible();
+
     // the orders list and the account pages
     await page.goto('/account/orders');
     await expect(page.getByRole('link', { name: orderNo })).toBeVisible();

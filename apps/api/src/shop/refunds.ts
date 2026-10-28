@@ -31,7 +31,15 @@ export async function requestRefund(
   db: Db, organizationId: string, orderId: string, userId: string,
   input: { amountMinor: number; reason: string; method?: 'card' | 'bank_transfer' }, requestId?: string,
 ) {
-  return withTx(db, async (tx) => {
+  return withTx(db, (tx) => requestRefundTx(tx, organizationId, orderId, userId, input, requestId));
+}
+
+/** The same, inside a transaction the caller already holds (for example while deciding a return). */
+export async function requestRefundTx(
+  tx: Tx, organizationId: string, orderId: string, userId: string,
+  input: { amountMinor: number; reason: string; method?: 'card' | 'bank_transfer' }, requestId?: string,
+) {
+  {
     const o = await lockOrder(tx, organizationId, { id: orderId });
     if (BigInt(o.paid_minor) === 0n) throw conflict('Nothing has been paid on this order');
     const open = await tx.query<{ n: string }>(`SELECT COALESCE(sum(amount_minor), 0) AS n FROM order_refunds WHERE order_id = $1 AND status = ANY($2)`, [orderId, OPEN]);
@@ -58,7 +66,7 @@ export async function requestRefund(
     await event(tx, orderId, o.status, `Refund of ${input.amountMinor} requested (${method.replace('_', ' ')}): ${input.reason}`);
     await audit(tx, organizationId, userId, 'order.refund_request', rows[0]!.id, { orderId, amountMinor: input.amountMinor, method }, requestId);
     return rows[0]!.id;
-  });
+  }
 }
 
 async function lockRefund(tx: Tx, organizationId: string, id: string): Promise<RefundRow> {

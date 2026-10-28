@@ -11,6 +11,7 @@ import { availability, quoteDelivery, type Storefront } from './catalog.js';
 import { quoteForOrder } from '../trade/quotes.js';
 import { recordShipment } from '../shipping/record.js';
 import { loadAreas, routeOrder } from './routing.js';
+import { listReturns } from './returns-read.js';
 import { trackingUrl } from '../shipping/url.js';
 
 const statusWord = (status: string) => `@err.status.${status}`;
@@ -73,6 +74,7 @@ export async function readOrder(q: Pick<Db, 'query'>, where: { id?: string; orde
   const result: Record<string, unknown> = {
     ...order,
     shipment,
+    returns: await listReturns(q, order.id),
     lines: lines.rows.map((l) => ({ ...l, quantity: normalize(l.quantity), unitPrice: normalize(l.unitPrice), grossMinor: Number(l.grossMinor), discountMinor: Number(l.discountMinor), taxMinor: Number(l.taxMinor), totalMinor: Number(l.totalMinor) })),
     events: events.rows,
   };

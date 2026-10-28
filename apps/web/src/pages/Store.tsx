@@ -7,7 +7,7 @@ import { Translations } from './StoreTranslations';
 
 interface Storefront {
   id: string; legalEntityId: string; slug: string; name: string; priceListId: string; currency: string; stockLocationIds: string[];
-  status: 'draft' | 'live' | 'closed'; tagline: string | null; publishedProducts: number; siteUrl: string | null;
+  status: 'draft' | 'live' | 'closed'; tagline: string | null; publishedProducts: number; siteUrl: string | null; returnWindowHours?: number;
   contact: { whatsapp?: string; phone?: string; email?: string; address?: string; bankName?: string; accountName?: string; accountNumber?: string; taxId?: string; invoiceFooter?: string };
 }
 interface Dept { id: string; slug: string; name: string; imageUrl: string | null; sort: number }
@@ -123,12 +123,13 @@ function Details({ store, onChanged }: { store: Storefront; onChanged(): void })
   const [address, setAddress] = useState(c.address ?? ''); const [bank, setBank] = useState(c.bankName ?? ''); const [accName, setAccName] = useState(c.accountName ?? ''); const [accNo, setAccNo] = useState(c.accountNumber ?? '');
   const [taxId, setTaxId] = useState(c.taxId ?? ''); const [footer, setFooter] = useState(c.invoiceFooter ?? '');
   const [site, setSite] = useState(store.siteUrl ?? '');
+  const [window_, setWindow] = useState(String(store.returnWindowHours ?? 48));
   const a = useAction();
   const clean = (v: string) => v.trim() || undefined;
   const submit = (e: FormEvent) => {
     e.preventDefault();
     const contact = Object.fromEntries(Object.entries({ whatsapp: clean(wa.replace(/[\s()-]/g, '')), phone: clean(phone), email: clean(email), address: clean(address), bankName: clean(bank), accountName: clean(accName), accountNumber: clean(accNo), taxId: clean(taxId), invoiceFooter: clean(footer) }).filter(([, v]) => v));
-    return a.run(() => api(`/v1/storefronts/${store.id}`, { method: 'PUT', body: { tagline: tag.trim() || null, contact, siteUrl: site.trim() || null } }), 'Saved.', onChanged);
+    return a.run(() => api(`/v1/storefronts/${store.id}`, { method: 'PUT', body: { tagline: tag.trim() || null, contact, siteUrl: site.trim() || null, returnWindowHours: Math.max(0, Math.round(Number(window_) || 0)) } }), 'Saved.', onChanged);
   };
   return (
     <details className="panel"><summary>Contact and bank-transfer details</summary>
@@ -144,6 +145,7 @@ function Details({ store, onChanged }: { store: Storefront; onChanged(): void })
         <Field label="Account number"><input inputMode="numeric" value={accNo} onChange={(e) => setAccNo(e.target.value)} pattern="[0-9]{6,20}" /></Field>
         <Field label="Tax ID on invoices" hint="Your tax identification number, printed on every customer invoice."><input value={taxId} onChange={(e) => setTaxId(e.target.value)} maxLength={50} /></Field>
         <Field label="Invoice footer" hint="One or two lines at the bottom of invoices, e.g. returns policy or thank-you."><input value={footer} onChange={(e) => setFooter(e.target.value)} maxLength={300} /></Field>
+        <Field label="Time allowed for returns (hours after delivery)" hint="Customers can ask to return goods from a delivered order during this time. 0 turns online returns off."><input inputMode="numeric" value={window_} onChange={(e) => setWindow(e.target.value)} pattern="[0-9]{1,4}" /></Field>
         <div className="form-actions"><button className="btn btn-primary" disabled={a.busy}>Save details</button></div>
       </form>
       <ErrorBanner error={a.error} />{a.ok && <Notice tone="ok">{a.ok}</Notice>}

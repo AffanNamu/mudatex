@@ -21,6 +21,7 @@ import { postingRuleRoutes } from './routes/posting-rules.js';
 import { journalRoutes } from './routes/journals.js';
 import { createSecretBox } from './events/secretbox.js';
 import { carrierRoutes } from './routes/carriers.js';
+import { orderReturnRoutes } from './routes/order-returns.js';
 import { carrierWebhookRoutes } from './routes/webhooks-carriers.js';
 import { ADAPTERS, type AdapterRegistry } from './shipping/adapters.js';
 import { clientReadRoutes, devAuthRoutes } from './routes/client-reads.js';
@@ -214,6 +215,7 @@ export async function buildServer({ config, db, verifier, carrierAdapters, migra
       await v1.register(storefrontAdminRoutes, { db });
       await v1.register(salesOrderRoutes, { db, payments, secretBox, adapters });
       await v1.register(carrierRoutes, { db, secretBox, adapters });
+      await v1.register(orderReturnRoutes, { db });
       await v1.register(enquiryRoutes, { db });
       await v1.register(reviewRoutes, { db });
       await v1.register(quoteRoutes, { db });

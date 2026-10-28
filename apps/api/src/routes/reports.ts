@@ -127,6 +127,7 @@ export const reportRoutes: FastifyPluginAsync<{ db: Db }> = async (app, { db }) 
     if (hasOrders) {
       const os = entityScope(ordGrants, 2);
       attention.ordersAwaitingPayment = await count(`SELECT count(*) AS n FROM sales_orders o JOIN legal_entities e ON e.id = o.legal_entity_id WHERE o.organization_id = $1 AND o.status = 'pending_payment' AND ${os.clause}`, [org, ...os.params]);
+      attention.onlineReturns = await count(`SELECT count(*) AS n FROM order_returns r JOIN sales_orders o ON o.id = r.order_id JOIN legal_entities e ON e.id = o.legal_entity_id WHERE o.organization_id = $1 AND r.status = 'requested' AND ${os.clause}`, [org, ...os.params]);
       attention.ordersToShip = await count(`SELECT count(*) AS n FROM sales_orders o JOIN legal_entities e ON e.id = o.legal_entity_id WHERE o.organization_id = $1 AND o.status IN ('paid', 'confirmed', 'processing') AND ${os.clause}`, [org, ...os.params]);
     }
     const entityCount = async (table: string, extra: string, g: Grants, joinSql: string) => {

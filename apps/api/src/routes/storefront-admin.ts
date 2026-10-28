@@ -45,6 +45,8 @@ const updateBody = z.object({
   stockLocationIds: z.array(uuid).min(1).max(50).optional(),
   status: z.enum(['draft', 'live', 'closed']).optional(),
   siteUrl: siteUrl.nullable().optional(),
+  /** How long after delivery a buyer may ask to return goods. 0 turns online returns off. */
+  returnWindowHours: z.number().int().min(0).max(2160).optional(),
 });
 
 const departmentBody = z.object({
@@ -102,7 +104,7 @@ const couponBody = z.object({
 });
 
 const STOREFRONT_COLUMNS = `s.id, s.legal_entity_id AS "legalEntityId", s.slug, s.name, s.price_list_id AS "priceListId", s.currency,
-  s.stock_location_ids AS "stockLocationIds", s.status, s.tagline, s.contact, s.site_url AS "siteUrl"`;
+  s.stock_location_ids AS "stockLocationIds", s.status, s.tagline, s.contact, s.site_url AS "siteUrl", s.return_window_hours AS "returnWindowHours"`;
 
 const slugify = (s: string) =>
   s.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80);
@@ -177,11 +179,11 @@ export const storefrontAdminRoutes: FastifyPluginAsync<{ db: Db }> = async (app,
       const { rows } = await tx.query(
         `UPDATE storefronts SET name = COALESCE($2, name), tagline = CASE WHEN $3::boolean THEN $4 ELSE tagline END,
                 contact = COALESCE($5, contact), stock_location_ids = COALESCE($6, stock_location_ids),
-                status = COALESCE($7, status), site_url = CASE WHEN $8::boolean THEN $9 ELSE site_url END, updated_at = now()
+                status = COALESCE($7, status), site_url = CASE WHEN $8::boolean THEN $9 ELSE site_url END, return_window_hours = COALESCE($10, return_window_hours), updated_at = now()
           WHERE id = $1
         RETURNING id, legal_entity_id AS "legalEntityId", slug, name, price_list_id AS "priceListId", currency,
-                  stock_location_ids AS "stockLocationIds", status, tagline, contact, site_url AS "siteUrl"`,
-        [id, body.name ?? null, body.tagline !== undefined, body.tagline ?? null, body.contact ?? null, body.stockLocationIds ? [...new Set(body.stockLocationIds)] : null, body.status ?? null, body.siteUrl !== undefined, body.siteUrl ?? null],
+                  stock_location_ids AS "stockLocationIds", status, tagline, contact, site_url AS "siteUrl", return_window_hours AS "returnWindowHours"`,
+        [id, body.name ?? null, body.tagline !== undefined, body.tagline ?? null, body.contact ?? null, body.stockLocationIds ? [...new Set(body.stockLocationIds)] : null, body.status ?? null, body.siteUrl !== undefined, body.siteUrl ?? null, body.returnWindowHours ?? null],
       );
       await audit(tx, req, 'storefront.update', 'storefront', id, body);
       return rows[0];

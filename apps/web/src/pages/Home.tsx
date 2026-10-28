@@ -17,6 +17,7 @@ const ATTENTION: { key: string; label: (n: number) => string; to: string }[] = [
   { key: 'ordersAwaitingPayment', label: (n) => `${n} online order${n === 1 ? '' : 's'} awaiting payment`, to: '/orders' },
   { key: 'ordersToShip', label: (n) => `${n} online order${n === 1 ? '' : 's'} to prepare or ship`, to: '/orders' },
   { key: 'newEnquiries', label: (n) => `${n} new website enquir${n === 1 ? 'y' : 'ies'}`, to: '/enquiries' },
+  { key: 'onlineReturns', label: (n) => `${n} online return${n === 1 ? '' : 's'} to decide`, to: '/orders' },
   { key: 'reviewsToApprove', label: (n) => `${n} review${n === 1 ? '' : 's'} to approve`, to: '/reviews' },
   { key: 'tradeApplications', label: (n) => `${n} wholesale application${n === 1 ? '' : 's'}`, to: '/trade' },
   { key: 'offlineShortfalls', label: (n) => `${n} offline stock shortfall${n === 1 ? '' : 's'} to explain`, to: '/till-exceptions' },
