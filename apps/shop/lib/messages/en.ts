@@ -536,6 +536,21 @@ export const en = {
   'offline.title': "You're offline",
   'offline.text': "We can't reach the shop right now. Your basket is saved on this phone and will be here when you're back online.",
   'offline.cta': 'Try again',
+  'ship.title': 'Your parcel',
+  'ship.carrier': 'Delivery company: {name}',
+  'ship.number': 'Tracking number: {ref}',
+  'ship.track': 'Track on {name}\'s website',
+  'ship.eta': 'Expected by {date}',
+  'ship.noUpdates': 'No updates from the delivery company yet.',
+  'ship.status.booked': 'Handed to the delivery company',
+  'ship.status.picked_up': 'Picked up',
+  'ship.status.in_transit': 'In transit',
+  'ship.status.out_for_delivery': 'Out for delivery',
+  'ship.status.delivered': 'Delivered',
+  'ship.status.failed': 'Delivery attempt failed',
+  'ship.status.returned': 'Returned to the shop',
+  'ship.status.cancelled': 'Cancelled',
+  'ship.update': 'Update',
 } as const;
 
 export type MessageKey = keyof typeof en;

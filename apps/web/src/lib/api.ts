@@ -42,3 +42,6 @@ export async function api<T = unknown>(path: string, opts: Options = {}): Promis
 }
 
 export const newKey = () => crypto.randomUUID();
+
+/** The API's address, for showing people the address a delivery company should call. */
+export const apiBase = () => BASE;

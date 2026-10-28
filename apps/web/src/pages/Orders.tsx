@@ -3,6 +3,7 @@ import { ErrorBanner, Field, Loading, Notice, PageHeader } from '../components/u
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useDebounced, useLoad } from '../lib/hooks';
+import type { Carrier } from './DeliveryCompanies';
 import { formatMoney } from '../lib/money';
 
 const STATUSES = [['', 'All'], ['pending_payment', 'Awaiting payment'], ['confirmed', 'On account'], ['paid', 'Paid'], ['processing', 'Preparing'], ['shipped', 'Shipped'], ['delivered', 'Delivered'], ['cancelled', 'Cancelled'], ['expired', 'Expired']] as const;
@@ -18,6 +19,7 @@ interface Detail {
   events: { status: string; actorType: string; note: string | null; at: string }[];
   payments: { method: string; reference: string; amountMinor: number; at: string }[];
   refunds: { id: string; amountMinor: number; reason: string; method: string; status: string; requestedBy: string; payoutRef: string | null; detail: string | null }[];
+  shipment: { status: string; carrierName: string; trackingRef: string | null; trackingUrl: string | null; eta: string | null; events: { status: string | null; description: string | null; location: string | null; at: string }[] } | null;
 }
 
 /** Online orders: confirm that money arrived, prepare, ship (which takes stock off the shelf), deliver, or cancel. */
@@ -62,6 +64,8 @@ export function Orders() {
 function OrderPanel({ id, onChanged }: { id: string; onChanged(): void }) {
   const { can, session } = useAuth();
   const d = useLoad<Detail>(`/v1/sales-orders/${id}`);
+  const carriers = useLoad<Carrier[]>(can('orders.fulfil') ? '/v1/carriers' : null);
+  const [carrierId, setCarrierId] = useState('');
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
   const [ref, setRef] = useState(''); const [amount, setAmount] = useState(''); const [carrier, setCarrier] = useState(''); const [tracking, setTracking] = useState(''); const [reason, setReason] = useState('');
@@ -75,7 +79,9 @@ function OrderPanel({ id, onChanged }: { id: string; onChanged(): void }) {
     catch (e) { setError(e); } finally { setBusy(false); }
   }
   if (!o) return <><ErrorBanner error={d.error} />{d.loading && <Loading what="the order" />}</>;
-  const step = (action: 'process' | 'ship' | 'deliver') => post('steps', { action, ...(action === 'ship' ? { ...(carrier.trim() ? { carrier: carrier.trim() } : {}), ...(tracking.trim() ? { trackingRef: tracking.trim() } : {}) } : {}) });
+  const step = (action: 'process' | 'ship' | 'deliver') => post('steps', { action, ...(action === 'ship' ? { ...(carrierId ? { carrierId } : carrier.trim() ? { carrier: carrier.trim() } : {}), ...(tracking.trim() ? { trackingRef: tracking.trim() } : {}) } : {}) });
+  const companies = (carriers.data ?? []).filter((c) => c.active);
+  const chosen = companies.find((c) => c.id === carrierId);
   const pay = (e: FormEvent) => { e.preventDefault(); return post('payments', { method: o.paymentMethod === 'account' ? 'bank_transfer' : o.paymentMethod, reference: ref.trim(), amountMinor: o.paymentMethod === 'account' ? Math.round(Number(amount) * 10 ** o.minorUnit) : o.totalMinor - o.paidMinor }); };
   const owing = o.totalMinor - o.paidMinor;
 
@@ -117,8 +123,13 @@ function OrderPanel({ id, onChanged }: { id: string; onChanged(): void }) {
           {(o.status === 'paid' || o.status === 'confirmed') && <button className="btn" disabled={busy} onClick={() => step('process')}>Start preparing</button>}
           {(o.status === 'paid' || o.status === 'confirmed' || o.status === 'processing') && (
             <form className="form-grid" onSubmit={(e) => { e.preventDefault(); step('ship'); }}>
-              <Field label="Courier"><input value={carrier} onChange={(e) => setCarrier(e.target.value)} maxLength={80} /></Field>
-              <Field label="Tracking number"><input value={tracking} onChange={(e) => setTracking(e.target.value)} maxLength={100} /></Field>
+              {companies.length > 0 && (
+                <Field label="Delivery company">
+                  <select value={carrierId} onChange={(e) => setCarrierId(e.target.value)}><option value="">Another courier (type the name)</option>{companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
+                </Field>
+              )}
+              {!carrierId && <Field label="Courier"><input value={carrier} onChange={(e) => setCarrier(e.target.value)} maxLength={80} /></Field>}
+              <Field label="Tracking number" hint={chosen?.kind === 'api' ? 'Leave empty: the delivery company gives it when the parcel is booked.' : undefined}><input value={tracking} onChange={(e) => setTracking(e.target.value)} maxLength={100} /></Field>
               <div className="form-actions"><button className="btn btn-primary" disabled={busy}>Ship — take stock off the shelf</button></div>
             </form>
           )}
@@ -136,7 +147,7 @@ function OrderPanel({ id, onChanged }: { id: string; onChanged(): void }) {
       <PrintInvoice id={o.id} />
       <Refunds o={o} money={money} me={session?.user.id ?? ''} onChanged={() => { d.reload(); onChanged(); }} />
       {o.refundDueMinor > 0 && <Notice tone="warn">Refund owed to the customer: {money(o.refundDueMinor)}. Refunds are paid out manually for now.</Notice>}
-      {o.trackingRef && <p>Courier: {o.carrier ?? '—'} · {o.trackingRef}</p>}
+      {o.shipment ? <ShipmentPanel o={o} orderId={o.id} onChanged={() => { d.reload(); onChanged(); }} /> : o.trackingRef && <p>Courier: {o.carrier ?? '—'} · {o.trackingRef}</p>}
       <h3>History</h3>
       <ol className="plain">{o.events.map((e, i) => <li key={i}>{new Date(e.at).toLocaleString()} — {LABEL[e.status] ?? e.status} ({e.actorType}){e.note ? ` — ${e.note}` : ''}</li>)}</ol>
       {o.payments.length > 0 && <p className="muted">Payments: {o.payments.map((p) => `${p.method} ${p.reference} ${money(p.amountMinor)}`).join('; ')}</p>}
@@ -241,5 +252,38 @@ function PrintInvoice({ id }: { id: string }) {
         </article>
       )}
     </div>
+  );
+}
+
+const STAGES: [string, string][] = [['picked_up', 'Picked up'], ['in_transit', 'In transit'], ['out_for_delivery', 'Out for delivery'], ['delivered', 'Delivered'], ['failed', 'Delivery attempt failed'], ['returned', 'Returned to us']];
+const STAGE_LABEL: Record<string, string> = { booked: 'Handed to the delivery company', cancelled: 'Cancelled', ...Object.fromEntries(STAGES) };
+
+/** Where the parcel is, from the delivery company's updates, and a way to add one by hand. */
+function ShipmentPanel({ o, orderId, onChanged }: { o: Detail; orderId: string; onChanged(): void }) {
+  const { can } = useAuth();
+  const sh = o.shipment!;
+  const [stage, setStage] = useState('in_transit'); const [note, setNote] = useState('');
+  const [error, setError] = useState<unknown>(null); const [busy, setBusy] = useState(false);
+  const add = async (e: FormEvent) => {
+    e.preventDefault(); setBusy(true); setError(null);
+    try { await api(`/v1/sales-orders/${orderId}/shipment/events`, { method: 'POST', body: { status: stage, ...(note.trim() ? { description: note.trim() } : {}) } }); setNote(''); onChanged(); }
+    catch (err) { setError(err); } finally { setBusy(false); }
+  };
+  return (
+    <section className="panel" aria-label="Parcel tracking">
+      <h3>Parcel: {STAGE_LABEL[sh.status] ?? sh.status}</h3>
+      <p>{sh.carrierName}{sh.trackingRef ? ` · ${sh.trackingRef}` : ''}{sh.eta ? ` · expected ${sh.eta}` : ''}{sh.trackingUrl && <> · <a href={sh.trackingUrl} target="_blank" rel="noopener noreferrer">their tracking page</a></>}</p>
+      {sh.status === 'failed' && <Notice tone="warn">The delivery company could not deliver this parcel. Contact the customer and the company.</Notice>}
+      {sh.status === 'returned' && <Notice tone="warn">The parcel came back. Arrange a refund or send it again.</Notice>}
+      <ol className="plain">{sh.events.map((e, i) => <li key={i}>{new Date(e.at).toLocaleString()} — {e.status ? STAGE_LABEL[e.status] : 'Note'}{e.description ? `: ${e.description}` : ''}{e.location ? ` (${e.location})` : ''}</li>)}</ol>
+      {can('orders.fulfil') && !['delivered', 'returned', 'cancelled'].includes(sh.status) && (
+        <form className="form-grid" onSubmit={add}>
+          <Field label="Add an update"><select value={stage} onChange={(e) => setStage(e.target.value)}>{STAGES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>
+          <Field label="Note"><input value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} /></Field>
+          <div className="form-actions"><button className="btn" disabled={busy}>Add update</button></div>
+        </form>
+      )}
+      <ErrorBanner error={error} />
+    </section>
   );
 }

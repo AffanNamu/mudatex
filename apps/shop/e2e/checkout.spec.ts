@@ -72,10 +72,21 @@ test.describe('buying', () => {
     await page.goto(`/orders/${orderNo}`);
     await expect(page.getByText('Paid').first()).toBeVisible();
     await expect(page.getByText('Pay by bank transfer')).toHaveCount(0);
-    await admin('POST', `/v1/sales-orders/${id}/steps`, { action: 'ship', carrier: 'GIG Logistics', trackingRef: 'GIG42' });
+    const carrier = await admin('POST', '/v1/carriers', { key: `gig-${Date.now().toString(36)}`, name: 'GIG Logistics', kind: 'manual', trackingUrl: 'https://gig.example/track?no={ref}' });
+    await admin('POST', `/v1/sales-orders/${id}/steps`, { action: 'ship', carrierId: carrier.id, trackingRef: 'GIG42' });
     await page.reload();
     await expect(page.getByText('On its way').first()).toBeVisible();
-    await expect(page.getByText(/GIG Logistics GIG42/)).toBeVisible();
+    const parcel = page.getByRole('region', { name: 'Your parcel' });
+    await expect(parcel.getByText('Handed to the delivery company')).toBeVisible();
+    await expect(parcel.getByText('Delivery company: GIG Logistics')).toBeVisible();
+    await expect(parcel.getByText('Tracking number: GIG42')).toBeVisible();
+    await expect(parcel.getByRole('link', { name: /Track on GIG Logistics/ })).toHaveAttribute('href', 'https://gig.example/track?no=GIG42');
+    await expect(parcel.getByText('No updates from the delivery company yet.')).toBeVisible();
+    await admin('POST', `/v1/sales-orders/${id}/shipment/events`, { status: 'out_for_delivery', description: 'With the rider', location: 'Kano' });
+    await page.reload();
+    await expect(parcel.getByText('Out for delivery').first()).toBeVisible();
+    await expect(parcel.getByText(/With the rider/)).toBeVisible();
+    expect((await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze()).violations).toEqual([]);
 
     // the orders list and the account pages
     await page.goto('/account/orders');

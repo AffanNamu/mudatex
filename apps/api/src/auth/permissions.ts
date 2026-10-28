@@ -62,6 +62,7 @@ export const PERMISSIONS = [
   'orders.refund.approve',
   'quotes.manage',
   'quotes.price.override',
+  'carriers.manage',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];

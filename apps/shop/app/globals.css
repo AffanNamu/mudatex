@@ -240,3 +240,4 @@ table.plain th, table.plain td { text-align: left; padding: 10px 8px; border-bot
   .wrap.section { padding: 0; max-width: none; }
   .doc { border: 0; padding: 0; background: #fff; }
 }
+.parcel { margin-top: 20px; }

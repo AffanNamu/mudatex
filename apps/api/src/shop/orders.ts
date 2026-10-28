@@ -9,6 +9,8 @@ import { fulfilReferenceReservations, createReservation, releaseReferenceReserva
 import { priceSaleLines, saleTotals, type PricedSaleLine } from '../pos/pricing.js';
 import { availability, quoteDelivery, type Storefront } from './catalog.js';
 import { quoteForOrder } from '../trade/quotes.js';
+import { recordShipment } from '../shipping/record.js';
+import { trackingUrl } from '../shipping/url.js';
 
 const statusWord = (status: string) => `@err.status.${status}`;
 
@@ -58,8 +60,18 @@ export async function readOrder(q: Pick<Db, 'query'>, where: { id?: string; orde
     [order.id, order.storefrontId],
   );
   const events = await q.query(`SELECT status, actor_type AS "actorType", note, at FROM sales_order_events WHERE order_id = $1 ORDER BY id`, [order.id]);
+  const sh = await q.query(
+    `SELECT s.id, s.status, s.carrier_name AS "carrierName", s.tracking_ref AS "trackingRef", to_char(s.eta, 'YYYY-MM-DD') AS eta, c.tracking_url AS "template"
+       FROM shipments s LEFT JOIN carriers c ON c.id = s.carrier_id WHERE s.order_id = $1`, [order.id]);
+  let shipment: Record<string, unknown> | null = null;
+  if (sh.rows[0]) {
+    const { id: shipmentId, template, ...s } = sh.rows[0];
+    const ev = await q.query(`SELECT status, description, location, occurred_at AS at FROM shipment_events WHERE shipment_id = $1 ORDER BY occurred_at DESC, id DESC LIMIT 50`, [shipmentId]);
+    shipment = { ...s, trackingUrl: trackingUrl(template, s.trackingRef), events: ev.rows };
+  }
   const result: Record<string, unknown> = {
     ...order,
+    shipment,
     lines: lines.rows.map((l) => ({ ...l, quantity: normalize(l.quantity), unitPrice: normalize(l.unitPrice), grossMinor: Number(l.grossMinor), discountMinor: Number(l.discountMinor), taxMinor: Number(l.taxMinor), totalMinor: Number(l.totalMinor) })),
     events: events.rows,
   };
@@ -399,7 +411,7 @@ const TRANSITIONS = { process: { from: ['paid', 'confirmed'], to: 'processing' }
 
 export async function advanceOrder(
   db: Db, organizationId: string, orderId: string, action: keyof typeof TRANSITIONS,
-  extra: { carrier?: string; trackingRef?: string; note?: string }, actor: Actor, requestId?: string,
+  extra: { carrier?: string; trackingRef?: string; note?: string; shipment?: { carrierId?: string | null; externalId?: string | null; labelUrl?: string | null; eta?: string | null } }, actor: Actor, requestId?: string,
 ) {
   await withTx(db, async (tx) => {
     const o = await lockOrder(tx, organizationId, { id: orderId });
@@ -417,6 +429,7 @@ export async function advanceOrder(
         WHERE id = $1`,
       [o.id, t.to, extra.carrier ?? null, extra.trackingRef ?? null],
     );
+    if (action === 'ship') await recordShipment(tx, organizationId, o.id, { carrierName: extra.carrier ?? 'Courier', trackingRef: extra.trackingRef, ...extra.shipment });
     await addEvent(tx, o.id, t.to, actor, extra.note);
     await audit(tx, organizationId, actor, `order.${action}`, o.id, { carrier: extra.carrier, trackingRef: extra.trackingRef }, requestId);
   });

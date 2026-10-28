@@ -20,6 +20,9 @@ import { accountingReportRoutes } from './routes/accounting-reports.js';
 import { postingRuleRoutes } from './routes/posting-rules.js';
 import { journalRoutes } from './routes/journals.js';
 import { createSecretBox } from './events/secretbox.js';
+import { carrierRoutes } from './routes/carriers.js';
+import { carrierWebhookRoutes } from './routes/webhooks-carriers.js';
+import { ADAPTERS, type AdapterRegistry } from './shipping/adapters.js';
 import { clientReadRoutes, devAuthRoutes } from './routes/client-reads.js';
 import { integrationRoutes } from './routes/integrations.js';
 import { catalogRoutes } from './routes/catalog.js';
@@ -67,6 +70,8 @@ export interface ServerDeps {
   config: Config;
   db: Db;
   verifier?: TokenVerifier;
+  /** Delivery-company connectors; defaults to the ones that ship with Mudatex. */
+  carrierAdapters?: AdapterRegistry;
   /** Directory of SQL migrations the readiness check compares against the database. */
   migrationsDir?: string;
   cron?: CronDeps;
@@ -79,7 +84,7 @@ export interface ServerDeps {
   kick?: () => Promise<unknown>;
 }
 
-export async function buildServer({ config, db, verifier, migrationsDir, cron, payments: injected, kick, pusher: injectedPusher, mailer: injectedMailer }: ServerDeps): Promise<FastifyInstance> {
+export async function buildServer({ config, db, verifier, carrierAdapters, migrationsDir, cron, payments: injected, kick, pusher: injectedPusher, mailer: injectedMailer }: ServerDeps): Promise<FastifyInstance> {
   const verify = verifier ?? createTokenVerifier(config);
   const app = Fastify({
     logger: config.NODE_ENV === 'test' ? false : { redact: ['req.headers.authorization'] },
@@ -169,6 +174,9 @@ export async function buildServer({ config, db, verifier, migrationsDir, cron, p
   // The customer-facing shop: public catalogue reads and signed-in shopper endpoints, apart from staff routes.
   const pusher = injectedPusher ?? pusherFromConfig(config);
   const payments = injected ?? (config.PAYSTACK_SECRET_KEY ? createPaystack(config.PAYSTACK_SECRET_KEY, fetch, config.PAYSTACK_BASE_URL) : undefined);
+  const secretBox = createSecretBox(config.SECRETS_ENCRYPTION_KEY);
+  const adapters = carrierAdapters ?? ADAPTERS;
+  await app.register(carrierWebhookRoutes, { db, secretBox });
   await app.register(shopPublicRoutes, { db, verify, cardPayments: !!payments, pushKey: pusher?.publicKey });
   await app.register(shopCustomerRoutes, { db, verify, payments });
   if (payments && config.PAYSTACK_SECRET_KEY) await app.register(paystackWebhookRoutes, { db, provider: payments, secretKey: config.PAYSTACK_SECRET_KEY });
@@ -204,7 +212,8 @@ export async function buildServer({ config, db, verifier, migrationsDir, cron, p
       await v1.register(stockCountRoutes, { db });
       await v1.register(pricingRoutes, { db });
       await v1.register(storefrontAdminRoutes, { db });
-      await v1.register(salesOrderRoutes, { db, payments });
+      await v1.register(salesOrderRoutes, { db, payments, secretBox, adapters });
+      await v1.register(carrierRoutes, { db, secretBox, adapters });
       await v1.register(enquiryRoutes, { db });
       await v1.register(reviewRoutes, { db });
       await v1.register(quoteRoutes, { db });
@@ -227,7 +236,7 @@ export async function buildServer({ config, db, verifier, migrationsDir, cron, p
       await v1.register(manufacturingTraceRoutes, { db });
       await v1.register(integrationRoutes, {
         db,
-        secretBox: createSecretBox(config.SECRETS_ENCRYPTION_KEY),
+        secretBox,
         urlPolicy: { allowHttp: config.WEBHOOK_ALLOW_HTTP, allowPrivate: config.WEBHOOK_ALLOW_PRIVATE },
       });
     },

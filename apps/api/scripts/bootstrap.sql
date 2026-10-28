@@ -87,7 +87,8 @@ perms AS (
       'orders.refund',
       'orders.refund.approve',
       'quotes.manage',
-      'quotes.price.override'
+      'quotes.price.override',
+      'carriers.manage'
   ]) AS p
   RETURNING 1
 ),

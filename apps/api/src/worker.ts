@@ -9,6 +9,8 @@ import { releaseExpiredReservations } from './inventory/expiry.js';
 import { expireUnpaidOrders } from './shop/orders.js';
 import { runCollections } from './trade/collections.js';
 import { runStandingOrders } from './trade/standing-orders.js';
+import { ADAPTERS } from './shipping/adapters.js';
+import { pollShipments } from './shipping/poll.js';
 
 // Standalone delivery worker: `node dist/worker.js`.
 const config = loadConfig();
@@ -27,6 +29,7 @@ const sweep = setInterval(() => {
 const collections = setInterval(() => {
   runStandingOrders(db, mailerFromConfig(config)).catch((err: Error) => console.error('standing orders failed', err.message));
   runCollections(db, mailerFromConfig(config)).catch((err: Error) => console.error('collections failed', err.message));
+  pollShipments(db, createSecretBox(config.SECRETS_ENCRYPTION_KEY), ADAPTERS).catch((err: Error) => console.error('parcel tracking failed', err.message));
 }, 3_600_000);
 const close = async () => { clearInterval(sweep); clearInterval(collections); await handle.stop(); await db.end(); };
 process.once('SIGTERM', close);

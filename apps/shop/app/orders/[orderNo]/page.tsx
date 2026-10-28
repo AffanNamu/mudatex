@@ -21,7 +21,7 @@ function OrderView() {
   const { token } = useAuth();
   const { store, add } = useCart();
   const router = useRouter();
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [order, setOrder] = useState<Order | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -129,7 +129,22 @@ function OrderView() {
           </tbody></table>
           <h3 style={{ marginTop: 20 }}>{t('order.deliveryTo')}</h3>
           <p>{order.delivery.recipient}<br />{order.delivery.line1}{order.delivery.line2 ? `, ${order.delivery.line2}` : ''}<br />{order.delivery.city}, {order.delivery.state}</p>
-          {order.trackingRef && <p><strong>{t('order.tracking')}</strong> {order.carrier} {order.trackingRef}</p>}
+          {order.shipment ? (
+            <section aria-labelledby="parcel" className="parcel">
+              <h3 id="parcel">{t('ship.title')}</h3>
+              <p><strong>{t(`ship.status.${order.shipment.status}`)}</strong>{order.shipment.eta && order.shipment.status !== 'delivered' ? <> · {t('ship.eta', { date: new Date(`${order.shipment.eta}T12:00:00`).toLocaleDateString(lang) })}</> : null}</p>
+              <p className="small">{t('ship.carrier', { name: order.shipment.carrierName })}{order.shipment.trackingRef && <><br />{t('ship.number', { ref: order.shipment.trackingRef })}</>}</p>
+              {order.shipment.trackingUrl && <p><a className="btn ghost small" href={order.shipment.trackingUrl} target="_blank" rel="noopener noreferrer">{t('ship.track', { name: order.shipment.carrierName })}</a></p>}
+              {order.shipment.events.length ? (
+                <ol className="timeline">
+                  {order.shipment.events.map((e, i) => (
+                    <li key={i}><strong>{e.status ? t(`ship.status.${e.status}`) : t('ship.update')}</strong>{e.description && <> — {e.description}</>}
+                      <div className="small muted">{e.location ? `${e.location} · ` : ''}{new Date(e.at).toLocaleString(lang)}</div></li>
+                  ))}
+                </ol>
+              ) : <p className="small muted">{t('ship.noUpdates')}</p>}
+            </section>
+          ) : order.trackingRef && <p><strong>{t('order.tracking')}</strong> {order.carrier} {order.trackingRef}</p>}
         </section>
         <section className="card" aria-labelledby="trail">
           <h2 id="trail">{t('order.progress')}</h2>

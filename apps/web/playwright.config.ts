@@ -32,7 +32,7 @@ export default defineConfig({
       timeout: 60_000,
       env: {
         DATABASE_URL, PORT: '3100', NODE_ENV: 'development', DEV_TOKEN_ENDPOINT: 'true',
-        AUTH_DEV_SECRET: 'e2e-dev-secret-e2e-dev-secret-0001', CORS_ORIGINS: 'http://localhost:4173', RATE_LIMIT_MAX: '100000',
+        AUTH_DEV_SECRET: 'e2e-dev-secret-e2e-dev-secret-0001', SECRETS_ENCRYPTION_KEY: Buffer.alloc(32, 9).toString('base64'), CORS_ORIGINS: 'http://localhost:4173', RATE_LIMIT_MAX: '100000',
       },
     },
     {

@@ -51,6 +51,13 @@ export interface Order {
   delivery: { recipient: string; line1: string; line2: string | null; city: string; state: string; zone: string; etaDays: { min: number; max: number } };
   lines: { lineNo: number; variantId: string; productSlug: string | null; image: string | null; unit: string; title: string; sku: string; quantity: string; unitPrice: string; totalMinor: number }[];
   events: { status: string; at: string; note: string | null }[];
+  shipment: Shipment | null;
+}
+
+export interface Shipment {
+  status: 'booked' | 'picked_up' | 'in_transit' | 'out_for_delivery' | 'delivered' | 'failed' | 'returned' | 'cancelled';
+  carrierName: string; trackingRef: string | null; trackingUrl: string | null; eta: string | null;
+  events: { status: string | null; description: string | null; location: string | null; at: string }[];
 }
 
 export interface Review { rating: number; title: string | null; body: string; name: string; at: string }

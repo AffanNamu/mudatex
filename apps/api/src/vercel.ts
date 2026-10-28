@@ -10,6 +10,8 @@ import { releaseExpiredReservations } from './inventory/expiry.js';
 import { expireUnpaidOrders } from './shop/orders.js';
 import { runCollections } from './trade/collections.js';
 import { runStandingOrders } from './trade/standing-orders.js';
+import { ADAPTERS } from './shipping/adapters.js';
+import { pollShipments } from './shipping/poll.js';
 import { purgeDelivered, purgeIdempotencyKeys } from './events/maintenance.js';
 import { createSecretBox } from './events/secretbox.js';
 import { buildServer } from './server.js';
@@ -53,6 +55,7 @@ export function createHandler(env: NodeJS.ProcessEnv = process.env) {
             await expireUnpaidOrders(db);
             await runStandingOrders(db, mailerFromConfig(config)).catch((err: Error) => console.error('standing orders failed', err.message));
             await runCollections(db, mailerFromConfig(config)).catch((err: Error) => console.error('collections failed', err.message));
+            await pollShipments(db, createSecretBox(config.SECRETS_ENCRYPTION_KEY), ADAPTERS).catch((err: Error) => console.error('parcel tracking failed', err.message));
             await releaseExpiredReservations(db);
             await purgeIdempotencyKeys(db);
             await purgeDelivered(db);

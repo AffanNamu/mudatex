@@ -4,6 +4,9 @@ import { orderDocument } from '../shop/documents.js';
 import { authorize, grantsFor } from '../auth/authorize.js';
 import type { Db } from '../db.js';
 import { notFound } from '../errors.js';
+import type { SecretBox } from '../events/secretbox.js';
+import type { AdapterRegistry } from '../shipping/adapters.js';
+import { bookWithCarrier, loadCarrier } from '../shipping/booking.js';
 import { uuid } from '../inventory/common.js';
 import type { PaymentProvider } from '../payments/paystack.js';
 import { advanceOrder, cancelOrder, readOrder, recordPayment } from '../shop/orders.js';
@@ -25,6 +28,8 @@ const paymentBody = z.object({
 const stepBody = z.object({
   action: z.enum(['process', 'ship', 'deliver']),
   carrier: z.string().trim().min(1).max(80).optional(),
+  /** A delivery company set up under Delivery companies; sets the courier name and its tracking page. */
+  carrierId: uuid.optional(),
   trackingRef: z.string().trim().min(1).max(100).optional(),
   note: z.string().trim().max(500).optional(),
 });
@@ -34,7 +39,7 @@ const escapeLike = (s: string) => s.replace(/[\\%_]/g, (c) => `\\${c}`);
 // These commands are safe to retry without an Idempotency-Key: each is guarded by the order's state, and a payment
 // reference can settle only one order.
 /** The order desk: staff view, confirm payment for, fulfil and cancel online orders. */
-export const salesOrderRoutes: FastifyPluginAsync<{ db: Db; payments?: PaymentProvider }> = async (app, { db, payments }) => {
+export const salesOrderRoutes: FastifyPluginAsync<{ db: Db; payments?: PaymentProvider; secretBox: SecretBox | null; adapters: AdapterRegistry }> = async (app, { db, payments, secretBox, adapters }) => {
   async function entityOf(orderId: string, organizationId: string): Promise<string> {
     const { rows } = await db.query<{ legal_entity_id: string }>('SELECT legal_entity_id FROM sales_orders WHERE id = $1 AND organization_id = $2', [orderId, organizationId]);
     if (!rows[0]) throw notFound('Order');
@@ -97,7 +102,17 @@ export const salesOrderRoutes: FastifyPluginAsync<{ db: Db; payments?: PaymentPr
     const body = stepBody.parse(req.body);
     const { actor } = req;
     await authorize(db, actor, 'orders.fulfil', { kind: 'legal_entity', legalEntityId: await entityOf(id, actor.organizationId) });
-    return await advanceOrder(db, actor.organizationId, id, body.action, body, { type: 'staff', id: actor.userId }, req.id);
+    let { carrier, trackingRef } = body;
+    let shipment: { carrierId?: string; externalId?: string; labelUrl?: string; eta?: string } | undefined;
+    if (body.action === 'ship' && body.carrierId) {
+      const c = await loadCarrier(db, actor.organizationId, body.carrierId);
+      carrier = c.name;
+      shipment = { carrierId: c.id };
+      // A company with a connector books the parcel first; if it refuses, the order stays as it was.
+      const booked = await bookWithCarrier(db, secretBox, adapters, actor.organizationId, id, c);
+      if (booked) { trackingRef = booked.trackingRef; shipment = { ...shipment, externalId: booked.externalId, labelUrl: booked.labelUrl, eta: booked.eta }; }
+    }
+    return await advanceOrder(db, actor.organizationId, id, body.action, { carrier, trackingRef, note: body.note, shipment }, { type: 'staff', id: actor.userId }, req.id);
   });
 
   app.post('/sales-orders/:id/cancel', async (req) => {

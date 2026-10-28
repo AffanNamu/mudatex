@@ -26,6 +26,7 @@ import { SetPassword } from './pages/SetPassword';
 import { Procurement } from './pages/Procurement';
 import { Returns } from './pages/Returns';
 import { Collections } from './pages/Collections';
+import { DeliveryCompanies } from './pages/DeliveryCompanies';
 import { Enquiries } from './pages/Enquiries';
 import { OfflineExceptions } from './pages/OfflineExceptions';
 import { Orders } from './pages/Orders';
@@ -87,6 +88,7 @@ export function App() {
           <Route path="boms" element={<Boms />} />
           <Route path="quality" element={<Quality />} />
         </Route>
+        <Route path="delivery" element={<Needs permission="carriers.manage"><DeliveryCompanies /></Needs>} />
         <Route path="security" element={<Security />} />
         <Route path="access" element={<Needs permission="iam.manage"><Access /></Needs>} />
         <Route path="*" element={<Navigate to="/" replace />} />
