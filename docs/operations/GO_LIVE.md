@@ -114,6 +114,7 @@ Each is optional and off until its settings exist. All go on the **API** project
 | Phone (web push) notifications | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | `GO_LIVE_SHOP.md` |
 | Text messages | `TERMII_API_KEY`, `TERMII_SENDER_ID` | `SMS.md` |
 | Two-step sign-in for all staff | `STAFF_MFA=required` (after everyone has set up an authenticator app) | `TWO_STEP_SIGN_IN.md` |
+| Public address for photo links | `PUBLIC_API_URL` (your API address), optional `IMAGE_QUOTA_MB` | `PRODUCT_PHOTOS.md` |
 | Delivery companies that send updates | uses `SECRETS_ENCRYPTION_KEY` from step 6 | `DELIVERY.md` |
 | Nightly encrypted backups | GitHub secrets `BACKUP_DATABASE_URL`, `BACKUP_PASSPHRASE` (not Vercel) | `BACKUPS.md` |
 

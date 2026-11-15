@@ -40,6 +40,10 @@ const schema = z
     RESEND_API_KEY: z.string().min(10).optional(),
     MAIL_FROM: z.string().min(5).max(200).optional(),
     // Browser push notifications (generate once with `npx web-push generate-vapid-keys`). Without all three, push is off.
+    // The address the public reaches this API at, used to build photo links (for example https://api.example.com). Defaults to the address of the request.
+    PUBLIC_API_URL: z.string().url().optional(),
+    // How much photo data one company may keep, in megabytes.
+    IMAGE_QUOTA_MB: z.coerce.number().int().positive().default(300),
     // Text messages (Termii). Off unless both the key and a registered sender ID are set.
     TERMII_API_KEY: z.string().min(10).optional(),
     TERMII_SENDER_ID: z.string().min(3).max(11).optional(),

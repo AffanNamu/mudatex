@@ -139,3 +139,6 @@ details > summary { cursor: pointer; font-weight: 600; margin: 8px 0; }
 .stock-actions { display: flex; gap: 12px; align-items: center; margin-bottom: 8px; }
 .stock-card table { width: 100%; }
 @media (max-width: 480px) { .stock-row { grid-template-columns: 1fr auto; } .stock-row .stock-qty:nth-of-type(1) { grid-column: 1 / -1; } .stock-qty input { width: 100%; } }
+.pictures { border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; }
+.picture-grid { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 8px; }
+.picture-grid img { object-fit: cover; border-radius: 6px; border: 1px solid var(--border); background: #f3f3f3; }

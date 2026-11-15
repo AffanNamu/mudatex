@@ -6,7 +6,7 @@ import { conflict, invalid, notFound } from '../errors.js';
 import { audit, loadStockLocation, uuid } from '../inventory/common.js';
 
 const slug = z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/).max(60);
-const httpsUrl = z.string().url().max(500).refine((u) => u.startsWith('https://'), 'Images must be https URLs');
+const httpsUrl = z.string().url().max(500).refine((u) => /^(https:\/\/|http:\/\/localhost)/.test(u), 'Images must be https URLs');
 
 const contactBody = z
   .object({

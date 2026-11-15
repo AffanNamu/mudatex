@@ -21,6 +21,7 @@ import { postingRuleRoutes } from './routes/posting-rules.js';
 import { journalRoutes } from './routes/journals.js';
 import { createSecretBox } from './events/secretbox.js';
 import { carrierRoutes } from './routes/carriers.js';
+import { imageServeRoutes, imageUploadRoutes } from './routes/images.js';
 import { orderReturnRoutes } from './routes/order-returns.js';
 import { customerRoutes } from './routes/customers.js';
 import { carrierWebhookRoutes } from './routes/webhooks-carriers.js';
@@ -179,6 +180,7 @@ export async function buildServer({ config, db, verifier, carrierAdapters, migra
   const secretBox = createSecretBox(config.SECRETS_ENCRYPTION_KEY);
   const adapters = carrierAdapters ?? ADAPTERS;
   await app.register(carrierWebhookRoutes, { db, secretBox });
+  await app.register(imageServeRoutes, { db });
   await app.register(shopPublicRoutes, { db, verify, cardPayments: !!payments, pushKey: pusher?.publicKey });
   await app.register(shopCustomerRoutes, { db, verify, payments });
   if (payments && config.PAYSTACK_SECRET_KEY) await app.register(paystackWebhookRoutes, { db, provider: payments, secretKey: config.PAYSTACK_SECRET_KEY });
@@ -216,6 +218,7 @@ export async function buildServer({ config, db, verifier, carrierAdapters, migra
       await v1.register(storefrontAdminRoutes, { db });
       await v1.register(salesOrderRoutes, { db, payments, secretBox, adapters });
       await v1.register(carrierRoutes, { db, secretBox, adapters });
+      await v1.register(imageUploadRoutes, { db, publicBase: config.PUBLIC_API_URL, quotaBytes: config.IMAGE_QUOTA_MB * 1_000_000 });
       await v1.register(orderReturnRoutes, { db });
       await v1.register(customerRoutes, { db });
       await v1.register(enquiryRoutes, { db });

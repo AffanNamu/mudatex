@@ -3,6 +3,7 @@ import { ErrorBanner, Field, Loading, Notice, PageHeader } from '../components/u
 import { api } from '../lib/api';
 import { useLoad, type Loaded } from '../lib/hooks';
 import type { Product } from './Catalogue';
+import { PictureUploader } from '../components/PictureUploader';
 import { Translations } from './StoreTranslations';
 
 interface Storefront {
@@ -154,9 +155,9 @@ function Details({ store, onChanged }: { store: Storefront; onChanged(): void })
 }
 
 function Departments({ storeId, depts }: { storeId: string; depts: Loaded<Dept[]> }) {
-  const [name, setName] = useState(''); const [image, setImage] = useState('');
+  const [name, setName] = useState(''); const [image, setImage] = useState<string[]>([]);
   const a = useAction();
-  const add = (e: FormEvent) => { e.preventDefault(); return a.run(() => api(`/v1/storefronts/${storeId}/departments`, { method: 'POST', body: { slug: slugify(name), name: name.trim(), imageUrl: image.trim() || null, sort: (depts.data?.length ?? 0) * 10 } }), `Added ${name.trim()}.`, () => { setName(''); setImage(''); depts.reload(); }); };
+  const add = (e: FormEvent) => { e.preventDefault(); return a.run(() => api(`/v1/storefronts/${storeId}/departments`, { method: 'POST', body: { slug: slugify(name), name: name.trim(), imageUrl: image[0] ?? null, sort: (depts.data?.length ?? 0) * 10 } }), `Added ${name.trim()}.`, () => { setName(''); setImage([]); depts.reload(); }); };
   const del = (d: Dept) => a.run(() => api(`/v1/storefronts/${storeId}/departments/${d.id}`, { method: 'DELETE' }), `Removed ${d.name}.`, depts.reload);
   return (
     <section className="panel" aria-label="Departments"><h2>Departments</h2>
@@ -164,7 +165,7 @@ function Departments({ storeId, depts }: { storeId: string; depts: Loaded<Dept[]
       <p>{(depts.data ?? []).map((d) => <span key={d.id} className="chip">{d.name} <button type="button" className="btn btn-ghost" aria-label={`Remove ${d.name}`} onClick={() => del(d)}>×</button></span>)}{depts.data?.length === 0 && <span className="muted">No departments yet — e.g. Lace, Ankara, Brocade, Atampa.</span>}</p>
       <form className="form-grid" onSubmit={add}>
         <Field label="New department"><input required value={name} onChange={(e) => setName(e.target.value)} maxLength={80} /></Field>
-        <Field label="Picture (https link, optional)"><input type="url" value={image} onChange={(e) => setImage(e.target.value)} placeholder="https://…" /></Field>
+        <PictureUploader value={image} onChange={(v) => setImage(v.slice(-1))} max={1} label="Department picture" />
         <div className="form-actions"><button className="btn btn-primary" disabled={a.busy || !slugify(name)}>Add</button></div>
       </form>
       <ErrorBanner error={a.error} />{a.ok && <Notice tone="ok">{a.ok}</Notice>}
@@ -211,14 +212,14 @@ function Publishing({ store, depts, onChanged }: { store: Storefront; depts: Dep
 function ProductForm({ storeId, product, existing, depts, onDone }: { storeId: string; product: Product; existing?: Published; depts: Dept[]; onDone(): void }) {
   const [title, setTitle] = useState(existing?.title ?? product.name); const [slug, setSlug] = useState(existing?.slug ?? slugify(product.name));
   const [brand, setBrand] = useState(existing?.brand ?? ''); const [dept, setDept] = useState(existing?.departmentId ?? '');
-  const [images, setImages] = useState((existing?.images ?? []).join('\n')); const [badges, setBadges] = useState((existing?.badges ?? []).join(', '));
+  const [images, setImages] = useState<string[]>(existing?.images ?? []); const [badges, setBadges] = useState((existing?.badges ?? []).join(', '));
   const [desc, setDesc] = useState(''); const [published, setPublished] = useState(existing?.published ?? false);
   const a = useAction();
   const submit = (e: FormEvent) => {
     e.preventDefault();
     return a.run(() => api(`/v1/storefronts/${storeId}/products/${product.id}`, { method: 'PUT', body: {
       title: title.trim(), slug, brand: brand.trim() || null, departmentId: dept || null,
-      images: images.split('\n').map((s) => s.trim()).filter(Boolean), badges: badges.split(',').map((s) => s.trim()).filter(Boolean).slice(0, 6),
+      images, badges: badges.split(',').map((s) => s.trim()).filter(Boolean).slice(0, 6),
       ...(desc.trim() ? { description: desc.trim() } : {}), published,
     } }), 'Saved.', onDone);
   };
@@ -229,7 +230,7 @@ function ProductForm({ storeId, product, existing, depts, onDone }: { storeId: s
       <Field label="Web address" hint="Lower-case letters, digits, dashes"><input required value={slug} onChange={(e) => setSlug(e.target.value)} pattern="[a-z0-9]+(-[a-z0-9]+)*" /></Field>
       <Field label="Brand"><input value={brand} onChange={(e) => setBrand(e.target.value)} maxLength={80} placeholder="Empire Atampa, Florance…" /></Field>
       <Field label="Department"><select value={dept} onChange={(e) => setDept(e.target.value)}><option value="">None</option>{depts.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}</select></Field>
-      <Field label="Picture links (https), one per line" hint="The first is the main picture"><textarea rows={3} value={images} onChange={(e) => setImages(e.target.value)} /></Field>
+      <PictureUploader value={images} onChange={setImages} label="Pictures" />
       <Field label="Badges" hint="Comma separated, up to 6, e.g. New, Best seller"><input value={badges} onChange={(e) => setBadges(e.target.value)} /></Field>
       <Field label="Description" hint={existing ? 'Leave empty to keep the current description' : 'Defaults to the catalogue description'}><textarea rows={4} value={desc} onChange={(e) => setDesc(e.target.value)} maxLength={5000} /></Field>
       <label className="field"><span className="field-label">Visible in the shop</span><input type="checkbox" checked={published} onChange={(e) => setPublished(e.target.checked)} /></label>

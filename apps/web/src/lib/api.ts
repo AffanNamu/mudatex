@@ -45,3 +45,19 @@ export const newKey = () => crypto.randomUUID();
 
 /** The API's address, for showing people the address a delivery company should call. */
 export const apiBase = () => BASE;
+
+/** Sends one picture (already shrunk) and returns the address the shop will show it at. */
+export async function uploadPicture(blob: Blob): Promise<{ id: string; url: string; sizeBytes: number }> {
+  const headers: Record<string, string> = { 'content-type': blob.type || 'application/octet-stream' };
+  if (token) headers.authorization = `Bearer ${token}`;
+  let res: Response;
+  try { res = await fetch(`${BASE}/v1/images`, { method: 'POST', headers, body: blob }); }
+  catch { throw new ApiError(0, 'network', 'Cannot reach the server. Check your connection and try again.'); }
+  const text = await res.text();
+  const data = text ? JSON.parse(text) : undefined;
+  if (!res.ok) {
+    if (res.status === 401 && token) onUnauthorized();
+    throw new ApiError(res.status, data?.error ?? 'error', data?.message ?? `Request failed (${res.status})`);
+  }
+  return data;
+}

@@ -45,7 +45,8 @@ test('an administrator opens an online store, publishes a product and sets deliv
   await page.getByRole('row', { name: /Ankara Wax Print/ }).getByRole('button', { name: 'Add to store' }).click();
   const listing = page.getByRole('form', { name: /Online listing for Ankara Wax Print/ });
   await listing.getByLabel('Department').selectOption({ label: 'Lace' });
-  await listing.getByLabel('Picture links (https), one per line').fill('https://img.example.test/ankara.jpg');
+  await listing.getByLabel('Picture link').fill('https://img.example.test/ankara.jpg');
+  await listing.getByRole('button', { name: 'Add link' }).click();
   await listing.getByLabel('Visible in the shop').check();
   await listing.getByRole('button', { name: 'Save listing' }).click();
   await expect(page.getByRole('row', { name: /Ankara Wax Print/ })).toContainText('Published');

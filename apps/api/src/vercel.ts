@@ -13,6 +13,7 @@ import { runCollections } from './trade/collections.js';
 import { runStandingOrders } from './trade/standing-orders.js';
 import { ADAPTERS } from './shipping/adapters.js';
 import { pollShipments } from './shipping/poll.js';
+import { purgeOrphanImages } from './routes/images.js';
 import { purgeDelivered, purgeIdempotencyKeys } from './events/maintenance.js';
 import { createSecretBox } from './events/secretbox.js';
 import { buildServer } from './server.js';
@@ -59,6 +60,7 @@ export function createHandler(env: NodeJS.ProcessEnv = process.env) {
             await pollShipments(db, createSecretBox(config.SECRETS_ENCRYPTION_KEY), ADAPTERS).catch((err: Error) => console.error('parcel tracking failed', err.message));
             await releaseExpiredReservations(db);
             await purgeIdempotencyKeys(db);
+            await purgeOrphanImages(db).catch((err: Error) => console.error('picture cleanup failed', err.message));
             await purgeDelivered(db);
             return { passes, handled };
           },
